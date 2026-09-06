@@ -111,7 +111,7 @@ async def custom_send_cached_media(
         
         vidcover_file = await _resolve_video_cover(self, peer, cover)
         
-        # Safe ASCII check to prevent Python 3.12 base64 crash on invalid/corrupted file IDs
+        # Safe ASCII check & graceful handling to prevent crashes
         try:
             safe_file_id = "".join([c for c in file_id if ord(c) < 128]) if isinstance(file_id, str) else file_id
             media = utils.get_input_media_from_file_id(
@@ -120,8 +120,8 @@ async def custom_send_cached_media(
                 video_cover=vidcover_file
             )
         except Exception as e:
-            log.error(f"Failed to decode file_id '{file_id}': {e}")
-            raise ValueError(f'Failed to decode "{file_id}". The value does not represent an existing local file, HTTP URL, or valid file id.')
+            log.warning(f"Skipping invalid/corrupted file_id '{file_id}': {e}")
+            return None
 
         r = await self.invoke(
             raw.functions.messages.SendMedia(
