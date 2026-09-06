@@ -375,7 +375,11 @@ async def start(client, message):
                         protect_content=settings.get('file_secure', PROTECT_CONTENT),
                         reply_markup=InlineKeyboardMarkup(btn)
                     )
-                    filesarr.append(msg)
+                    if msg:
+                        filesarr.append(msg)
+                if not filesarr:
+                    return await message.reply('<b>ɴᴏ ꜱᴜᴄʜ ꜰɪʟᴇ ᴇxɪꜱᴛꜱ ᴏʀ ɪɴᴠᴀʟɪᴅ ꜰɪʟᴇ ɪᴅ !</b>')
+                
                 k = await client.send_message(chat_id=message.from_user.id, text=script.DEL_MSG.format(get_time(DELETE_TIME)), parse_mode=enums.ParseMode.HTML)
 
                 await asyncio.sleep(DELETE_TIME)
@@ -412,6 +416,9 @@ async def start(client, message):
                     file_id=file_id,
                     protect_content=settings.get('file_secure', PROTECT_CONTENT),
                     reply_markup=InlineKeyboardMarkup(btn))
+
+                if not msg:
+                    return await message.reply('<b>ɴᴏ ꜱᴜᴄʜ ꜰɪʟᴇ ᴇxɪꜱᴛꜱ ᴏʀ ɪɴᴠᴀʟɪᴅ ꜰɪʟᴇ ɪᴅ !</b>')
 
                 filetype = msg.media
                 file = getattr(msg, filetype.value)
@@ -462,6 +469,9 @@ async def start(client, message):
             reply_markup=InlineKeyboardMarkup(btn)
         )
         
+        if not msg:
+            return await message.reply('<b>ɴᴏ ꜱᴜᴄʜ ꜰɪʟᴇ ᴇxɪꜱᴛꜱ ᴏʀ ɪɴᴠᴀʟɪᴅ ꜰɪʟᴇ ɪᴅ !</b>')
+
         k = await msg.reply(script.DEL_MSG.format(get_time(DELETE_TIME)), quote=True, parse_mode=enums.ParseMode.HTML)
         await asyncio.sleep(DELETE_TIME)
         await msg.delete()
@@ -484,7 +494,7 @@ async def stream_buttons(user_id: int, file_id: str):
         if not await db.has_premium_access(user_id):
             return [
                 [InlineKeyboardButton('🚀 ꜰᴀꜱᴛ ᴅᴏᴡɴʟᴏᴀᴅ / ᴡᴀᴛᴄʜ ᴏɴʟɪɴᴇ 🖥️', callback_data='prestream')],
-                [InlineKeyboardButton('ℹ️ ᴠɪᴇᴡ ᴀᴜᴅɪᴏ & ꜱᴜʙꜱ ɪɴꜰᴏ ℹ️', callback_data='prestream')],
+                [InlineKeyboardButton('ℹ️ ᴠɪᴇᴡ ᴀᴜᴅɪ​ᴏ & ꜱᴜʙꜱ ɪɴꜰᴏ ℹ️', callback_data='prestream')],
                 [InlineKeyboardButton('📌 ᴊᴏɪɴ ᴜᴘᴅᴀᴛᴇꜱ ᴄʜᴀɴɴᴇʟ 📌', url=UPDATE_CHNL_LNK)]
             ]
         else:
@@ -1000,7 +1010,7 @@ async def del_msg(client, message):
         InlineKeyboardButton("No", callback_data="confirm_del_no")
     ]])
     sent_message = await message.reply_text(
-        "⚠️ Aʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ᴄʟᴇᴀʀ ᴛʜᴇ ᴜᴘᴅᴀᴛᴇs ᴄʜᴀɴɴᴇʟ ʟɪsᴛ ?\n\n ᴅᴏ ʏᴏᴜ ꜱᴛɪʟʟ ᴡᴀɴᴛ ᴛᴏ ᴄᴏɴᴛɪɴᴜᴇ ?",
+        "⚠️ Aʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ cʟᴇᴀʀ ᴛʜᴇ ᴜᴘᴅᴀᴛᴇs ᴄʜᴀɴɴᴇʟ ʟɪsᴛ ?\n\n ᴅᴏ ʏᴏᴜ ꜱᴛɪʟʟ ᴡᴀɴᴛ ᴛᴏ ᴄᴏɴᴛɪɴᴜᴇ ?",
         reply_markup=confirm_markup
     )
     await asyncio.sleep(60)
@@ -1437,7 +1447,7 @@ async def remove_fsub(client, message):
         )
     except Exception as e:
         logger.error("remove_fsub: %s", e)
-        await message.reply_text(f"⚠️ ᴀɴ ᴇʀʀᴏʀ ᴏᴄᴄᴜʀʀᴇᴅ: {e}")
+        await message.reply_text(f"⚠️ ᴀɴ ᴇʀʀᴏʀ ᴏᴄᴄᴜʀᴇᴅ: {e}")
 
 @Client.on_message(filters.command('clean_groups') & filters.user(ADMINS))
 async def clean_groups_handler(client, message):
