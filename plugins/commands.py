@@ -213,7 +213,7 @@ async def start(client, message):
                         disable_web_page_preview=True              
                     )
                 for admin in ADMINS:
-                    await client.send_message(chat_id=admin, text=f"Sᴜᴄᴄᴇss ғᴜʟʟʏ ᴛᴀsᴋ ᴄᴏᴍᴘʟᴇᴛᴇᴅ ʙʏ ᴛʜɪs ᴜsᴇʀ:\n\nuser Nᴀᴍᴇ: {uss.mention}\n\nUsᴇʀ ɪᴅ: {uss.id}!")	
+                    await client.send_message(chat_id=admin, text=f"Sᴜᴄᴄᴇss ғᴜʟʟʏ ᴛᴀsᴋ cᴏᴍᴘʟᴇᴛᴇᴅ ʙʏ ᴛʜɪs ᴜsᴇʀ:\n\nuser Nᴀᴍᴇ: {uss.mention}\n\nUsᴇʀ ɪᴅ: {uss.id}!")	
             else:
                 referdb.add_refer_points(user_id, fromuse)
                 await message.reply_text(script.REFER_INVITED_ALRT.format(uss.mention))
@@ -255,7 +255,8 @@ async def start(client, message):
         decoded_file_id = file_id
         if not data.startswith("allfiles"):
             try:
-                raw = base64.urlsafe_b64decode(file_id + "=" * (-len(file_id) % 4))
+                safe_file_id = "".join([c for c in file_id if ord(c) < 128])
+                raw = base64.urlsafe_b64decode(safe_file_id + "=" * (-len(safe_file_id) % 4))
                 sep = raw.find(b"_")
                 if sep != -1:
                     decoded_file_id = raw[sep + 1:].decode("latin1")
@@ -388,11 +389,17 @@ async def start(client, message):
 
         settings = await get_settings(int(grp_id))
         if not files_:
-            raw = base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))
-            sep = raw.find(b"_")
-            if sep == -1:
-                raise ValueError("Invalid encoded data")
-            file_id = raw[sep + 1:].decode("latin1")
+            try:
+                safe_data = "".join([c for c in data if ord(c) < 128])
+                raw = base64.urlsafe_b64decode(safe_data + "=" * (-len(safe_data) % 4))
+                sep = raw.find(b"_")
+                if sep == -1:
+                    file_id = data
+                else:
+                    file_id = raw[sep + 1:].decode("latin1")
+            except Exception:
+                file_id = data
+
             try:
                 cover = None
                 if COVERX:
@@ -417,7 +424,7 @@ async def start(client, message):
                     try:
                         f_caption=DREAMX_CAPTION.format(file_name= '' if title is None else title, file_size='' if size is None else size, file_caption='')
                     except Exception:
-                        return
+                        pass
                 await msg.edit_caption(f_caption, reply_markup=InlineKeyboardMarkup(btn))
                 k = await msg.reply(script.DEL_MSG.format(get_time(DELETE_TIME)), quote=True, parse_mode=enums.ParseMode.HTML)
                 await asyncio.sleep(DELETE_TIME)
@@ -504,7 +511,7 @@ async def save_file_handler(bot, message):
     if reply and reply.media:
         msg = await message.reply("Pʀᴏᴄᴇssɪɴɢ...⏳", quote=True)
     else:
-        await message.reply('Rᴇᴘʟʏ ᴛᴏ ғɪʟᴇ ᴡɪᴛʜ /save ᴡʜɪᴄʜ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ sᴀᴠᴇ', quote=True)
+        await message.reply('Rᴇᴘʟʏ ᴛᴏ ғɪʟᴇ ᴡɪᴛ🇭 /save ᴡʜɪᴄʜ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ sᴀᴠᴇ', quote=True)
         return
 
     try:
@@ -1377,7 +1384,7 @@ async def remove_fsub(client, message):
         if not user:
             return await message.reply("ʏᴏᴜ ᴀʀᴇ ᴀɴᴏɴʏᴍᴏᴜs ᴀᴅᴍɪɴ — ʏᴏᴜ ᴄᴀɴ'ᴛ ᴜsᴇ ᴛʜɪs ᴄᴏᴍᴍᴀɴᴅ!")
         if message.chat.type not in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
-            return await message.reply_text("ᴛʜɪs ᴄᴏᴍᴍᴀɴᴅ ᴄᴀɴ ᴏɴʟʏ ʙᴇ ᴜsᴇᴅ ɪɴ ɢʀᴏᴜᴘs.")
+            return await message.reply_text("ᴛʜɪs ᴄᴏᴍᴍᴀɴᴅ cᴀɴ ᴏɴʟʏ ʙᴇ ᴜsᴇᴅ ɪɴ ɢʀᴏᴜᴘs.")
         grp_id = message.chat.id
         title = message.chat.title
         if not await is_check_admin(client, grp_id, user.id):
