@@ -40,7 +40,8 @@ async def _resolve_video_cover(client: "Client", peer, cover: Union[str, BinaryI
                     )
                 )
             else:
-                return utils.get_input_media_from_file_id(cover, FileType.PHOTO).id
+                safe_cover = "".join([c for c in cover if ord(c) < 128])
+                return utils.get_input_media_from_file_id(safe_cover, FileType.PHOTO).id
         else:
             uploaded = await client.invoke(
                 raw.functions.messages.UploadMedia(
@@ -109,11 +110,18 @@ async def custom_send_cached_media(
             )
         
         vidcover_file = await _resolve_video_cover(self, peer, cover)
-        media = utils.get_input_media_from_file_id(
-            file_id,
-            has_spoiler=has_spoiler,
-            video_cover=vidcover_file
-        )
+        
+        # Safe ASCII check to prevent Python 3.12 base64 crash on invalid/corrupted file IDs
+        try:
+            safe_file_id = "".join([c for c in file_id if ord(c) < 128]) if isinstance(file_id, str) else file_id
+            media = utils.get_input_media_from_file_id(
+                safe_file_id,
+                has_spoiler=has_spoiler,
+                video_cover=vidcover_file
+            )
+        except Exception as e:
+            log.error(f"Failed to decode file_id '{file_id}': {e}")
+            raise ValueError(f'Failed to decode "{file_id}". The value does not represent an existing local file, HTTP URL, or valid file id.')
 
         r = await self.invoke(
             raw.functions.messages.SendMedia(
@@ -229,8 +237,9 @@ async def custom_send_video(
                         video_timestamp=start_timestamp
                     )
                 else:
+                    safe_video = "".join([c for c in video if ord(c) < 128])
                     media = utils.get_input_media_from_file_id(
-                        video,
+                        safe_video,
                         FileType.VIDEO,
                         ttl_seconds=(1 << 31) - 1 if view_once else ttl_seconds,
                         has_spoiler=has_spoiler,
@@ -566,10 +575,6 @@ SendCachedMedia.send_cached_media = custom_send_cached_media
 Client.send_video = custom_send_video
 SendVideo.send_video = custom_send_video
 
-
-Client.send_video = custom_send_video
-SendVideo.send_video = custom_send_video
-
 types.Message.copy = custom_copy
 
 Client.copy_message = custom_copy_message
@@ -582,8 +587,6 @@ import asyncio
 from pyrogram.types import Message
 import pyrogram
 
-# ── Global patch: Message.copy() uses web_page_preview which was removed in
-#    Pyrogram v2 / Kurigram. Inject it as None before every copy() call.
 if not getattr(Message, "_copy_patched", False):
     Message._copy_patched = True
     _original_copy = Message.copy
