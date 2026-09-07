@@ -256,7 +256,14 @@ async def media_handler(bot, message):
     media.caption = message.caption or ""
     filename = getattr(media, "file_name", None) or message.caption or "Unknown"
 
-    # Save file properly using the full message object for filter database indexing
+    # Extract embedded thumbnail automatically from file if available
+    thumb_file_id = None
+    if message.video and message.video.thumb:
+        thumb_file_id = message.video.thumb.file_id
+    elif message.document and message.document.thumb:
+        thumb_file_id = message.document.thumb.file_id
+
+    # Save file into filter database so GET FILES button works 100%
     try:
         await save_file(message)
     except Exception as e:
@@ -265,11 +272,11 @@ async def media_handler(bot, message):
     # Trigger movie update channel notification
     try:
         if await db.movie_update_status(bot.me.id):
-            await process_and_send_update(bot, filename, message.caption or "")
+            await process_and_send_update(bot, filename, message.caption or "", thumb_file_id)
     except Exception:
         logger.exception("Error processing media update")
 
-async def process_and_send_update(bot, filename, caption):
+async def process_and_send_update(bot, filename, caption, thumb_file_id=None):
     try:
         media_info = extract_media_info(filename, caption)
         base_name = media_info["base_name"]
@@ -277,11 +284,11 @@ async def process_and_send_update(bot, filename, caption):
 
         lock = locks[base_name]
         async with lock:
-            await _process_with_lock(bot, filename, caption, media_info, base_name, processed)
+            await _process_with_lock(bot, filename, caption, media_info, base_name, processed, thumb_file_id)
     except Exception as e:
         logger.exception(f"Processing failed in process_and_send_update: {e}")
 
-async def _process_with_lock(bot, filename, caption, media_info, base_name, processed):
+async def _process_with_lock(bot, filename, caption, media_info, base_name, processed, thumb_file_id=None):
     if not hasattr(db, 'movie_updates'):
         db.movie_updates = db.db.movie_updates
 
@@ -298,7 +305,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
 
     tmdb_details = {}
     tmdb_valid = False
-    if TMDB_POSTER:
+    if TMDB_POSTER and not thumb_file_id:
         try:
             search_query = f"{correct_title} {correct_year}" if correct_year else correct_title
             tmdb_details = await get_tmdb_details(search_query) or {}
@@ -309,8 +316,12 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     backdrop_url = tmdb_details.get("backdrop_url") if tmdb_valid else None
     poster_imdb = imdb_details.get("poster_url") if imdb_details else None
 
+    # Priority: 1. File's own Auto-Thumbnail, 2. TMDB Backdrop (Landscape), 3. IMDb Poster
     is_backdrop = False
-    if LANDSCAPE_POSTER and TMDB_POSTER and backdrop_url:
+    if thumb_file_id:
+        poster_url = thumb_file_id
+        is_backdrop = True
+    elif LANDSCAPE_POSTER and TMDB_POSTER and backdrop_url:
         poster_url = backdrop_url
         is_backdrop = True
     elif poster_imdb:
@@ -348,7 +359,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         "timestamp": datetime.now(),
         "tag": media_info["tag"],
         "season": media_info["season"],
-        "episode": media_info["episode"]
+        "episode": media_info["episode"],
+        "custom_thumb": thumb_file_id
     }
 
     if not movie_doc:
@@ -364,8 +376,9 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             "ott_platform": media_info["ott_platform"],
             "message_id": None,
             "is_photo": False,
-            "error_tmdb": not tmdb_valid,
-            "is_backdrop": is_backdrop
+            "error_tmdb": not tmdb_valid and not thumb_file_id,
+            "is_backdrop": is_backdrop,
+            "custom_thumb": thumb_file_id
         }
         try:
             await db.movie_updates.insert_one(movie_doc)
@@ -376,12 +389,16 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                 if any(f["filename"] == filename for f in movie_doc["files"]):
                     return
                 update_data = {"$push": {"files": file_data}}
+                if thumb_file_id and not movie_doc.get("custom_thumb"):
+                    update_data["$set"] = {"custom_thumb": thumb_file_id, "poster_url": thumb_file_id, "is_backdrop": True}
                 await db.movie_updates.update_one({"_id": base_name}, update_data)
                 schedule_update(bot, base_name)
     else:
         if any(f["filename"] == filename for f in movie_doc["files"]):
             return
         update_data = {"$push": {"files": file_data}}
+        if thumb_file_id and not movie_doc.get("custom_thumb"):
+            update_data["$set"] = {"custom_thumb": thumb_file_id, "poster_url": thumb_file_id, "is_backdrop": True}
         await db.movie_updates.update_one({"_id": base_name}, update_data)
         schedule_update(bot, base_name)
 
@@ -408,27 +425,38 @@ async def send_movie_update(bot, base_name):
             ]])
             
             poster_val = movie_doc.get("poster_url")
+            custom_thumb = movie_doc.get("custom_thumb")
 
             if poster_val and not LINK_PREVIEW:
-                size = (2560, 1440) if LANDSCAPE_POSTER and TMDB_POSTER and movie_doc.get("is_backdrop") else (853, 1280)
-                resized_poster = await fetch_image(poster_val, size)
-                if resized_poster:
+                if custom_thumb and poster_val == custom_thumb:
                     msg = await bot.send_photo(
                         chat_id=MOVIE_UPDATE_CHANNEL,
-                        photo=resized_poster,
+                        photo=custom_thumb,
                         caption=text,
                         reply_markup=buttons,
                         parse_mode=enums.ParseMode.HTML
                     )
                     is_photo = True
                 else:
-                    msg = await bot.send_message(
-                        chat_id=MOVIE_UPDATE_CHANNEL,
-                        text=text,
-                        reply_markup=buttons,
-                        parse_mode=enums.ParseMode.HTML
-                    )
-                    is_photo = False
+                    size = (2560, 1440) if LANDSCAPE_POSTER and TMDB_POSTER and movie_doc.get("is_backdrop") else (853, 1280)
+                    resized_poster = await fetch_image(poster_val, size)
+                    if resized_poster:
+                        msg = await bot.send_photo(
+                            chat_id=MOVIE_UPDATE_CHANNEL,
+                            photo=resized_poster,
+                            caption=text,
+                            reply_markup=buttons,
+                            parse_mode=enums.ParseMode.HTML
+                        )
+                        is_photo = True
+                    else:
+                        msg = await bot.send_message(
+                            chat_id=MOVIE_UPDATE_CHANNEL,
+                            text=text,
+                            reply_markup=buttons,
+                            parse_mode=enums.ParseMode.HTML
+                        )
+                        is_photo = False
             else:
                 send_params = {
                     "chat_id": MOVIE_UPDATE_CHANNEL,
