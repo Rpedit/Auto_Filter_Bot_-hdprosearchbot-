@@ -1,7 +1,6 @@
 import re
 import logging
 import asyncio
-import traceback
 from datetime import datetime
 from collections import defaultdict
 from plugins.Dreamxfutures.Imdbposter import get_tmdb_details, fetch_image, get_movie_details
@@ -245,41 +244,32 @@ def extract_media_info(filename: str, caption: str):
 
 @Client.on_message(filters.chat(CHANNELS) & MEDIA_FILTER)
 async def media_handler(bot, message):
-    print("🔥 SUCCESS: Media handler trigger ho gaya hai!")
     media = next(
         (getattr(message, ft) for ft in ("document", "video", "audio")
          if getattr(message, ft, None)),
         None
     )
     if not media:
-        print("❌ ERROR: Media object nahi mila!")
         return
 
     media.file_type = next(ft for ft in ("document", "video", "audio") if getattr(message, ft, None))
     media.caption = message.caption or ""
     filename = getattr(media, "file_name", None) or message.caption or "Unknown"
-    print(f"📁 File Detected: {filename}")
 
-    thumb_file_id = None
-    if message.video and message.video.thumb:
-        thumb_file_id = message.video.thumb.file_id
-    elif message.document and message.document.thumb:
-        thumb_file_id = message.document.thumb.file_id
-
+    # Save file properly using the full message object for filter database indexing
     try:
         await save_file(message)
     except Exception as e:
-        print(f"⚠️ Save file warning: {e}")
+        logger.error(f"Save file error: {e}")
 
+    # Trigger movie update channel notification
     try:
-        print("🚀 Sending movie update to channel...")
-        await process_and_send_update(bot, filename, message.caption or "", thumb_file_id)
-        print("✅ Movie update process finished!")
-    except Exception as e:
-        print(f"❌ Media Handler Exception: {e}")
-        traceback.print_exc()
+        if await db.movie_update_status(bot.me.id):
+            await process_and_send_update(bot, filename, message.caption or "")
+    except Exception:
+        logger.exception("Error processing media update")
 
-async def process_and_send_update(bot, filename, caption, thumb_file_id=None):
+async def process_and_send_update(bot, filename, caption):
     try:
         media_info = extract_media_info(filename, caption)
         base_name = media_info["base_name"]
@@ -287,12 +277,11 @@ async def process_and_send_update(bot, filename, caption, thumb_file_id=None):
 
         lock = locks[base_name]
         async with lock:
-            await _process_with_lock(bot, filename, caption, media_info, base_name, processed, thumb_file_id)
+            await _process_with_lock(bot, filename, caption, media_info, base_name, processed)
     except Exception as e:
-        print(f"❌ Error in process_and_send_update: {e}")
-        traceback.print_exc()
+        logger.exception(f"Processing failed in process_and_send_update: {e}")
 
-async def _process_with_lock(bot, filename, caption, media_info, base_name, processed, thumb_file_id=None):
+async def _process_with_lock(bot, filename, caption, media_info, base_name, processed):
     if not hasattr(db, 'movie_updates'):
         db.movie_updates = db.db.movie_updates
 
@@ -301,8 +290,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     imdb_details = {}
     try:
         imdb_details = await get_movie_details(base_name) or {}
-    except Exception as e:
-        print(f"⚠️ IMDb fetch warning: {e}")
+    except Exception:
         imdb_details = {}
 
     correct_title = imdb_details.get("title") or base_name
@@ -310,23 +298,19 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
 
     tmdb_details = {}
     tmdb_valid = False
-    if TMDB_POSTER and not thumb_file_id:
+    if TMDB_POSTER:
         try:
             search_query = f"{correct_title} {correct_year}" if correct_year else correct_title
             tmdb_details = await get_tmdb_details(search_query) or {}
             tmdb_valid = tmdb_details and bool(tmdb_details.get("backdrop_url"))
-        except Exception as e:
-            print(f"⚠️ TMDB fetch warning: {e}")
+        except Exception:
             tmdb_details = {}
 
     backdrop_url = tmdb_details.get("backdrop_url") if tmdb_valid else None
     poster_imdb = imdb_details.get("poster_url") if imdb_details else None
 
     is_backdrop = False
-    if thumb_file_id:
-        poster_url = thumb_file_id
-        is_backdrop = True
-    elif LANDSCAPE_POSTER and TMDB_POSTER and backdrop_url:
+    if LANDSCAPE_POSTER and TMDB_POSTER and backdrop_url:
         poster_url = backdrop_url
         is_backdrop = True
     elif poster_imdb:
@@ -364,8 +348,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         "timestamp": datetime.now(),
         "tag": media_info["tag"],
         "season": media_info["season"],
-        "episode": media_info["episode"],
-        "custom_thumb": thumb_file_id
+        "episode": media_info["episode"]
     }
 
     if not movie_doc:
@@ -381,9 +364,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             "ott_platform": media_info["ott_platform"],
             "message_id": None,
             "is_photo": False,
-            "error_tmdb": not tmdb_valid and not thumb_file_id,
-            "is_backdrop": is_backdrop,
-            "custom_thumb": thumb_file_id
+            "error_tmdb": not tmdb_valid,
+            "is_backdrop": is_backdrop
         }
         try:
             await db.movie_updates.insert_one(movie_doc)
@@ -394,16 +376,12 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                 if any(f["filename"] == filename for f in movie_doc["files"]):
                     return
                 update_data = {"$push": {"files": file_data}}
-                if thumb_file_id and not movie_doc.get("custom_thumb"):
-                    update_data["$set"] = {"custom_thumb": thumb_file_id, "poster_url": thumb_file_id, "is_backdrop": True}
                 await db.movie_updates.update_one({"_id": base_name}, update_data)
                 schedule_update(bot, base_name)
     else:
         if any(f["filename"] == filename for f in movie_doc["files"]):
             return
         update_data = {"$push": {"files": file_data}}
-        if thumb_file_id and not movie_doc.get("custom_thumb"):
-            update_data["$set"] = {"custom_thumb": thumb_file_id, "poster_url": thumb_file_id, "is_backdrop": True}
         await db.movie_updates.update_one({"_id": base_name}, update_data)
         schedule_update(bot, base_name)
 
@@ -430,38 +408,27 @@ async def send_movie_update(bot, base_name):
             ]])
             
             poster_val = movie_doc.get("poster_url")
-            custom_thumb = movie_doc.get("custom_thumb")
 
             if poster_val and not LINK_PREVIEW:
-                if custom_thumb and poster_val == custom_thumb:
+                size = (2560, 1440) if LANDSCAPE_POSTER and TMDB_POSTER and movie_doc.get("is_backdrop") else (853, 1280)
+                resized_poster = await fetch_image(poster_val, size)
+                if resized_poster:
                     msg = await bot.send_photo(
                         chat_id=MOVIE_UPDATE_CHANNEL,
-                        photo=custom_thumb,
+                        photo=resized_poster,
                         caption=text,
                         reply_markup=buttons,
                         parse_mode=enums.ParseMode.HTML
                     )
                     is_photo = True
                 else:
-                    size = (2560, 1440) if LANDSCAPE_POSTER and TMDB_POSTER and movie_doc.get("is_backdrop") else (853, 1280)
-                    resized_poster = await fetch_image(poster_val, size)
-                    if resized_poster:
-                        msg = await bot.send_photo(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            photo=resized_poster,
-                            caption=text,
-                            reply_markup=buttons,
-                            parse_mode=enums.ParseMode.HTML
-                        )
-                        is_photo = True
-                    else:
-                        msg = await bot.send_message(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            text=text,
-                            reply_markup=buttons,
-                            parse_mode=enums.ParseMode.HTML
-                        )
-                        is_photo = False
+                    msg = await bot.send_message(
+                        chat_id=MOVIE_UPDATE_CHANNEL,
+                        text=text,
+                        reply_markup=buttons,
+                        parse_mode=enums.ParseMode.HTML
+                    )
+                    is_photo = False
             else:
                 send_params = {
                     "chat_id": MOVIE_UPDATE_CHANNEL,
@@ -479,9 +446,11 @@ async def send_movie_update(bot, base_name):
                 {"$set": {"message_id": msg.id, "is_photo": is_photo}}
             )
             return msg
+        except FloodWait as e:
+            wait_time = e.value + 2
+            await asyncio.sleep(wait_time)
         except Exception as e:
-            print(f"🔥 ASLI ERROR YAHAN HAI: {e}")
-            traceback.print_exc()
+            logger.error(f"Failed to send movie update: {e}")
             break
     return None
 
@@ -535,8 +504,7 @@ async def update_movie_message(bot, base_name):
         except (MessageIdInvalid, MessageNotModified) as e:
             logger.warning(f"Message update skipped due to error: {e}")
             pass
-        except Exception as e:
-            print(f"⚠️ Update message error recovery: {e}")
+        except Exception:
             try:
                 await bot.delete_messages(
                     chat_id=MOVIE_UPDATE_CHANNEL,
@@ -546,12 +514,12 @@ async def update_movie_message(bot, base_name):
                     {"_id": base_name},
                     {"$set": {"message_id": None, "is_photo": False}}
                 )
-            except Exception as sub_e:
-                print(f"❌ Recovery delete failed: {sub_e}")
+            except Exception as e:
+                logger.error(f"Error during message deletion/update in recovery: {e}")
+                pass
             await send_movie_update(bot, base_name)
     except Exception as e:
-        print(f"❌ Failed to update movie message for {base_name}: {e}")
-        traceback.print_exc()
+        logger.error(f"Failed to update movie message for {base_name}: {e}")
 
 def generate_movie_message(movie_doc, base_name):
     all_qualities = set()
