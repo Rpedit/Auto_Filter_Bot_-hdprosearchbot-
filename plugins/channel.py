@@ -304,23 +304,27 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
 
     movie_doc = await db.movie_updates.find_one({"_id": base_name})
     
-    # ── TMDB + IMDb Hybrid Combination ──
-    tmdb_details = {}
-    if TMDB_POSTER:
-        try:
-            tmdb_details = await get_movie_detailsx(base_name) or {}
-        except Exception:
-            tmdb_details = {}
-
+    # ── HYBRID FIX: IMDb First for Accurate Year/Series, then TMDB for Backdrop ──
     imdb_details = {}
     try:
         imdb_details = await get_movie_details(base_name) or {}
     except Exception:
         imdb_details = {}
 
-    tmdb_valid = tmdb_details and not tmdb_details.get("error")
+    correct_title = imdb_details.get("title") or base_name
+    correct_year = imdb_details.get("year") or media_info["year"]
 
-    # Poster & Backdrop resolution
+    tmdb_details = {}
+    tmdb_valid = False
+    if TMDB_POSTER:
+        try:
+            search_query = f"{correct_title} {correct_year}" if correct_year else correct_title
+            tmdb_details = await get_movie_detailsx(search_query) or {}
+            tmdb_valid = tmdb_details and not tmdb_details.get("error")
+        except Exception:
+            tmdb_details = {}
+
+    # Poster & Backdrop resolution (Landscape priority via TMDB backdrop)
     backdrop_url = tmdb_details.get("backdrop_url") if tmdb_valid else None
     poster_tmdb = tmdb_details.get("poster_url") if tmdb_valid else None
     poster_imdb = imdb_details.get("poster_url") if imdb_details else None
@@ -329,38 +333,38 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     if LANDSCAPE_POSTER and TMDB_POSTER and backdrop_url:
         poster_url = backdrop_url
         is_backdrop = True
-    elif poster_tmdb:
-        poster_url = poster_tmdb
     elif poster_imdb:
         poster_url = poster_imdb
+    elif poster_tmdb:
+        poster_url = poster_tmdb
     else:
         poster_url = None
 
-    # Genres combination (Fallback to IMDb if TMDB has N/A)
-    tmdb_genres = tmdb_details.get("genres", "N/A") if tmdb_valid else "N/A"
+    # Genres combination (Prioritize IMDb for accuracy)
     imdb_genres = imdb_details.get("genres", "N/A") if imdb_details else "N/A"
-    genres_raw = tmdb_genres if tmdb_genres and tmdb_genres != "N/A" else imdb_genres
+    tmdb_genres = tmdb_details.get("genres", "N/A") if tmdb_valid else "N/A"
+    genres_raw = imdb_genres if imdb_genres and imdb_genres != "N/A" else tmdb_genres
 
     if isinstance(genres_raw, str):
         genre_list = [g.strip() for g in genres_raw.split(",")]
         genres = ", ".join(g for g in genre_list if g in STANDARD_GENRES) or "N/A"
-    else:
+    elif isinstance(genres_raw, list):
         genres = ", ".join(g for g in genres_raw if g in STANDARD_GENRES) or "N/A"
+    else:
+        genres = "N/A"
 
-    # Rating combination (Fallback to IMDb if TMDB has N/A or 0)
-    tmdb_rating = tmdb_details.get("rating", "N/A") if tmdb_valid else "N/A"
+    # Rating combination (Prioritize IMDb)
     imdb_rating = imdb_details.get("rating", "N/A") if imdb_details else "N/A"
-    rating = tmdb_rating if tmdb_rating and tmdb_rating != "N/A" and str(tmdb_rating) != "0" else imdb_rating
+    tmdb_rating = tmdb_details.get("rating", "N/A") if tmdb_valid else "N/A"
+    rating = imdb_rating if imdb_rating and imdb_rating != "N/A" and str(imdb_rating) != "0" else tmdb_rating
 
     # URL combination
-    tmdb_url = tmdb_details.get("tmdb_url") or tmdb_details.get("url") if tmdb_valid else ""
     imdb_url = imdb_details.get("url") if imdb_details else ""
-    url = tmdb_url if tmdb_url else imdb_url
+    tmdb_url = tmdb_details.get("tmdb_url") or tmdb_details.get("url") if tmdb_valid else ""
+    url = imdb_url if imdb_url else tmdb_url
 
-    # Year combination
-    tmdb_year = tmdb_details.get("year") if tmdb_valid else None
-    imdb_year = imdb_details.get("year") if imdb_details else None
-    year = tmdb_year if tmdb_year else (imdb_year or media_info["year"])
+    # Year combination (Strictly using IMDb / Correct Year to prevent old 2018 premiere date bug)
+    year = correct_year
 
     file_data = {
         "filename": filename,
