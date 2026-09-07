@@ -1,6 +1,7 @@
 import re
 import logging
 import asyncio
+import traceback
 from datetime import datetime
 from collections import defaultdict
 from plugins.Dreamxfutures.Imdbposter import get_tmdb_details, fetch_image, get_movie_details
@@ -244,17 +245,20 @@ def extract_media_info(filename: str, caption: str):
 
 @Client.on_message(filters.chat(CHANNELS) & MEDIA_FILTER)
 async def media_handler(bot, message):
+    print("🔥 SUCCESS: Media handler trigger ho gaya hai!")
     media = next(
         (getattr(message, ft) for ft in ("document", "video", "audio")
          if getattr(message, ft, None)),
         None
     )
     if not media:
+        print("❌ ERROR: Media object nahi mila!")
         return
 
     media.file_type = next(ft for ft in ("document", "video", "audio") if getattr(message, ft, None))
     media.caption = message.caption or ""
     filename = getattr(media, "file_name", None) or message.caption or "Unknown"
+    print(f"📁 File Detected: {filename}")
 
     thumb_file_id = None
     if message.video and message.video.thumb:
@@ -262,18 +266,18 @@ async def media_handler(bot, message):
     elif message.document and message.document.thumb:
         thumb_file_id = message.document.thumb.file_id
 
-    # Background safe file save (won't crash the update even if save_file errors out)
     try:
         await save_file(message)
     except Exception as e:
-        logger.error(f"Save file background error: {e}")
+        print(f"⚠️ Save file warning: {e}")
 
-    # Directly trigger channel update with auto-thumbnail detection
     try:
-        if await db.movie_update_status(bot.me.id):
-            await process_and_send_update(bot, filename, message.caption or "", thumb_file_id)
-    except Exception:
-        logger.exception("Error processing media update")
+        print("🚀 Sending movie update to channel...")
+        await process_and_send_update(bot, filename, message.caption or "", thumb_file_id)
+        print("✅ Movie update process finished!")
+    except Exception as e:
+        print(f"❌ Media Handler Exception: {e}")
+        traceback.print_exc()
 
 async def process_and_send_update(bot, filename, caption, thumb_file_id=None):
     try:
@@ -284,10 +288,9 @@ async def process_and_send_update(bot, filename, caption, thumb_file_id=None):
         lock = locks[base_name]
         async with lock:
             await _process_with_lock(bot, filename, caption, media_info, base_name, processed, thumb_file_id)
-    except PyMongoError as e:
-        logger.error(f"Database error in process_and_send_update: {e}")
     except Exception as e:
-        logger.exception(f"Processing failed in process_and_send_update: {e}")
+        print(f"❌ Error in process_and_send_update: {e}")
+        traceback.print_exc()
 
 async def _process_with_lock(bot, filename, caption, media_info, base_name, processed, thumb_file_id=None):
     if not hasattr(db, 'movie_updates'):
@@ -298,7 +301,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     imdb_details = {}
     try:
         imdb_details = await get_movie_details(base_name) or {}
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ IMDb fetch warning: {e}")
         imdb_details = {}
 
     correct_title = imdb_details.get("title") or base_name
@@ -311,7 +315,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             search_query = f"{correct_title} {correct_year}" if correct_year else correct_title
             tmdb_details = await get_tmdb_details(search_query) or {}
             tmdb_valid = tmdb_details and bool(tmdb_details.get("backdrop_url"))
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ TMDB fetch warning: {e}")
             tmdb_details = {}
 
     backdrop_url = tmdb_details.get("backdrop_url") if tmdb_valid else None
@@ -474,11 +479,9 @@ async def send_movie_update(bot, base_name):
                 {"$set": {"message_id": msg.id, "is_photo": is_photo}}
             )
             return msg
-        except FloodWait as e:
-            wait_time = e.value + 2
-            await asyncio.sleep(wait_time)
         except Exception as e:
-            logger.error(f"Failed to send movie update: {e}")
+            print(f"🔥 ASLI ERROR YAHAN HAI: {e}")
+            traceback.print_exc()
             break
     return None
 
@@ -532,7 +535,8 @@ async def update_movie_message(bot, base_name):
         except (MessageIdInvalid, MessageNotModified) as e:
             logger.warning(f"Message update skipped due to error: {e}")
             pass
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ Update message error recovery: {e}")
             try:
                 await bot.delete_messages(
                     chat_id=MOVIE_UPDATE_CHANNEL,
@@ -542,12 +546,12 @@ async def update_movie_message(bot, base_name):
                     {"_id": base_name},
                     {"$set": {"message_id": None, "is_photo": False}}
                 )
-            except Exception as e:
-                logger.error(f"Error during message deletion/update in recovery: {e}")
-                pass
+            except Exception as sub_e:
+                print(f"❌ Recovery delete failed: {sub_e}")
             await send_movie_update(bot, base_name)
     except Exception as e:
-        logger.error(f"Failed to update movie message for {base_name}: {e}")
+        print(f"❌ Failed to update movie message for {base_name}: {e}")
+        traceback.print_exc()
 
 def generate_movie_message(movie_doc, base_name):
     all_qualities = set()
