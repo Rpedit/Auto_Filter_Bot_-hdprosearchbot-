@@ -256,16 +256,18 @@ async def media_handler(bot, message):
     media.caption = message.caption or ""
     filename = getattr(media, "file_name", None) or message.caption or "Unknown"
 
-    # Auto-detect embedded thumbnail from the file
     thumb_file_id = None
     if message.video and message.video.thumb:
         thumb_file_id = message.video.thumb.file_id
     elif message.document and message.document.thumb:
         thumb_file_id = message.document.thumb.file_id
 
-    success, info = await save_file(media)
-    if not success:
-        return
+    # FIX HERE: Pass the full 'message' object to save_file instead of 'media'
+    try:
+        success, info = await save_file(message)
+    except Exception as e:
+        logger.error(f"Save file error: {e}")
+        success = False
 
     try:
         if await db.movie_update_status(bot.me.id):
@@ -315,7 +317,6 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     backdrop_url = tmdb_details.get("backdrop_url") if tmdb_valid else None
     poster_imdb = imdb_details.get("poster_url") if imdb_details else None
 
-    # Priority: 1. File's own thumb, 2. TMDB Backdrop, 3. IMDb Poster
     is_backdrop = False
     if thumb_file_id:
         poster_url = thumb_file_id
