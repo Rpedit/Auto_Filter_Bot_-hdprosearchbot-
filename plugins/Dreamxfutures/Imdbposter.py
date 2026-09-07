@@ -5,8 +5,9 @@ import warnings
 import logging
 from io import BytesIO
 from datetime import datetime
+from collections import defaultdict
 from PIL import Image
-from info import DREAMXBOTZ_IMAGE_FETCH, MAX_LIST_ELM
+from info import DREAMXBOTZ_IMAGE_FETCH, MAX_LIST_ELM, TMDB_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -165,13 +166,112 @@ async def get_movie_details(query, bulk=False, id=False, file=None):
     }
 
 async def get_movie_detailsx(query, id=False, file=None):
-    """
-    Primary movie & series details fetcher using IMDb directly to ensure correct years and sorting.
-    """
     try:
         data = await get_movie_details(query, id=id, file=file)
         if data:
             return data
     except Exception as e:
         logger.error(f"IMDb direct fetch failed: {e}")
+    return None
+
+async def _fetch_tmdb_data(query, api_key=None):
+    key = api_key or TMDB_API_KEY
+    if not key:
+        return None
+    try:
+        session = await get_session()
+        url = f"https://api.themoviedb.org/3/search/multi?api_key={key}&query={aiohttp.helpers.quote(query)}"
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return None
+            res = await resp.json()
+            results = res.get('results', [])
+            if not results:
+                return None
+            item = next((r for r in results if r.get('media_type') in ['movie', 'tv']), results[0])
+            media_type = item.get('media_type') or ('tv' if 'name' in item else 'movie')
+            tmdb_id = item.get('id')
+            if not tmdb_id:
+                return None
+            
+            detail_url = f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}?api_key={key}&append_to_response=images"
+            async with session.get(detail_url) as d_resp:
+                if d_resp.status != 200:
+                    return None
+                d_data = await d_resp.json()
+                
+                images = d_data.get('images', {})
+                backdrops_raw = images.get('backdrops', [])
+                posters_raw = images.get('posters', [])
+                
+                backdrops = defaultdict(list)
+                for b in backdrops_raw:
+                    iso = b.get('iso_639_1') or 'no_lang'
+                    path = b.get('file_path')
+                    if path:
+                        backdrops[iso].append(f"https://image.tmdb.org/t/p/original{path}")
+                        
+                posters = defaultdict(list)
+                for p in posters_raw:
+                    iso = p.get('iso_639_1') or 'no_lang'
+                    path = p.get('file_path')
+                    if path:
+                        posters[iso].append(f"https://image.tmdb.org/t/p/original{path}")
+                        
+                poster_path = d_data.get('poster_path')
+                poster_url = f"https://image.tmdb.org/t/p/original{poster_path}" if poster_path else None
+                
+                return {
+                    'title': d_data.get('title') or d_data.get('name'),
+                    'localized_title': d_data.get('original_title') or d_data.get('original_name'),
+                    'year': (d_data.get('release_date') or d_data.get('first_air_date') or '')[:4],
+                    'rating': str(d_data.get('vote_average', '0.0')),
+                    'images': {
+                        'backdrops': dict(backdrops),
+                        'posters': dict(posters),
+                        'original_language': d_data.get('original_language')
+                    },
+                    'poster_url': poster_url
+                }
+    except Exception as e:
+        logger.error(f"TMDB API data fetch error: {e}")
+    return None
+
+async def get_tmdb_details(query, api_key=None):
+    """Fetch TMDB landscape backdrop for the query."""
+    q = str(query).strip()
+    try:
+        data = await _fetch_tmdb_data(q, api_key=api_key)
+        if data:
+            details = {}
+            details['title'] = data.get('title') or data.get('localized_title')
+            details['year'] = data.get('year')
+            details['rating'] = data.get('rating')
+            
+            backdrops = data.get('images', {}).get('backdrops', {})
+            original_language = data.get('images', {}).get('original_language')
+            backdrop_url = None
+            for key in ('en', original_language, 'xx', 'no_lang'):
+                if key and backdrops.get(key):
+                    backdrop_url = backdrops[key][0]
+                    break
+            if not backdrop_url and backdrops:
+                for lang_list in backdrops.values():
+                    if lang_list:
+                        backdrop_url = lang_list[0]
+                        break
+                        
+            details['backdrop_url'] = backdrop_url.replace("/original/", "/w1280/") if backdrop_url else None
+            
+            posters = data.get('images', {}).get('posters', {})
+            poster_url = data.get('poster_url')
+            if not poster_url:
+                for key in ('en', original_language, 'xx'):
+                    if key and posters.get(key):
+                        poster_url = posters[key][0]
+                        break
+            details['poster_url'] = poster_url.replace("/original/", "/w1280/") if poster_url else None
+            return details
+    except Exception as e:
+        logger.error(f"TMDB backdrop fetch error: {e}")
     return None
