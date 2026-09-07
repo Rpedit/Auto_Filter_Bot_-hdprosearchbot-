@@ -17,7 +17,6 @@ from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Precomputed sets for faster lookups
 _BASE_IGNORE_WORDS = {
     "rarbg", "dub", "sub", "sample", "mkv", "mp4", "avi", "aac", "ac3", "eac3", "ddp", "ddp5", "atmos", "dts", 
     "combined", "esub", "msub", "proper", "repack", "unrated", "extended", "imax", "remux", "10bit",
@@ -47,57 +46,33 @@ _BASE_IGNORE_WORDS = {
 
 IGNORE_WORDS = _BASE_IGNORE_WORDS | set(BAD_WORDS if isinstance(BAD_WORDS, (list, tuple, set)) else [])
 
-# Constants
 CAPTION_LANGUAGES = {
-    "hin": "Hindi", "hindi": "Hindi",
-    "tam": "Tamil", "tamil": "Tamil",
-    "kan": "Kannada", "kannada": "Kannada",
-    "tel": "Telugu", "telugu": "Telugu",
-    "mal": "Malayalam", "malayalam": "Malayalam",
-    "eng": "English", "english": "English",
-    "pun": "Punjabi", "punjabi": "Punjabi",
-    "ben": "Bengali", "bengali": "Bengali",
-    "mar": "Marathi", "marathi": "Marathi",
-    "guj": "Gujarati", "gujarati": "Gujarati",
-    "urd": "Urdu", "urdu": "Urdu",
-    "kor": "Korean", "korean": "Korean",
-    "jpn": "Japanese", "japanese": "Japanese",
-    "bho": "Bhojpuri", "bhojpuri": "Bhojpuri",
-    "ori": "Odia", "odia": "Odia", "oriya": "Odia",
-    "asm": "Assamese", "assamese": "Assamese",
-    "spa": "Spanish", "spanish": "Spanish",
-    "fre": "French", "french": "French", "fra": "French",
-    "ger": "German", "german": "German", "deu": "German",
-    "ita": "Italian", "italian": "Italian",
-    "rus": "Russian", "russian": "Russian",
-    "chi": "Chinese", "chinese": "Chinese", "zho": "Chinese",
-    "tha": "Thai", "thai": "Thai",
-    "ind": "Indonesian", "indonesian": "Indonesian",
+    "hin": "Hindi", "hindi": "Hindi", "tam": "Tamil", "tamil": "Tamil",
+    "kan": "Kannada", "kannada": "Kannada", "tel": "Telugu", "telugu": "Telugu",
+    "mal": "Malayalam", "malayalam": "Malayalam", "eng": "English", "english": "English",
+    "pun": "Punjabi", "punjabi": "Punjabi", "ben": "Bengali", "bengali": "Bengali",
+    "mar": "Marathi", "marathi": "Marathi", "guj": "Gujarati", "gujarati": "Gujarati",
+    "urd": "Urdu", "urdu": "Urdu", "kor": "Korean", "korean": "Korean",
+    "jpn": "Japanese", "japanese": "Japanese", "bho": "Bhojpuri", "bhojpuri": "Bhojpuri",
+    "ori": "Odia", "odia": "Odia", "oriya": "Odia", "asm": "Assamese", "assamese": "Assamese",
+    "spa": "Spanish", "spanish": "Spanish", "fre": "French", "french": "French", "fra": "French",
+    "ger": "German", "german": "German", "deu": "German", "ita": "Italian", "italian": "Italian",
+    "rus": "Russian", "russian": "Russian", "chi": "Chinese", "chinese": "Chinese", "zho": "Chinese",
+    "tha": "Thai", "thai": "Thai", "ind": "Indonesian", "indonesian": "Indonesian",
     "dual": "Dual Audio", "multi": "Multi Audio"
 }
 
 OTT_PLATFORMS = {
-    "nf": "Netflix", "netflix": "Netflix",
-    "sonyliv": "SonyLiv", "sony": "SonyLiv", "sliv": "SonyLiv",
+    "nf": "Netflix", "netflix": "Netflix", "sonyliv": "SonyLiv", "sony": "SonyLiv", "sliv": "SonyLiv",
     "amzn": "Amazon Prime Video", "prime": "Amazon Prime Video", "primevideo": "Amazon Prime Video",
-    "hotstar": "Disney+ Hotstar", "disney": "Disney+", "dnp": "Disney+",
-    "zee5": "Zee5",
-    "jio": "JioHotstar", "jhs": "JioHotstar",
-    "aha": "Aha", "hbo": "HBO Max", "max": "Max",
-    "paramount": "Paramount+", 
-    "apple": "Apple TV+", "atv": "Apple TV+", "atvp": "Apple TV+", "appletv": "Apple TV+",
-    "hoichoi": "Hoichoi", "sunnxt": "Sun NXT", "viki": "Viki",
-    "cr": "Crunchyroll", "crunchyroll": "Crunchyroll",
-    "hulu": "Hulu",
-    "peacock": "Peacock",
-    "lionsgate": "Lionsgate Play", "lionsgateplay": "Lionsgate Play",
-    "altbalaji": "ALTT", "alt": "ALTT", "altt": "ALTT",
-    "shemaroo": "ShemarooMe", "shemaroome": "ShemarooMe",
-    "chaupal": "Chaupal",
-    "stage": "Stage",
-    "planetmarathi": "Planet Marathi",
-    "manorama": "ManoramaMAX", "manoramamax": "ManoramaMAX",
-    "tubi": "Tubi"
+    "hotstar": "Disney+ Hotstar", "disney": "Disney+", "dnp": "Disney+", "zee5": "Zee5",
+    "jio": "JioHotstar", "jhs": "JioHotstar", "aha": "Aha", "hbo": "HBO Max", "max": "Max",
+    "paramount": "Paramount+", "apple": "Apple TV+", "atv": "Apple TV+", "atvp": "Apple TV+", "appletv": "Apple TV+",
+    "hoichoi": "Hoichoi", "sunnxt": "Sun NXT", "viki": "Viki", "cr": "Crunchyroll", "crunchyroll": "Crunchyroll",
+    "hulu": "Hulu", "peacock": "Peacock", "lionsgate": "Lionsgate Play", "lionsgateplay": "Lionsgate Play",
+    "altbalaji": "ALTT", "alt": "ALTT", "altt": "ALTT", "shemaroo": "ShemarooMe", "shemaroome": "ShemarooMe",
+    "chaupal": "Chaupal", "stage": "Stage", "planetmarathi": "Planet Marathi",
+    "manorama": "ManoramaMAX", "manoramamax": "ManoramaMAX", "tubi": "Tubi"
 }
 
 STANDARD_GENRES = {
@@ -106,7 +81,6 @@ STANDARD_GENRES = {
     'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Sport', 'Thriller', 'War', 'Western', 'Anime'
 }
 
-# Precompiled regex patterns
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
 NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
 QUALITY_PATTERN = re.compile(
@@ -274,17 +248,24 @@ async def media_handler(bot, message):
 
     media.file_type = next(ft for ft in ("document", "video", "audio") if getattr(message, ft, None))
     media.caption = message.caption or ""
+    
+    thumb_file_id = None
+    if message.video and message.video.thumb:
+        thumb_file_id = message.video.thumb.file_id
+    elif message.document and message.document.thumb:
+        thumb_file_id = message.document.thumb.file_id
+
     success, info = await save_file(media)
     if not success:
         return
 
     try:
         if await db.movie_update_status(bot.me.id):
-            await process_and_send_update(bot, media.file_name, media.caption)
+            await process_and_send_update(bot, media.file_name, media.caption, thumb_file_id)
     except Exception:
         logger.exception("Error processing media")
 
-async def process_and_send_update(bot, filename, caption):
+async def process_and_send_update(bot, filename, caption, thumb_file_id=None):
     try:
         media_info = extract_media_info(filename, caption)
         base_name = media_info["base_name"]
@@ -292,19 +273,18 @@ async def process_and_send_update(bot, filename, caption):
 
         lock = locks[base_name]
         async with lock:
-            await _process_with_lock(bot, filename, caption, media_info, base_name, processed)
+            await _process_with_lock(bot, filename, caption, media_info, base_name, processed, thumb_file_id)
     except PyMongoError as e:
         logger.error(f"Database error in process_and_send_update: {e}")
     except Exception as e:
         logger.exception(f"Processing failed in process_and_send_update: {e}")
 
-async def _process_with_lock(bot, filename, caption, media_info, base_name, processed):
+async def _process_with_lock(bot, filename, caption, media_info, base_name, processed, thumb_file_id=None):
     if not hasattr(db, 'movie_updates'):
         db.movie_updates = db.db.movie_updates
 
     movie_doc = await db.movie_updates.find_one({"_id": base_name})
     
-    # ── HYBRID SETUP: IMDb for Accurate Year/Series & Details, TMDB for Landscape Backdrop ──
     imdb_details = {}
     try:
         imdb_details = await get_movie_details(base_name) or {}
@@ -316,7 +296,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
 
     tmdb_details = {}
     tmdb_valid = False
-    if TMDB_POSTER:
+    if TMDB_POSTER and not thumb_file_id:
         try:
             search_query = f"{correct_title} {correct_year}" if correct_year else correct_title
             tmdb_details = await get_tmdb_details(search_query) or {}
@@ -324,12 +304,14 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         except Exception:
             tmdb_details = {}
 
-    # Poster & Backdrop resolution (Landscape priority via TMDB backdrop)
     backdrop_url = tmdb_details.get("backdrop_url") if tmdb_valid else None
     poster_imdb = imdb_details.get("poster_url") if imdb_details else None
 
     is_backdrop = False
-    if LANDSCAPE_POSTER and TMDB_POSTER and backdrop_url:
+    if thumb_file_id:
+        poster_url = thumb_file_id
+        is_backdrop = True
+    elif LANDSCAPE_POSTER and TMDB_POSTER and backdrop_url:
         poster_url = backdrop_url
         is_backdrop = True
     elif poster_imdb:
@@ -337,7 +319,6 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     else:
         poster_url = tmdb_details.get("poster_url") or None
 
-    # Genres combination (Prioritize IMDb for accuracy)
     imdb_genres = imdb_details.get("genres", "N/A") if imdb_details else "N/A"
     tmdb_genres = tmdb_details.get("genres", "N/A") if tmdb_valid else "N/A"
     genres_raw = imdb_genres if imdb_genres and imdb_genres != "N/A" else tmdb_genres
@@ -350,17 +331,13 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     else:
         genres = "N/A"
 
-    # Rating combination (Prioritize IMDb)
     imdb_rating = imdb_details.get("rating", "N/A") if imdb_details else "N/A"
     tmdb_rating = tmdb_details.get("rating", "N/A") if tmdb_valid else "N/A"
     rating = imdb_rating if imdb_rating and imdb_rating != "N/A" and str(imdb_rating) != "0" else tmdb_rating
 
-    # URL combination
     imdb_url = imdb_details.get("url") if imdb_details else ""
     tmdb_url = tmdb_details.get("tmdb_url") or tmdb_details.get("url") if tmdb_valid else ""
     url = imdb_url if imdb_url else tmdb_url
-
-    # Year combination (Strictly using IMDb / Correct Year to prevent old 2018 premiere date bug)
     year = correct_year
 
     file_data = {
@@ -372,7 +349,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         "timestamp": datetime.now(),
         "tag": media_info["tag"],
         "season": media_info["season"],
-        "episode": media_info["episode"]
+        "episode": media_info["episode"],
+        "custom_thumb": thumb_file_id
     }
 
     if not movie_doc:
@@ -388,8 +366,9 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             "ott_platform": media_info["ott_platform"],
             "message_id": None,
             "is_photo": False,
-            "error_tmdb": not tmdb_valid,
-            "is_backdrop": is_backdrop
+            "error_tmdb": not tmdb_valid and not thumb_file_id,
+            "is_backdrop": is_backdrop,
+            "custom_thumb": thumb_file_id
         }
         try:
             await db.movie_updates.insert_one(movie_doc)
@@ -400,19 +379,19 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             if movie_doc:
                 if any(f["filename"] == filename for f in movie_doc["files"]):
                     return
-                await db.movie_updates.update_one(
-                    {"_id": base_name},
-                    {"$push": {"files": file_data}}
-                )
+                update_data = {"$push": {"files": file_data}}
+                if thumb_file_id and not movie_doc.get("custom_thumb"):
+                    update_data["$set"] = {"custom_thumb": thumb_file_id, "poster_url": thumb_file_id, "is_backdrop": True}
+                await db.movie_updates.update_one({"_id": base_name}, update_data)
                 movie_doc["files"].append(file_data)
                 schedule_update(bot, base_name)
     else:
         if any(f["filename"] == filename for f in movie_doc["files"]):
             return
-        await db.movie_updates.update_one(
-            {"_id": base_name},
-            {"$push": {"files": file_data}}
-        )
+        update_data = {"$push": {"files": file_data}}
+        if thumb_file_id and not movie_doc.get("custom_thumb"):
+            update_data["$set"] = {"custom_thumb": thumb_file_id, "poster_url": thumb_file_id, "is_backdrop": True}
+        await db.movie_updates.update_one({"_id": base_name}, update_data)
         movie_doc["files"].append(file_data)
         schedule_update(bot, base_name)
 
@@ -438,27 +417,39 @@ async def send_movie_update(bot, base_name):
                 )
             ]])
             
-            size = (2560, 1440) if LANDSCAPE_POSTER and TMDB_POSTER and movie_doc.get("is_backdrop") and not movie_doc.get("error_tmdb") else (853, 1280)
-            if movie_doc.get("poster_url") and not LINK_PREVIEW:
-                resized_poster = await fetch_image(movie_doc["poster_url"], size)
-                if resized_poster:
+            poster_val = movie_doc.get("poster_url")
+            custom_thumb = movie_doc.get("custom_thumb")
+
+            if poster_val and not LINK_PREVIEW:
+                if custom_thumb and poster_val == custom_thumb:
                     msg = await bot.send_photo(
                         chat_id=MOVIE_UPDATE_CHANNEL,
-                        photo=resized_poster,
+                        photo=custom_thumb,
                         caption=text,
                         reply_markup=buttons,
                         parse_mode=enums.ParseMode.HTML
                     )
                     is_photo = True
                 else:
-                    send_params = {
-                        "chat_id": MOVIE_UPDATE_CHANNEL,
-                        "text": text,
-                        "reply_markup": buttons,
-                        "parse_mode": enums.ParseMode.HTML
-                    }
-                    msg = await bot.send_message(**send_params)
-                    is_photo = False
+                    size = (2560, 1440) if LANDSCAPE_POSTER and TMDB_POSTER and movie_doc.get("is_backdrop") else (853, 1280)
+                    resized_poster = await fetch_image(poster_val, size)
+                    if resized_poster:
+                        msg = await bot.send_photo(
+                            chat_id=MOVIE_UPDATE_CHANNEL,
+                            photo=resized_poster,
+                            caption=text,
+                            reply_markup=buttons,
+                            parse_mode=enums.ParseMode.HTML
+                        )
+                        is_photo = True
+                    else:
+                        msg = await bot.send_message(
+                            chat_id=MOVIE_UPDATE_CHANNEL,
+                            text=text,
+                            reply_markup=buttons,
+                            parse_mode=enums.ParseMode.HTML
+                        )
+                        is_photo = False
             else:
                 send_params = {
                     "chat_id": MOVIE_UPDATE_CHANNEL,
@@ -466,7 +457,7 @@ async def send_movie_update(bot, base_name):
                     "reply_markup": buttons,
                     "parse_mode": enums.ParseMode.HTML
                 }
-                if movie_doc.get("poster_url") and LINK_PREVIEW:
+                if poster_val and LINK_PREVIEW:
                     send_params["invert_media"] = ABOVE_PREVIEW
                 msg = await bot.send_message(**send_params)
                 is_photo = False
