@@ -124,7 +124,6 @@ EP_ONLY_RANGE = re.compile(r'\b(?:EP|Episode)0*(\d{1,3})\s*-\s*0*(\d{1,3})\b', r
 MEDIA_FILTER = filters.document | filters.video | filters.audio
 locks = defaultdict(asyncio.Lock)
 pending_updates = {}
-error_tmdb = False
 
 def clean_mentions_links(text: str) -> str:
     return CLEAN_PATTERN.sub("", text or "").strip()
@@ -304,7 +303,65 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         db.movie_updates = db.db.movie_updates
 
     movie_doc = await db.movie_updates.find_one({"_id": base_name})
-    error_tmdb = False
+    
+    # ── TMDB + IMDb Hybrid Combination ──
+    tmdb_details = {}
+    if TMDB_POSTER:
+        try:
+            tmdb_details = await get_movie_detailsx(base_name) or {}
+        except Exception:
+            tmdb_details = {}
+
+    imdb_details = {}
+    try:
+        imdb_details = await get_movie_details(base_name) or {}
+    except Exception:
+        imdb_details = {}
+
+    tmdb_valid = tmdb_details and not tmdb_details.get("error")
+
+    # Poster & Backdrop resolution
+    backdrop_url = tmdb_details.get("backdrop_url") if tmdb_valid else None
+    poster_tmdb = tmdb_details.get("poster_url") if tmdb_valid else None
+    poster_imdb = imdb_details.get("poster_url") if imdb_details else None
+
+    is_backdrop = False
+    if LANDSCAPE_POSTER and TMDB_POSTER and backdrop_url:
+        poster_url = backdrop_url
+        is_backdrop = True
+    elif poster_tmdb:
+        poster_url = poster_tmdb
+    elif poster_imdb:
+        poster_url = poster_imdb
+    else:
+        poster_url = None
+
+    # Genres combination (Fallback to IMDb if TMDB has N/A)
+    tmdb_genres = tmdb_details.get("genres", "N/A") if tmdb_valid else "N/A"
+    imdb_genres = imdb_details.get("genres", "N/A") if imdb_details else "N/A"
+    genres_raw = tmdb_genres if tmdb_genres and tmdb_genres != "N/A" else imdb_genres
+
+    if isinstance(genres_raw, str):
+        genre_list = [g.strip() for g in genres_raw.split(",")]
+        genres = ", ".join(g for g in genre_list if g in STANDARD_GENRES) or "N/A"
+    else:
+        genres = ", ".join(g for g in genres_raw if g in STANDARD_GENRES) or "N/A"
+
+    # Rating combination (Fallback to IMDb if TMDB has N/A or 0)
+    tmdb_rating = tmdb_details.get("rating", "N/A") if tmdb_valid else "N/A"
+    imdb_rating = imdb_details.get("rating", "N/A") if imdb_details else "N/A"
+    rating = tmdb_rating if tmdb_rating and tmdb_rating != "N/A" and str(tmdb_rating) != "0" else imdb_rating
+
+    # URL combination
+    tmdb_url = tmdb_details.get("tmdb_url") or tmdb_details.get("url") if tmdb_valid else ""
+    imdb_url = imdb_details.get("url") if imdb_details else ""
+    url = tmdb_url if tmdb_url else imdb_url
+
+    # Year combination
+    tmdb_year = tmdb_details.get("year") if tmdb_valid else None
+    imdb_year = imdb_details.get("year") if imdb_details else None
+    year = tmdb_year if tmdb_year else (imdb_year or media_info["year"])
+
     file_data = {
         "filename": filename,
         "processed": processed,
@@ -318,35 +375,20 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     }
 
     if not movie_doc:
-        if TMDB_POSTER:
-            details = await get_movie_detailsx(base_name)
-            if not details or details.get("error") or (not details.get("poster_url") and not details.get("backdrop_url")):
-                error_tmdb = True
-                details = await get_movie_details(base_name) or {}
-        else:
-            details = await get_movie_details(base_name) or {}
-
-        raw_genres = details.get("genres", "N/A")
-        if isinstance(raw_genres, str):
-            genre_list = [g.strip() for g in raw_genres.split(",")]
-            genres = ", ".join(g for g in genre_list if g in STANDARD_GENRES) or "N/A"
-        else:
-            genres = ", ".join(g for g in raw_genres if g in STANDARD_GENRES) or "N/A"
-        
         movie_doc = {
             "_id": base_name,
             "files": [file_data],
-            "poster_url": details.get("backdrop_url") if LANDSCAPE_POSTER and TMDB_POSTER and details.get("backdrop_url") and not error_tmdb else details.get("poster_url"),
+            "poster_url": poster_url,
             "genres": genres,
-            "rating": details.get("rating", "N/A"),
-            "imdb_url": details.get("url", "") if not TMDB_POSTER or error_tmdb else details.get("tmdb_url"),
-            "year": details.get("year") or media_info["year"],
+            "rating": rating,
+            "imdb_url": url,
+            "year": year,
             "tag": media_info["tag"],
             "ott_platform": media_info["ott_platform"],
             "message_id": None,
             "is_photo": False,
-            "error_tmdb": error_tmdb,
-            "is_backdrop": details.get("backdrop_url")
+            "error_tmdb": not tmdb_valid,
+            "is_backdrop": is_backdrop
         }
         try:
             await db.movie_updates.insert_one(movie_doc)
