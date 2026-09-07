@@ -100,26 +100,31 @@ locks = defaultdict(asyncio.Lock)
 pending_updates = {}
 
 def clean_mentions_links(text: str) -> str:
-    return CLEAN_PATTERN.sub("", text or "").strip()
+    return CLEAN_PATTERN.sub("", str(text or "")).strip()
 
 def normalize(s: str) -> str:
-    s = NORMALIZE_PATTERN.sub(" ", s)
+    if not s:
+        return ""
+    s = NORMALIZE_PATTERN.sub(" ", str(s))
     return re.sub(r"\s+", " ", s).strip()
 
 def remove_ignored_words(text: str) -> str:
+    if not text:
+        return ""
     IGNORE_WORDS_LOWER = {w.lower() for w in IGNORE_WORDS}
-    return " ".join(word for word in text.split() if word.lower() not in IGNORE_WORDS_LOWER)
+    return " ".join(word for word in str(text).split() if word.lower() not in IGNORE_WORDS_LOWER)
 
 def get_qualities(text: str) -> str:
-    qualities = QUALITY_PATTERN.findall(text)
+    qualities = QUALITY_PATTERN.findall(str(text or ""))
     return ", ".join(qualities) if qualities else "N/A"
 
 def extract_ott_platform(text: str) -> str:
-    text = text.lower()
+    text = str(text or "").lower()
     platforms = {plat for key, plat in OTT_PLATFORMS.items() if re.search(rf"\b{re.escape(key)}\b", text)}
     return " | ".join(sorted(platforms)) if platforms else "N/A"
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
+    filename = str(filename or "")
     if m := EP_ONLY_RANGE.search(filename):
         return 1, f"{int(m.group(1))}-{int(m.group(2))}"
     for pattern in (RANGE_REGEX, SINGLE_REGEX, NAMED_REGEX):
@@ -144,7 +149,8 @@ def schedule_update(bot, base_name, delay=5):
     )
 
 def extract_media_info(filename: str, caption: str):
-    filename = normalize(clean_mentions_links(filename).title())
+    filename_str = str(filename or caption or "Unknown File")
+    filename = normalize(clean_mentions_links(filename_str).title())
     caption_clean = clean_mentions_links(caption).lower() if caption else ""
     unified = f"{caption_clean} {filename.lower()}".strip()
 
@@ -222,7 +228,7 @@ def extract_media_info(filename: str, caption: str):
 
     base_name = _strip_season_episode_tokens(base_name)
     if not base_name:
-        base_name = normalize(remove_ignored_words(normalize(processed_raw))) or filename
+        base_name = normalize(remove_ignored_words(normalize(processed_raw))) or filename_str
 
     return {
         "processed": normalize(processed_raw),
@@ -248,7 +254,8 @@ async def media_handler(bot, message):
 
     media.file_type = next(ft for ft in ("document", "video", "audio") if getattr(message, ft, None))
     media.caption = message.caption or ""
-    
+    filename = getattr(media, "file_name", None) or message.caption or "Unknown"
+
     thumb_file_id = None
     if message.video and message.video.thumb:
         thumb_file_id = message.video.thumb.file_id
@@ -261,9 +268,9 @@ async def media_handler(bot, message):
 
     try:
         if await db.movie_update_status(bot.me.id):
-            await process_and_send_update(bot, media.file_name, media.caption, thumb_file_id)
-    except Exception:
-        logger.exception("Error processing media")
+            await process_and_send_update(bot, filename, media.caption, thumb_file_id)
+    except Exception as e:
+        logger.exception(f"Error processing media: {e}")
 
 async def process_and_send_update(bot, filename, caption, thumb_file_id=None):
     try:
@@ -373,7 +380,6 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         try:
             await db.movie_updates.insert_one(movie_doc)
             await send_movie_update(bot, base_name)
-            movie_doc = await db.movie_updates.find_one({"_id": base_name})
         except DuplicateKeyError:
             movie_doc = await db.movie_updates.find_one({"_id": base_name})
             if movie_doc:
@@ -383,7 +389,6 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                 if thumb_file_id and not movie_doc.get("custom_thumb"):
                     update_data["$set"] = {"custom_thumb": thumb_file_id, "poster_url": thumb_file_id, "is_backdrop": True}
                 await db.movie_updates.update_one({"_id": base_name}, update_data)
-                movie_doc["files"].append(file_data)
                 schedule_update(bot, base_name)
     else:
         if any(f["filename"] == filename for f in movie_doc["files"]):
@@ -392,7 +397,6 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         if thumb_file_id and not movie_doc.get("custom_thumb"):
             update_data["$set"] = {"custom_thumb": thumb_file_id, "poster_url": thumb_file_id, "is_backdrop": True}
         await db.movie_updates.update_one({"_id": base_name}, update_data)
-        movie_doc["files"].append(file_data)
         schedule_update(bot, base_name)
 
 async def send_movie_update(bot, base_name):
