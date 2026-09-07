@@ -3,7 +3,7 @@ import logging
 import asyncio
 from datetime import datetime
 from collections import defaultdict
-from plugins.Dreamxfutures.Imdbposter import get_movie_detailsx, fetch_image, get_movie_details
+from plugins.Dreamxfutures.Imdbposter import get_tmdb_details, fetch_image, get_movie_details
 from database.users_chats_db import db
 from pyrogram import Client, filters, enums
 from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER
@@ -304,7 +304,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
 
     movie_doc = await db.movie_updates.find_one({"_id": base_name})
     
-    # ── HYBRID FIX: IMDb First for Accurate Year/Series, then TMDB for Backdrop ──
+    # ── HYBRID SETUP: IMDb for Accurate Year/Series & Details, TMDB for Landscape Backdrop ──
     imdb_details = {}
     try:
         imdb_details = await get_movie_details(base_name) or {}
@@ -319,14 +319,13 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     if TMDB_POSTER:
         try:
             search_query = f"{correct_title} {correct_year}" if correct_year else correct_title
-            tmdb_details = await get_movie_detailsx(search_query) or {}
-            tmdb_valid = tmdb_details and not tmdb_details.get("error")
+            tmdb_details = await get_tmdb_details(search_query) or {}
+            tmdb_valid = tmdb_details and bool(tmdb_details.get("backdrop_url"))
         except Exception:
             tmdb_details = {}
 
     # Poster & Backdrop resolution (Landscape priority via TMDB backdrop)
     backdrop_url = tmdb_details.get("backdrop_url") if tmdb_valid else None
-    poster_tmdb = tmdb_details.get("poster_url") if tmdb_valid else None
     poster_imdb = imdb_details.get("poster_url") if imdb_details else None
 
     is_backdrop = False
@@ -335,10 +334,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         is_backdrop = True
     elif poster_imdb:
         poster_url = poster_imdb
-    elif poster_tmdb:
-        poster_url = poster_tmdb
     else:
-        poster_url = None
+        poster_url = tmdb_details.get("poster_url") or None
 
     # Genres combination (Prioritize IMDb for accuracy)
     imdb_genres = imdb_details.get("genres", "N/A") if imdb_details else "N/A"
