@@ -8,6 +8,7 @@ import requests
 
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.errors import MessageIdInvalid, MessageNotModified
 from telegraph import Telegraph
 from pymediainfo import MediaInfo
 
@@ -66,8 +67,11 @@ async def extract_data_handler(client: Client, query: CallbackQuery):
                     new_row.append(btn)
             wait_keyboard.append(new_row)
 
+    # Safe edit markup with try-except to prevent MessageIdInvalid crash
     try:
         await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(wait_keyboard))
+    except (MessageIdInvalid, MessageNotModified):
+        pass
     except Exception:
         pass
 
@@ -79,7 +83,10 @@ async def extract_data_handler(client: Client, query: CallbackQuery):
     try:
         files_ = await get_file_details(file_id)
         if not files_:
-            await query.message.reply_text("❌ File not found in DB.", quote=True)
+            try:
+                await query.message.reply_text("❌ File not found in DB.", quote=True)
+            except Exception:
+                pass
             return
 
         if query.message and query.message.media:
@@ -205,7 +212,10 @@ async def extract_data_handler(client: Client, query: CallbackQuery):
                 author_name="DreamxBotz"
             )
         except (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout):
-            await query.message.reply_text("⚠️ Telegraph is busy. Try again later.", quote=True)
+            try:
+                await query.message.reply_text("⚠️ Telegraph is busy. Try again later.", quote=True)
+            except Exception:
+                pass
             return
 
         telegraph_url = response["url"]
@@ -223,14 +233,26 @@ async def extract_data_handler(client: Client, query: CallbackQuery):
                         new_row.append(btn)
                 success_keyboard.append(new_row)
 
-        await query.edit_message_reply_markup(
-            reply_markup=InlineKeyboardMarkup(success_keyboard)
-        )
+        # Safe edit markup with try-except to prevent MessageIdInvalid crash
+        try:
+            await query.edit_message_reply_markup(
+                reply_markup=InlineKeyboardMarkup(success_keyboard)
+            )
+        except (MessageIdInvalid, MessageNotModified):
+            pass
+        except Exception:
+            pass
 
     except Exception as e:
         logger.exception(e)
-        await query.message.reply_text(f"Error: {e}", quote=True)
+        try:
+            await query.message.reply_text(f"Error: {e}", quote=True)
+        except Exception:
+            pass
 
     finally:
         if os.path.exists(temp_path):
-            os.remove(temp_path)
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
