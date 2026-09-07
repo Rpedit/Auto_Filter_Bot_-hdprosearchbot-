@@ -238,7 +238,6 @@ async def _fetch_tmdb_data(query, api_key=None):
     return None
 
 async def get_tmdb_details(query, api_key=None):
-    """Fetch TMDB landscape backdrop for the query."""
     q = str(query).strip()
     try:
         data = await _fetch_tmdb_data(q, api_key=api_key)
