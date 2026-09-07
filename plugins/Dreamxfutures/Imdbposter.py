@@ -191,8 +191,10 @@ async def _search_media_id(query: str, api_key=None):
         candidate = {'type': mtype, 'id': r['id'], 'date': rd_date, 'score': r.get('popularity', 0), 'ratio': ratio}
         (candidates_upcoming if rd_date > today else candidates_past).append(candidate)
 
-    candidates_past.sort(key=lambda x: (x['ratio'], x['date'], x['score']), reverse=True)
-    candidates_upcoming.sort(key=lambda x: (x['ratio'], x['date'], x['score']), reverse=True)
+    # Prioritize popularity score over date to prevent old premiere years from overriding active/trending shows
+    candidates_past.sort(key=lambda x: (x['ratio'], x['score'], x['date']), reverse=True)
+    candidates_upcoming.sort(key=lambda x: (x['ratio'], x['score'], x['date']), reverse=True)
+    
     final = candidates_past or candidates_upcoming
     if not final:
         return None, None
@@ -443,5 +445,5 @@ async def get_movie_detailsx(query, id=False, file=None):
             break
     details['backdrop_url'] = backdrop_url.replace("/original/", "/w1280/") if backdrop_url else None
 
+    details['error'] = False
     return details
-
