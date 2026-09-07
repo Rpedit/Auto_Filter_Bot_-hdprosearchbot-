@@ -103,7 +103,14 @@ OTT_PLATFORMS = {
 STANDARD_GENRES = {
     'Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary',
     'Drama', 'Family', 'Fantasy', 'Film-Noir', 'History', 'Horror', 'Music',
-    'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Sport', 'Thriller', 'War', 'Western', 'Anime'
+    'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Sport', 'Thriller', 'War', 'Western', 'Anime',
+    'Reality', 'Reality-TV', 'Game Show', 'Talk-Show'
+}
+
+GENRE_MAPPING = {
+    "Science Fiction": "Sci-Fi",
+    "Action & Adventure": "Action",
+    "Sci-Fi & Fantasy": "Sci-Fi"
 }
 
 # Precompiled regex patterns
@@ -164,10 +171,20 @@ def schedule_update(bot, base_name, delay=5):
         if not handle.cancelled():
             handle.cancel()
     
-    loop = asyncio.get_event_loop()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.get_event_loop()
+
+    async def wrapper():
+        try:
+            await update_movie_message(bot, base_name)
+        finally:
+            pending_updates.pop(base_name, None)
+
     pending_updates[base_name] = loop.call_later(
         delay,
-        lambda: asyncio.create_task(update_movie_message(bot, base_name))
+        lambda: asyncio.create_task(wrapper())
     )
 
 def extract_media_info(filename: str, caption: str):
@@ -328,10 +345,11 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
 
         raw_genres = details.get("genres", "N/A")
         if isinstance(raw_genres, str):
-            genre_list = [g.strip() for g in raw_genres.split(",")]
+            genre_list = [GENRE_MAPPING.get(g.strip(), g.strip()) for g in raw_genres.split(",")]
             genres = ", ".join(g for g in genre_list if g in STANDARD_GENRES) or "N/A"
         else:
-            genres = ", ".join(g for g in raw_genres if g in STANDARD_GENRES) or "N/A"
+            genre_list = [GENRE_MAPPING.get(str(g).strip(), str(g).strip()) for g in raw_genres]
+            genres = ", ".join(g for g in genre_list if g in STANDARD_GENRES) or "N/A"
         
         movie_doc = {
             "_id": base_name,
@@ -339,6 +357,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             "poster_url": details.get("backdrop_url") if LANDSCAPE_POSTER and TMDB_POSTER and details.get("backdrop_url") and not error_tmdb else details.get("poster_url"),
             "genres": genres,
             "rating": details.get("rating", "N/A"),
+            "runtime": details.get("runtime", "N/A"),
+            "certificates": details.get("certificates", "N/A"),
             "imdb_url": details.get("url", "") if not TMDB_POSTER or error_tmdb else details.get("tmdb_url"),
             "year": details.get("year") or media_info["year"],
             "tag": media_info["tag"],
