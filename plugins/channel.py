@@ -262,18 +262,18 @@ async def media_handler(bot, message):
     elif message.document and message.document.thumb:
         thumb_file_id = message.document.thumb.file_id
 
-    # FIX HERE: Pass the full 'message' object to save_file instead of 'media'
+    # Background safe file save (won't crash the update even if save_file errors out)
     try:
-        success, info = await save_file(message)
+        await save_file(message)
     except Exception as e:
-        logger.error(f"Save file error: {e}")
-        success = False
+        logger.error(f"Save file background error: {e}")
 
+    # Directly trigger channel update with auto-thumbnail detection
     try:
         if await db.movie_update_status(bot.me.id):
             await process_and_send_update(bot, filename, message.caption or "", thumb_file_id)
     except Exception:
-        logger.exception("Error processing media")
+        logger.exception("Error processing media update")
 
 async def process_and_send_update(bot, filename, caption, thumb_file_id=None):
     try:
@@ -383,7 +383,6 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         try:
             await db.movie_updates.insert_one(movie_doc)
             await send_movie_update(bot, base_name)
-            movie_doc = await db.movie_updates.find_one({"_id": base_name})
         except DuplicateKeyError:
             movie_doc = await db.movie_updates.find_one({"_id": base_name})
             if movie_doc:
@@ -393,7 +392,6 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                 if thumb_file_id and not movie_doc.get("custom_thumb"):
                     update_data["$set"] = {"custom_thumb": thumb_file_id, "poster_url": thumb_file_id, "is_backdrop": True}
                 await db.movie_updates.update_one({"_id": base_name}, update_data)
-                movie_doc["files"].append(file_data)
                 schedule_update(bot, base_name)
     else:
         if any(f["filename"] == filename for f in movie_doc["files"]):
@@ -402,7 +400,6 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         if thumb_file_id and not movie_doc.get("custom_thumb"):
             update_data["$set"] = {"custom_thumb": thumb_file_id, "poster_url": thumb_file_id, "is_backdrop": True}
         await db.movie_updates.update_one({"_id": base_name}, update_data)
-        movie_doc["files"].append(file_data)
         schedule_update(bot, base_name)
 
 async def send_movie_update(bot, base_name):
