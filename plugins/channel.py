@@ -432,7 +432,7 @@ async def send_movie_update(bot, base_name):
                 [
                     InlineKeyboardButton(
                         '🔍 sᴇᴀʀᴄʜ ᴍᴏʀᴇ',
-                        switch_inline_query=""
+                        switch_inline_query=" "
                     )
                 ]
             ])
@@ -506,7 +506,7 @@ async def update_movie_message(bot, base_name):
             [
                 InlineKeyboardButton(
                     '🔍 sᴇᴀʀᴄʜ ᴍᴏʀᴇ',
-                    switch_inline_query=""
+                    switch_inline_query=" "
                 )
             ]
         ])
