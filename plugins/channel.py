@@ -104,13 +104,14 @@ STANDARD_GENRES = {
     'Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary',
     'Drama', 'Family', 'Fantasy', 'Film-Noir', 'History', 'Horror', 'Music',
     'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Sport', 'Thriller', 'War', 'Western', 'Anime',
-    'Reality', 'Reality-TV', 'Game Show', 'Talk-Show'
+    'Reality', 'Reality-TV', 'Game Show', 'Talk-Show', 'Reality TV', 'Reality Show'
 }
 
 GENRE_MAPPING = {
     "Science Fiction": "Sci-Fi",
     "Action & Adventure": "Action",
-    "Sci-Fi & Fantasy": "Sci-Fi"
+    "Sci-Fi & Fantasy": "Sci-Fi",
+    "Reality-TV": "Reality TV"
 }
 
 # Precompiled regex patterns
@@ -344,12 +345,25 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             details = await get_movie_details(base_name) or {}
 
         raw_genres = details.get("genres", "N/A")
+        genre_names = []
+
         if isinstance(raw_genres, str):
-            genre_list = [GENRE_MAPPING.get(g.strip(), g.strip()) for g in raw_genres.split(",")]
-            genres = ", ".join(g for g in genre_list if g in STANDARD_GENRES) or "N/A"
-        else:
-            genre_list = [GENRE_MAPPING.get(str(g).strip(), str(g).strip()) for g in raw_genres]
-            genres = ", ".join(g for g in genre_list if g in STANDARD_GENRES) or "N/A"
+            genre_names = [g.strip() for g in raw_genres.split(",") if g.strip() and g.strip() != "N/A"]
+        elif isinstance(raw_genres, (list, tuple)):
+            for g in raw_genres:
+                if isinstance(g, dict):
+                    name = g.get("name") or g.get("genre")
+                    if name:
+                        genre_names.append(str(name).strip())
+                elif isinstance(g, str):
+                    genre_names.append(g.strip())
+                else:
+                    name = str(g).strip()
+                    if name:
+                        genre_names.append(name)
+
+        genre_list = [GENRE_MAPPING.get(g, g) for g in genre_names]
+        genres = ", ".join(g for g in genre_list if g in STANDARD_GENRES) or "N/A"
         
         movie_doc = {
             "_id": base_name,
