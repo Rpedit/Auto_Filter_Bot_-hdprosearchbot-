@@ -279,16 +279,16 @@ Mᴇꜱꜱᴀɢᴇ : <b>{}</b>"""
 
 <b>⚙️ sɪᴢᴇ : {file_size}</b>"""
     
-            MOVIE_UPDATE_NOTIFY_TXT = """<b><a href="{poster_url}">📥</a> <a href="{imdb_url}">ɴᴇᴡ {tag} ᴀᴅᴅᴇᴅ</a></b>
+    MOVIE_UPDATE_NOTIFY_TXT = """<b><a href="{poster_url}">📥</a> <a href="{imdb_url}">ɴᴇᴡ {tag} ᴀᴅᴅᴇᴅ</a></b>
 
 ✨ ᴛɪᴛʟᴇ : <code>{filename}</code>
 ─┉─•✦•─┉─
-<blockquote>🎭 ɢᴇɴʀᴇs : <b>{genres}</b>
-🍿 ᴏᴛᴛ        : <b>{ott}</b>
-⏱️ ʀᴜɴᴛɪᴍᴇ : <b>{runtime}</b>
-🎬 ǫᴜᴀʟɪᴛʏ : <b>{quality}</b>
-🔉 ᴀᴜᴅɪᴏ    : <b>{language}</b>
-🌟 ɪᴍᴅʙ    : <b>{rating}</b>
+<blockquote>🎭 ɢᴇɴʀᴇs  : <b>{genres}</b>
+🍿 ᴏᴛᴛ         : <b>{ott}</b>
+⏱️ ʀᴜɴᴛɪᴍᴇ  : <b>{runtime}</b>
+🎬 ǫᴜᴀʟɪᴛʏ  : <b>{quality}</b>
+🔉 ᴀᴜᴅɪᴏ     : <b>{language}</b>
+🌟 ɪᴍᴅʙ     : <b>{rating}</b>
 {episodes}</blockquote>
 ─┉─•✦•─┉─
 
