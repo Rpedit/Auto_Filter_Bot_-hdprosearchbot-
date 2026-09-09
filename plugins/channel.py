@@ -158,7 +158,6 @@ def extract_ott_platform(text: str) -> str:
     return " | ".join(sorted(platforms)) if platforms else "N/A"
 
 def format_runtime(runtime_val):
-    """Safely parses runtime from lists, tuples, or strings and formats >=60 mins as 'Xh Ym' and <60 mins as 'Xm'."""
     if not runtime_val or runtime_val == "N/A":
         return "N/A"
     
@@ -191,7 +190,6 @@ def format_runtime(runtime_val):
         return f"{total_mins}m"
 
 async def get_hdhub4u_genres(base_name: str) -> str:
-    """Scrapes genres directly from HDHub4u if TMDB/IMDb fails or returns N/A"""
     try:
         clean_query = re.sub(r'\b(19|20)\d{2}\b', '', base_name).strip()
         search_url = f"https://new5.hdhub4u.cl/?s={clean_query.replace(' ', '+')}"
@@ -374,7 +372,6 @@ async def media_handler(bot, message):
     if not media:
         return
 
-    # Auto-detect file duration from Telegram file properties (in seconds)
     duration_secs = getattr(media, "duration", None)
     if not duration_secs and message.video:
         duration_secs = message.video.duration
@@ -567,7 +564,7 @@ async def send_movie_update(bot, base_name):
                     )
                     is_photo = True
                     
-                    # --- AUTO-EDIT TRICK TO CLEAN EXTRA SPACES ---
+                    # Auto-edit trick for initial send
                     await asyncio.sleep(0.5)
                     await bot.edit_message_caption(
                         chat_id=MOVIE_UPDATE_CHANNEL,
@@ -576,7 +573,6 @@ async def send_movie_update(bot, base_name):
                         reply_markup=buttons,
                         parse_mode=enums.ParseMode.HTML
                     )
-                    # ---------------------------------------------
                 else:
                     msg = await bot.send_message(
                         chat_id=MOVIE_UPDATE_CHANNEL,
@@ -586,7 +582,7 @@ async def send_movie_update(bot, base_name):
                     )
                     is_photo = False
                     
-                    # --- AUTO-EDIT TRICK TO CLEAN EXTRA SPACES ---
+                    # Auto-edit trick for initial send
                     await asyncio.sleep(0.5)
                     await msg.edit_text(
                         text=text,
@@ -594,7 +590,6 @@ async def send_movie_update(bot, base_name):
                         parse_mode=enums.ParseMode.HTML,
                         disable_web_page_preview=not LINK_PREVIEW
                     )
-                    # ---------------------------------------------
             else:
                 send_params = {
                     "chat_id": MOVIE_UPDATE_CHANNEL,
@@ -607,7 +602,7 @@ async def send_movie_update(bot, base_name):
                 msg = await bot.send_message(**send_params)
                 is_photo = False
                 
-                # --- AUTO-EDIT TRICK TO CLEAN EXTRA SPACES ---
+                # Auto-edit trick for initial send
                 await asyncio.sleep(0.5)
                 await msg.edit_text(
                     text=text,
@@ -616,7 +611,6 @@ async def send_movie_update(bot, base_name):
                     invert_media=ABOVE_PREVIEW,
                     disable_web_page_preview=not LINK_PREVIEW
                 )
-                # ---------------------------------------------
 
             await db.movie_updates.update_one(
                 {"_id": base_name},
@@ -667,7 +661,27 @@ async def update_movie_message(bot, base_name):
                     reply_markup=buttons,
                     parse_mode=enums.ParseMode.HTML
                 )
+                # Auto-edit trick for updates
+                await asyncio.sleep(0.5)
+                await bot.edit_message_caption(
+                    chat_id=MOVIE_UPDATE_CHANNEL,
+                    message_id=message_id,
+                    caption=text,
+                    reply_markup=buttons,
+                    parse_mode=enums.ParseMode.HTML
+                )
             else:
+                await bot.edit_message_text(
+                    chat_id=MOVIE_UPDATE_CHANNEL,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=buttons,
+                    parse_mode=enums.ParseMode.HTML,
+                    invert_media=ABOVE_PREVIEW,
+                    disable_web_page_preview=not LINK_PREVIEW
+                )
+                # Auto-edit trick for updates
+                await asyncio.sleep(0.5)
                 await bot.edit_message_text(
                     chat_id=MOVIE_UPDATE_CHANNEL,
                     message_id=message_id,
@@ -681,20 +695,8 @@ async def update_movie_message(bot, base_name):
         except (MessageIdInvalid, MessageNotModified) as e:
             logger.warning(f"Message update skipped due to error: {e}")
             pass
-        except Exception:
-            try:
-                await bot.delete_messages(
-                    chat_id=MOVIE_UPDATE_CHANNEL,
-                    message_ids=message_id
-                )
-                await db.movie_updates.update_one(
-                    {"_id": base_name},
-                    {"$set": {"message_id": None, "is_photo": False}}
-                )
-            except Exception as e:
-                logger.error(f"Error during message deletion/update in recovery: {e}")
-                pass
-            await send_movie_update(bot, base_name)
+        except Exception as e:
+            logger.error(f"Error updating movie message: {e}")
     except Exception as e:
         logger.error(f"Failed to update movie message for {base_name}: {e}")
 
@@ -761,7 +763,6 @@ def generate_movie_message(movie_doc, base_name):
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
     ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else "N/A"
     
-    # --- IMDb Rating & Link Formatting ---
     raw_rating = movie_doc.get("rating", "-")
     imdb_url = movie_doc.get("imdb_url", "")
     
@@ -779,14 +780,11 @@ def generate_movie_message(movie_doc, base_name):
         clean_rating = str(raw_rating).replace("/10", "").strip()
         rating_display = f"<small>{clean_rating}/10</small>"
 
-    # Wrap rating with IMDb hyperlink if URL is present (works for both x/10 and numbers)
     if imdb_url:
         rating_text = f'<a href="{imdb_url}">{rating_display}</a>'
     else:
         rating_text = rating_display
-    # -------------------------------------
     
-    # Universal smart runtime formatting applied here
     raw_runtime = movie_doc.get("runtime", "N/A")
     runtime = format_runtime(raw_runtime)
     
