@@ -155,6 +155,27 @@ def extract_ott_platform(text: str) -> str:
     platforms = {plat for key, plat in OTT_PLATFORMS.items() if re.search(rf"\b{re.escape(key)}\b", text)}
     return " | ".join(sorted(platforms)) if platforms else "N/A"
 
+def format_runtime(runtime_val, primary_tag):
+    """Formats runtime into short format: e.g., '1h 43m' for movies and '27m' for series."""
+    if not runtime_val or runtime_val == "N/A":
+        return "N/A"
+    try:
+        total_mins = int(runtime_val)
+    except (ValueError, TypeError):
+        return str(runtime_val)
+    
+    if primary_tag == "#SERIES":
+        return f"{total_mins}m"
+    else:
+        hours = total_mins // 60
+        mins = total_mins % 60
+        if hours > 0 and mins > 0:
+            return f"{hours}h {mins}m"
+        elif hours > 0:
+            return f"{hours}h"
+        else:
+            return f"{mins}m"
+
 async def get_hdhub4u_genres(base_name: str) -> str:
     """Scrapes genres directly from HDHub4u if TMDB/IMDb fails or returns N/A"""
     try:
@@ -679,7 +700,11 @@ def generate_movie_message(movie_doc, base_name):
         r = 0.0
 
     rating_text = "-" if r == 0.0 else str(rating)
-    runtime = movie_doc.get("runtime", "N/A")
+    
+    # Runtime formatting applied here
+    raw_runtime = movie_doc.get("runtime", "N/A")
+    runtime = format_runtime(raw_runtime, primary_tag)
+    
     certificates = movie_doc.get("certificates", "N/A")
     filename_display = base_name
 
