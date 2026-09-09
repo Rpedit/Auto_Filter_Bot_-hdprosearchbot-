@@ -190,8 +190,8 @@ def format_runtime(runtime_val):
     else:
         return f"{total_mins}m"
 
-async def get_hdhub4u_genres(base_name: str) -> str:
-    """Scrapes genres directly from HDHub4u if TMDB/IMDb fails or returns N/A"""
+async def get_hdhub4u_url_and_genres(base_name: str) -> Tuple[str, str]:
+    """Scrapes direct movie URL and genres from HDHub4u"""
     try:
         clean_query = re.sub(r'\b(19|20)\d{2}\b', '', base_name).strip()
         search_url = f"https://new5.hdhub4u.cl/?s={clean_query.replace(' ', '+')}"
@@ -201,20 +201,20 @@ async def get_hdhub4u_genres(base_name: str) -> str:
         async with aiohttp.ClientSession() as session:
             async with session.get(search_url, headers=headers, timeout=8) as resp:
                 if resp.status != 200:
-                    return "N/A"
+                    return "", "N/A"
                 html = await resp.text()
                 
         soup = BeautifulSoup(html, 'html.parser')
         result_item = soup.select_one('.archive-posts h2 a, .post-item a, article a, .entry-title a')
         if not result_item or not result_item.get('href'):
-            return "N/A"
+            return "", "N/A"
             
         movie_page_url = result_item['href']
         
         async with aiohttp.ClientSession() as session:
             async with session.get(movie_page_url, headers=headers, timeout=8) as resp:
                 if resp.status != 200:
-                    return "N/A"
+                    return movie_page_url, "N/A"
                 movie_html = await resp.text()
                 
         movie_soup = BeautifulSoup(movie_html, 'html.parser')
@@ -231,11 +231,11 @@ async def get_hdhub4u_genres(base_name: str) -> str:
             cat_links = movie_soup.select('.cat-links a, .genres a, .entry-category a')
             genres = [c.text.strip() for c in cat_links if c.text.strip()]
             
-        if genres:
-            return ", ".join(genres)
+        genre_str = ", ".join(genres) if genres else "N/A"
+        return movie_page_url, genre_str
     except Exception as e:
-        logger.error(f"Error scraping HDHub4u genres: {e}")
-    return "N/A"
+        logger.error(f"Error scraping HDHub4u URL and genres: {e}")
+    return "", "N/A"
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
     if m := EP_ONLY_RANGE.search(filename):
@@ -374,7 +374,6 @@ async def media_handler(bot, message):
     if not media:
         return
 
-    # Auto-detect file duration from Telegram file properties (in seconds)
     duration_secs = getattr(media, "duration", None)
     if not duration_secs and message.video:
         duration_secs = message.video.duration
@@ -428,7 +427,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         "tag": media_info["tag"],
         "season": media_info["season"],
         "episode": media_info["episode"],
-        "runtime": final_file_runtime
+        "runtime": final_file_runtime,
+        "caption": caption or ""
     }
 
     if not movie_doc:
@@ -458,7 +458,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             else imdb_details.get("runtime", "N/A")
         )
         
-        certificates = tmdb_details.get("certificates") if tmdb_details.get("certificates") and tmdb_details.get("certificates") != "N/A" else imdb_details.get("certificates", "N/A")
+        certificates = ""  # Removed certificates/ratings to keep it clean
 
         raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
         genre_names = []
@@ -478,9 +478,10 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                     if name:
                         genre_names.append(name)
 
-        if not genre_names:
-            hdhub_genres = await get_hdhub4u_genres(base_name)
-            if hdhub_genres != "N/A":
+        hdhub_url = ""
+        if not genre_names or "hdhub4u" in (caption or "").lower():
+            hdhub_url, hdhub_genres = await get_hdhub4u_url_and_genres(base_name)
+            if not genre_names and hdhub_genres != "N/A":
                 genre_names = [g.strip() for g in hdhub_genres.split(",") if g.strip()]
 
         genre_list = [GENRE_MAPPING.get(g, g) for g in genre_names]
@@ -498,6 +499,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             "year": tmdb_details.get("year") or imdb_details.get("year") or media_info["year"],
             "tag": media_info["tag"],
             "ott_platform": media_info["ott_platform"],
+            "hdhub_url": hdhub_url,
             "message_id": None,
             "is_photo": False,
             "error_tmdb": error_tmdb,
@@ -525,6 +527,14 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         if final_file_runtime != "N/A":
             update_fields["$set"] = {"runtime": final_file_runtime}
             
+        if "hdhub4u" in (caption or "").lower() and not movie_doc.get("hdhub_url"):
+            hdhub_url, _ = await get_hdhub4u_url_and_genres(base_name)
+            if hdhub_url:
+                if "$set" in update_fields:
+                    update_fields["$set"]["hdhub_url"] = hdhub_url
+                else:
+                    update_fields["$set"] = {"hdhub_url": hdhub_url}
+
         await db.movie_updates.update_one(
             {"_id": base_name},
             update_fields
@@ -672,6 +682,7 @@ def generate_movie_message(movie_doc, base_name):
     all_languages = set()
     all_ott_platforms = set()
     all_tags = set()
+    has_hdhub = False
     episodes_by_season = defaultdict(set)
 
     for file in movie_doc["files"]:
@@ -684,6 +695,8 @@ def generate_movie_message(movie_doc, base_name):
             all_ott_platforms.update(platforms)
         if file["tag"]:
             all_tags.add(file["tag"])
+        if "hdhub4u" in file.get("caption", "").lower():
+            has_hdhub = True
         if file.get("season") and file.get("episode"):
             season = file["season"]
             episode = file["episode"]
@@ -737,12 +750,17 @@ def generate_movie_message(movie_doc, base_name):
 
     rating_text = "-" if r == 0.0 else str(rating)
     
-    # Universal smart runtime formatting applied here
     raw_runtime = movie_doc.get("runtime", "N/A")
     runtime = format_runtime(raw_runtime)
     
-    certificates = movie_doc.get("certificates", "N/A")
+    certificates = ""  # Cleaned out messy country code ratings
     filename_display = base_name
+
+    hdhub_url = movie_doc.get("hdhub_url", "")
+    if (has_hdhub or hdhub_url) and hdhub_url:
+        search_link_val = hdhub_url
+    else:
+        search_link_val = temp.B_LINK
 
     return script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get("poster_url", ""),
@@ -757,5 +775,5 @@ def generate_movie_message(movie_doc, base_name):
         language=language_str,
         episodes=epi_block,
         rating=rating_text,
-        search_link=temp.B_LINK
+        search_link=search_link_val
     )
