@@ -1,7 +1,9 @@
 import re
 import logging
 import asyncio
+import aiohttp
 from datetime import datetime
+from bs4 import BeautifulSoup
 from collections import defaultdict
 from plugins.Dreamxfutures.Imdbposter import get_movie_detailsx, fetch_image, get_movie_details
 from database.users_chats_db import db
@@ -153,6 +155,53 @@ def extract_ott_platform(text: str) -> str:
     text = text.lower()
     platforms = {plat for key, plat in OTT_PLATFORMS.items() if re.search(rf"\b{re.escape(key)}\b", text)}
     return " | ".join(sorted(platforms)) if platforms else "N/A"
+
+async def get_hdhub4u_genres(base_name: str) -> str:
+    """Scrapes genres directly from HDHub4u if TMDB/IMDb fails or returns N/A"""
+    try:
+        clean_query = re.sub(r'\b(19|20)\d{2}\b', '', base_name).strip()
+        search_url = f"https://new5.hdhub4u.cl/?s={clean_query.replace(' ', '+')}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.get(search_url, headers=headers, timeout=8) as resp:
+                if resp.status != 200:
+                    return "N/A"
+                html = await resp.text()
+                
+        soup = BeautifulSoup(html, 'html.parser')
+        result_item = soup.select_one('.archive-posts h2 a, .post-item a, article a, .entry-title a')
+        if not result_item or not result_item.get('href'):
+            return "N/A"
+            
+        movie_page_url = result_item['href']
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(movie_page_url, headers=headers, timeout=8) as resp:
+                if resp.status != 200:
+                    return "N/A"
+                movie_html = await resp.text()
+                
+        movie_soup = BeautifulSoup(movie_html, 'html.parser')
+        genres = []
+        for p in movie_soup.find_all(['p', 'div', 'span']):
+            text = p.text.strip()
+            if text.lower().startswith('genre') or 'genres:' in text.lower():
+                parts = text.split(':')
+                if len(parts) > 1:
+                    genres = [g.strip() for g in parts[1].split(',') if g.strip()]
+                    break
+        
+        if not genres:
+            cat_links = movie_soup.select('.cat-links a, .genres a, .entry-category a')
+            genres = [c.text.strip() for c in cat_links if c.text.strip()]
+            
+        if genres:
+            return ", ".join(genres)
+    except Exception as e:
+        logger.error(f"Error scraping HDHub4u genres: {e}")
+    return "N/A"
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
     if m := EP_ONLY_RANGE.search(filename):
@@ -347,7 +396,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         raw_genres = details.get("genres", "N/A")
         genre_names = []
 
-        if isinstance(raw_genres, str):
+        if isinstance(raw_genres, str) and raw_genres != "N/A":
             genre_names = [g.strip() for g in raw_genres.split(",") if g.strip() and g.strip() != "N/A"]
         elif isinstance(raw_genres, (list, tuple)):
             for g in raw_genres:
@@ -362,8 +411,14 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                     if name:
                         genre_names.append(name)
 
+        # If TMDB/IMDb didn't return genres, scrape HDHub4u directly!
+        if not genre_names:
+            hdhub_genres = await get_hdhub4u_genres(base_name)
+            if hdhub_genres != "N/A":
+                genre_names = [g.strip() for g in hdhub_genres.split(",") if g.strip()]
+
         genre_list = [GENRE_MAPPING.get(g, g) for g in genre_names]
-        genres = ", ".join(g for g in genre_list if g in STANDARD_GENRES) or "N/A"
+        genres = ", ".join(genre_list) if genre_list else "N/A"
         
         movie_doc = {
             "_id": base_name,
