@@ -279,7 +279,7 @@ Mᴇꜱꜱᴀɢᴇ : <b>{}</b>"""
 
 <b>⚙️ sɪᴢᴇ : {file_size}</b>"""
     
-    MOVIE_UPDATE_NOTIFY_TXT = """<b><a href="{poster_url}">📥</a> <a href="{imdb_url}">ɴᴇᴡ {tag} ᴀᴅᴅᴇᴅ</a></b>
+        MOVIE_UPDATE_NOTIFY_TXT = """<b><a href="{poster_url}">📥</a> <a href="{imdb_url}">ɴᴇᴡ {tag} ᴀᴅᴅᴇᴅ</a></b>
 
 ✨ ᴛɪᴛʟᴇ : <code>{filename}</code>
 ─┉─•✦•─┉─
@@ -293,7 +293,6 @@ Mᴇꜱꜱᴀɢᴇ : <b>{}</b>"""
 ─┉─•✦•─┉─
 
 🔍 <b>Sᴇᴀʀᴄʜ →</b> {search_link}"""
-
 
     IMDB_TEMPLATE_TXT = """<b><a href={url}>{title} (<a href={url}/releaseinfo>{year}</a>)
 
