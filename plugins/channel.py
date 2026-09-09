@@ -127,11 +127,16 @@ MEDIA_FILTER = filters.document | filters.video | filters.audio
 locks = defaultdict(asyncio.Lock)
 pending_updates = {}
 
+def sanitize_text(text: str) -> str:
+    if not isinstance(text, str):
+        return str(text or "")
+    return text.encode('utf-8', 'ignore').decode('utf-8', 'ignore')
+
 def clean_mentions_links(text: str) -> str:
-    return CLEAN_PATTERN.sub("", text or "").strip()
+    return sanitize_text(CLEAN_PATTERN.sub("", text or "").strip())
 
 def normalize(s: str) -> str:
-    s = NORMALIZE_PATTERN.sub(" ", s)
+    s = NORMALIZE_PATTERN.sub(" ", sanitize_text(s))
     return re.sub(r"\s+", " ", s).strip()
 
 def remove_ignored_words(text: str) -> str:
@@ -139,11 +144,11 @@ def remove_ignored_words(text: str) -> str:
     return " ".join(word for word in text.split() if word.lower() not in IGNORE_WORDS_LOWER)
 
 def get_qualities(text: str) -> str:
-    qualities = QUALITY_PATTERN.findall(text)
+    qualities = QUALITY_PATTERN.findall(sanitize_text(text))
     return ", ".join(qualities) if qualities else "N/A"
 
 def extract_ott_platform(text: str) -> str:
-    text = text.lower()
+    text = sanitize_text(text).lower()
     platforms = {plat for key, plat in OTT_PLATFORMS.items() if re.search(rf"\b{re.escape(key)}\b", text)}
     return " | ".join(sorted(platforms)) if platforms else "N/A"
 
@@ -154,7 +159,7 @@ def format_runtime(runtime_val):
         if not runtime_val:
             return "N/A"
         runtime_val = runtime_val[0]
-    runtime_str = str(runtime_val).strip()
+    runtime_str = sanitize_text(str(runtime_val)).strip()
     numbers = re.findall(r'\d+', runtime_str)
     if not numbers:
         return runtime_str
@@ -175,7 +180,7 @@ def format_runtime(runtime_val):
 
 async def get_hdhub4u_url_and_genres(base_name: str) -> Tuple[str, str]:
     try:
-        clean_query = re.sub(r'\b(19|20)\d{2}\b', '', base_name).strip()
+        clean_query = re.sub(r'\b(19|20)\d{2}\b', '', sanitize_text(base_name)).strip()
         search_url = f"https://new5.hdhub4u.cl/?s={clean_query.replace(' ', '+')}"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -186,7 +191,7 @@ async def get_hdhub4u_url_and_genres(base_name: str) -> Tuple[str, str]:
                     return "", "N/A"
                 html = await resp.text()
                 
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(sanitize_text(html), 'html.parser')
         result_item = soup.select_one('.archive-posts h2 a, .post-item a, article a, .entry-title a')
         if not result_item or not result_item.get('href'):
             return "", "N/A"
@@ -199,19 +204,19 @@ async def get_hdhub4u_url_and_genres(base_name: str) -> Tuple[str, str]:
                     return movie_page_url, "N/A"
                 movie_html = await resp.text()
                 
-        movie_soup = BeautifulSoup(movie_html, 'html.parser')
+        movie_soup = BeautifulSoup(sanitize_text(movie_html), 'html.parser')
         genres = []
         for p in movie_soup.find_all(['p', 'div', 'span']):
-            text = p.text.strip()
+            text = sanitize_text(p.text).strip()
             if text.lower().startswith('genre') or 'genres:' in text.lower():
                 parts = text.split(':')
                 if len(parts) > 1:
-                    genres = [g.strip() for g in parts[1].split(',') if g.strip()]
+                    genres = [sanitize_text(g).strip() for g in parts[1].split(',') if g.strip()]
                     break
         
         if not genres:
             cat_links = movie_soup.select('.cat-links a, .genres a, .entry-category a')
-            genres = [c.text.strip() for c in cat_links if c.text.strip()]
+            genres = [sanitize_text(c.text).strip() for c in cat_links if c.text.strip()]
             
         genre_str = ", ".join(genres) if genres else "N/A"
         return movie_page_url, genre_str
@@ -220,6 +225,7 @@ async def get_hdhub4u_url_and_genres(base_name: str) -> Tuple[str, str]:
     return "", "N/A"
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
+    filename = sanitize_text(filename)
     if m := EP_ONLY_RANGE.search(filename):
         return 1, f"{int(m.group(1))}-{int(m.group(2))}"
     for pattern in (RANGE_REGEX, SINGLE_REGEX, NAMED_REGEX):
@@ -363,13 +369,15 @@ async def media_handler(bot, message):
     file_runtime_mins = round(duration_secs / 60) if duration_secs else None
 
     media.file_type = next(ft for ft in ("document", "video", "audio") if getattr(message, ft, None))
-    media.caption = message.caption or ""
+    media.caption = sanitize_text(message.caption or "")
+    filename = sanitize_text(getattr(media, "file_name", "Unknown_File.mkv"))
+    
     success, info = await save_file(media)
     if not success:
         return
 
     try:
-        await process_and_send_update(bot, media.file_name, media.caption, file_runtime_mins)
+        await process_and_send_update(bot, filename, media.caption, file_runtime_mins)
     except Exception:
         logger.exception("Error processing media")
 
@@ -397,17 +405,17 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     final_file_runtime = f"{file_runtime_mins}" if file_runtime_mins else "N/A"
 
     file_data = {
-        "filename": filename,
-        "processed": processed,
-        "quality": media_info["quality"],
-        "language": media_info["language"],
-        "ott_platform": media_info["ott_platform"],
+        "filename": sanitize_text(filename),
+        "processed": sanitize_text(processed),
+        "quality": sanitize_text(media_info["quality"]),
+        "language": sanitize_text(media_info["language"]),
+        "ott_platform": sanitize_text(media_info["ott_platform"]),
         "timestamp": datetime.now(),
-        "tag": media_info["tag"],
+        "tag": sanitize_text(media_info["tag"]),
         "season": media_info["season"],
         "episode": media_info["episode"],
         "runtime": final_file_runtime,
-        "caption": caption or ""
+        "caption": sanitize_text(caption or "")
     }
 
     if not movie_doc:
@@ -443,17 +451,17 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         genre_names = []
 
         if isinstance(raw_genres, str) and raw_genres != "N/A":
-            genre_names = [g.strip() for g in raw_genres.split(",") if g.strip() and g.strip() != "N/A"]
+            genre_names = [sanitize_text(g).strip() for g in raw_genres.split(",") if g.strip() and g.strip() != "N/A"]
         elif isinstance(raw_genres, (list, tuple)):
             for g in raw_genres:
                 if isinstance(g, dict):
                     name = g.get("name") or g.get("genre")
                     if name:
-                        genre_names.append(str(name).strip())
+                        genre_names.append(sanitize_text(str(name)).strip())
                 elif isinstance(g, str):
-                    genre_names.append(g.strip())
+                    genre_names.append(sanitize_text(g).strip())
                 else:
-                    name = str(g).strip()
+                    name = sanitize_text(str(g)).strip()
                     if name:
                         genre_names.append(name)
 
@@ -461,24 +469,24 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         if not genre_names or "hdhub4u" in (caption or "").lower():
             hdhub_url, hdhub_genres = await get_hdhub4u_url_and_genres(base_name)
             if not genre_names and hdhub_genres != "N/A":
-                genre_names = [g.strip() for g in hdhub_genres.split(",") if g.strip()]
+                genre_names = [sanitize_text(g).strip() for g in hdhub_genres.split(",") if g.strip()]
 
         genre_list = [GENRE_MAPPING.get(g, g) for g in genre_names]
         genres = ", ".join(genre_list) if genre_list else "N/A"
         
         movie_doc = {
-            "_id": base_name,
+            "_id": sanitize_text(base_name),
             "files": [file_data],
-            "poster_url": poster_url,
-            "genres": genres,
-            "rating": rating,
-            "runtime": runtime,
-            "certificates": certificates,
-            "imdb_url": imdb_url,
-            "year": tmdb_details.get("year") or imdb_details.get("year") or media_info["year"],
-            "tag": media_info["tag"],
-            "ott_platform": media_info["ott_platform"],
-            "hdhub_url": hdhub_url,
+            "poster_url": sanitize_text(poster_url),
+            "genres": sanitize_text(genres),
+            "rating": sanitize_text(str(rating)),
+            "runtime": sanitize_text(str(runtime)),
+            "certificates": sanitize_text(certificates),
+            "imdb_url": sanitize_text(imdb_url),
+            "year": sanitize_text(str(tmdb_details.get("year") or imdb_details.get("year") or media_info["year"])),
+            "tag": sanitize_text(media_info["tag"]),
+            "ott_platform": sanitize_text(media_info["ott_platform"]),
+            "hdhub_url": sanitize_text(hdhub_url),
             "message_id": None,
             "is_photo": False,
             "error_tmdb": error_tmdb,
@@ -529,7 +537,7 @@ async def send_movie_update(bot, base_name):
             if not movie_doc:
                 return None
 
-            text = generate_movie_message(movie_doc, base_name)
+            text = sanitize_text(generate_movie_message(movie_doc, base_name))
             
             all_tags = set(f.get("tag") for f in movie_doc["files"] if f.get("tag"))
             primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
@@ -595,7 +603,7 @@ async def update_movie_message(bot, base_name):
         if not movie_doc:
             return
 
-        text = generate_movie_message(movie_doc, base_name)
+        text = sanitize_text(generate_movie_message(movie_doc, base_name))
         
         all_tags = set(f.get("tag") for f in movie_doc["files"] if f.get("tag"))
         primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
@@ -717,7 +725,7 @@ def generate_movie_message(movie_doc, base_name):
         if epi_str:
             epi_block = f"📺 ᴇᴘɪsᴏᴅᴇs : <b>{epi_str}</b>"
 
-    genres = movie_doc.get("genres", "N/A")
+    genres = sanitize_text(movie_doc.get("genres", "N/A"))
     quality_str = ", ".join(sorted(all_qualities)) if all_qualities else "N/A"
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
     ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else "N/A"
@@ -732,7 +740,7 @@ def generate_movie_message(movie_doc, base_name):
     raw_runtime = movie_doc.get("runtime", "N/A")
     runtime = format_runtime(raw_runtime)
     
-    filename_display = base_name
+    filename_display = sanitize_text(base_name)
 
     hdhub_url = movie_doc.get("hdhub_url", "")
     if (has_hdhub or hdhub_url) and hdhub_url:
@@ -743,8 +751,8 @@ def generate_movie_message(movie_doc, base_name):
         source_name = "HD Pro Search Bot"
 
     return script.MOVIE_UPDATE_NOTIFY_TXT.format(
-        poster_url=movie_doc.get("poster_url", ""),
-        imdb_url=movie_doc.get("imdb_url", ""),
+        poster_url=sanitize_text(movie_doc.get("poster_url", "")),
+        imdb_url=sanitize_text(movie_doc.get("imdb_url", "")),
         filename=filename_display,
         tag=primary_tag,
         genres=genres,
