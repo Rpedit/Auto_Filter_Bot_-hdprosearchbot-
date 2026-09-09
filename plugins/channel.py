@@ -458,7 +458,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             else imdb_details.get("runtime", "N/A")
         )
         
-        certificates = ""  # Removed certificates/ratings to keep it clean
+        certificates = ""  # Cleaned out messy country code ratings
 
         raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
         genre_names = []
@@ -753,14 +753,15 @@ def generate_movie_message(movie_doc, base_name):
     raw_runtime = movie_doc.get("runtime", "N/A")
     runtime = format_runtime(raw_runtime)
     
-    certificates = ""  # Cleaned out messy country code ratings
     filename_display = base_name
 
     hdhub_url = movie_doc.get("hdhub_url", "")
     if (has_hdhub or hdhub_url) and hdhub_url:
-        search_link_val = hdhub_url
+        search_url = hdhub_url
+        source_name = "HDHub4u"
     else:
-        search_link_val = temp.B_LINK
+        search_url = temp.B_LINK
+        source_name = "HD Pro Search Bot"
 
     return script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get("poster_url", ""),
@@ -770,10 +771,10 @@ def generate_movie_message(movie_doc, base_name):
         genres=genres,
         ott=ott_str,
         runtime=runtime,
-        certificates=certificates,
         quality=quality_str,
         language=language_str,
         episodes=epi_block,
         rating=rating_text,
-        search_link=search_link_val
+        search_url=search_url,
+        source_name=source_name
     )
