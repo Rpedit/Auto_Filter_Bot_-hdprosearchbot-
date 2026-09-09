@@ -49,7 +49,7 @@ _BASE_IGNORE_WORDS = {
 
 IGNORE_WORDS = _BASE_IGNORE_WORDS | set(BAD_WORDS if isinstance(BAD_WORDS, (list, tuple, set)) else [])
 
-# Constants (Updated with HQ Dub & Audio tags)
+# Constants
 CAPTION_LANGUAGES = {
     "hin": "Hindi", "hindi": "Hindi",
     "tam": "Tamil", "tamil": "Tamil",
@@ -480,7 +480,9 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             if hdhub_genres != "N/A":
                 genre_names = [g.strip() for g in hdhub_genres.split(",") if g.strip()]
 
-        genre_list = [GENRE_MAPPING.get(g, g) for g in genre_names]
+        genre_list = [GENRE_MAPPING.get(g, g) for g in genre_names if g in STANDARD_GENRES or g in GENRE_MAPPING]
+        if not genre_list and genre_names:
+            genre_list = genre_names
         genres = ", ".join(genre_list) if genre_list else "N/A"
         
         movie_doc = {
