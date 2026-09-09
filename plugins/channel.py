@@ -735,18 +735,21 @@ def generate_movie_message(movie_doc, base_name):
     imdb_url = movie_doc.get("imdb_url", "")
     
     try:
-        r = float(raw_rating)
+        r = float(str(raw_rating).replace("/10", "").strip())
     except (TypeError, ValueError):
         r = 0.0
 
-    if r == 0.0 or not raw_rating or str(raw_rating).upper() in ["N/A", "-", "NONE"]:
+    invalid_ratings = {"N/A", "-", "NONE", "", "0", "0.0", "NULL"}
+    is_invalid = (r == 0.0 or not raw_rating or str(raw_rating).strip().upper() in invalid_ratings)
+
+    if is_invalid:
         rating_display = "<small>x/10</small>"
     else:
         clean_rating = str(raw_rating).replace("/10", "").strip()
-        rating_display = f"{clean_rating}/10"
+        rating_display = f"<small>{clean_rating}/10</small>"
 
-    # Wrap rating with IMDb hyperlink if URL is present (and rating is valid)
-    if imdb_url and r != 0.0 and str(raw_rating).upper() not in ["N/A", "-", "NONE"]:
+    # Wrap rating with IMDb hyperlink if URL is present (works for both x/10 and numbers)
+    if imdb_url:
         rating_text = f'<a href="{imdb_url}">{rating_display}</a>'
     else:
         rating_text = rating_display
