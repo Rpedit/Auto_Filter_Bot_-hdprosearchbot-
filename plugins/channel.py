@@ -421,21 +421,13 @@ async def send_movie_update(bot, base_name):
             primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
             btn_style = enums.ButtonStyle.SUCCESS if primary_tag == "#SERIES" else enums.ButtonStyle.DANGER
 
-            buttons = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        'ɢᴇᴛ ғɪʟᴇs',
-                        url=f"https://t.me/{temp.U_NAME}?start=getfile-{base_name.replace(' ', '-')}",
-                        style=btn_style
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        '🔍 sᴇᴀʀᴄʜ ᴍᴏʀᴇ',
-                        switch_inline_query=" "
-                    )
-                ]
-            ])
+            buttons = InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    'ɢᴇᴛ ғɪʟᴇs',
+                    url=f"https://t.me/{temp.U_NAME}?start=getfile-{base_name.replace(' ', '-')}",
+                    style=btn_style
+                )
+            ]])
             
             size = (2560, 1440) if LANDSCAPE_POSTER and TMDB_POSTER and movie_doc.get("is_backdrop") and not movie_doc.get("error_tmdb") else (853, 1280)
             if movie_doc.get("poster_url") and not LINK_PREVIEW:
@@ -495,21 +487,13 @@ async def update_movie_message(bot, base_name):
         primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
         btn_style = enums.ButtonStyle.SUCCESS if primary_tag == "#SERIES" else enums.ButtonStyle.DANGER
 
-        buttons = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton(
-                    'ɢᴇᴛ ғɪʟᴇs',
-                    url=f"https://t.me/{temp.U_NAME}?start=getfile-{base_name.replace(' ', '-')}",
-                    style=btn_style
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    '🔍 sᴇᴀʀᴄʜ ᴍᴏʀᴇ',
-                    switch_inline_query=" "
-                )
-            ]
-        ])
+        buttons = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                'ɢᴇᴛ ғɪʟᴇs',
+                url=f"https://t.me/{temp.U_NAME}?start=getfile-{base_name.replace(' ', '-')}",
+                style=btn_style
+            )
+        ]])
 
         message_id = movie_doc.get("message_id")
         is_photo = movie_doc.get("is_photo", False)
