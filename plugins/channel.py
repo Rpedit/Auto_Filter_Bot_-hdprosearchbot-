@@ -181,6 +181,11 @@ def extract_ott_platform(text: str) -> str:
     return " | ".join(sorted(platforms)) if platforms else "N/A"
 
 
+def get_clean_title(name: str) -> str:
+    t = re.sub(r'\b(19|20)\d{2}\b', '', name)
+    return normalize(t).lower()
+
+
 def format_runtime(runtime_val):
     if not runtime_val or runtime_val == "N/A":
         return "N/A"
@@ -219,10 +224,48 @@ def format_runtime(runtime_val):
     return f"{total_mins}m"
 
 
+# --- DYNAMIC DOMAIN FUNCTIONS (NO HARDCODED LINK) ---
+async def get_hdhub_base_url() -> Optional[str]:
+    try:
+        if not hasattr(db, 'db'):
+            return None
+        setting = await db.db.settings.find_one({"_id": "hdhub_base_url"})
+        if setting and setting.get("url"):
+            return setting["url"]
+    except Exception:
+        pass
+    return None
+
+
+@Client.on_message(filters.command("setdomain"))
+async def set_domain_handler(bot, message):
+    if len(message.command) < 2:
+        current_url = await get_hdhub_base_url()
+        current_text = f"<code>{current_url}</code>" if current_url else "<i>Not Set Yet!</i>"
+        return await message.reply_text(
+            f"🌐 **Current HDHub4u URL:** {current_text}\n\n"
+            f"💡 **Usage:** <code>/setdomain https://new-domain.com/</code>"
+        )
+    new_url = message.command[1].strip()
+    try:
+        await db.db.settings.update_one(
+            {"_id": "hdhub_base_url"},
+            {"$set": {"url": new_url}},
+            upsert=True
+        )
+        await message.reply_text(f"✅ **HDHub4u base URL successfully updated to:**\n<code>{new_url}</code>")
+    except Exception as e:
+        await message.reply_text(f"❌ Failed to update domain: {e}")
+
+
 async def get_hdhub4u_genres(base_name: str) -> str:
     try:
+        base_url = await get_hdhub_base_url()
+        if not base_url:
+            return "N/A"
+
         clean_query = re.sub(r"\b(19|20)\d{2}\b", "", base_name).strip()
-        search_url = f"https://new5.hdhub4u.cl/?s={clean_query.replace(' ', '+')}"
+        search_url = f"{base_url.rstrip('/')}/?s={clean_query.replace(' ', '+')}"
 
         headers = {
             "User-Agent": (
@@ -635,9 +678,14 @@ async def _process_with_lock(
     if not hasattr(db, "movie_updates"):
         db.movie_updates = db.db.movie_updates
 
+    clean_title = get_clean_title(base_name)
     movie_doc = await db.movie_updates.find_one(
         {"_id": base_name}
     )
+    if not movie_doc:
+        movie_doc = await db.movie_updates.find_one({"clean_title": clean_title})
+        if movie_doc:
+            base_name = movie_doc["_id"]
 
     error_tmdb = False
 
@@ -815,6 +863,7 @@ async def _process_with_lock(
 
         movie_doc = {
             "_id": base_name,
+            "clean_title": clean_title,
             "files": [file_data],
             "poster_url": poster_url,
             "genres": genres,
