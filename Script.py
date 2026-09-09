@@ -288,14 +288,17 @@ Mᴇꜱꜱᴀɢᴇ : <b>{}</b>"""
 ─┉─•✦•─┉─
 <blockquote>🎭 ɢᴇɴʀᴇs : <b>{genres}</b>
 🍿 ᴏᴛᴛ        : <b>{ott}</b>
+⏱️ ʀᴜɴᴛɪᴍᴇ : <b>{runtime}</b>
+🔞 ʀᴀᴛɪɴɢs : <b>{certificates}</b>
 🎬 ǫᴜᴀʟɪᴛʏ : <b>{quality}</b>
 🔉 ᴀᴜᴅɪᴏ    : <b>{language}</b>
-🌟 ʀᴀᴛɪɴɢ   : <b>{rating}</b>
+🌟 ɪᴍᴅʙ    : <b>{rating}</b>
 {episodes} </blockquote>
 ─┉─•✦•─┉─
 
 🔍 <b>Sᴇᴀʀᴄʜ →</b> {search_link}
 """
+
 
     IMDB_TEMPLATE_TXT = """<b><a href={url}>{title} (<a href={url}/releaseinfo>{year}</a>)
 
