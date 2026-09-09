@@ -49,7 +49,7 @@ _BASE_IGNORE_WORDS = {
 
 IGNORE_WORDS = _BASE_IGNORE_WORDS | set(BAD_WORDS if isinstance(BAD_WORDS, (list, tuple, set)) else [])
 
-# Constants
+# Constants (Updated with HQ Dub & Audio tags)
 CAPTION_LANGUAGES = {
     "hin": "Hindi", "hindi": "Hindi",
     "tam": "Tamil", "tamil": "Tamil",
@@ -75,7 +75,9 @@ CAPTION_LANGUAGES = {
     "chi": "Chinese", "chinese": "Chinese", "zho": "Chinese",
     "tha": "Thai", "thai": "Thai",
     "ind": "Indonesian", "indonesian": "Indonesian",
-    "dual": "Dual Audio", "multi": "Multi Audio"
+    "dual": "Dual Audio", "multi": "Multi Audio",
+    "hq dub": "HQ Dub", "hq-dub": "HQ Dub",
+    "hq audio": "HQ Audio", "hq-audio": "HQ Audio"
 }
 
 OTT_PLATFORMS = {
@@ -155,15 +157,17 @@ def extract_ott_platform(text: str) -> str:
     platforms = {plat for key, plat in OTT_PLATFORMS.items() if re.search(rf"\b{re.escape(key)}\b", text)}
     return " | ".join(sorted(platforms)) if platforms else "N/A"
 
-def format_runtime(runtime_val, primary_tag=None):
-    """Universal runtime formatter for both movies and series. 
-    Converts minutes >= 60 into Hours & Minutes (e.g., 1h 15m), and < 60 into minutes (e.g., 27m)."""
+def format_runtime(runtime_val):
+    """Safely parses runtime from lists, tuples, or strings and formats >=60 mins as 'Xh Ym' and <60 mins as 'Xm'."""
     if not runtime_val or runtime_val == "N/A":
         return "N/A"
     
-    runtime_str = str(runtime_val).strip()
+    if isinstance(runtime_val, (list, tuple)):
+        if not runtime_val:
+            return "N/A"
+        runtime_val = runtime_val[0]
     
-    # Extract numbers from the string
+    runtime_str = str(runtime_val).strip()
     numbers = re.findall(r'\d+', runtime_str)
     if not numbers:
         return runtime_str
@@ -176,7 +180,6 @@ def format_runtime(runtime_val, primary_tag=None):
     except ValueError:
         return runtime_str
 
-    # Agar duration 60 minutes ya usse zyada hai, toh hours aur minutes mein breakdown karega (chahe movie ho ya series)
     if total_mins >= 60:
         hours = total_mins // 60
         mins = total_mins % 60
@@ -371,6 +374,15 @@ async def media_handler(bot, message):
     if not media:
         return
 
+    # Auto-detect file duration from Telegram file properties (in seconds)
+    duration_secs = getattr(media, "duration", None)
+    if not duration_secs and message.video:
+        duration_secs = message.video.duration
+    if not duration_secs and message.audio:
+        duration_secs = message.audio.duration
+    
+    file_runtime_mins = round(duration_secs / 60) if duration_secs else None
+
     media.file_type = next(ft for ft in ("document", "video", "audio") if getattr(message, ft, None))
     media.caption = message.caption or ""
     success, info = await save_file(media)
@@ -379,11 +391,11 @@ async def media_handler(bot, message):
 
     try:
         if await db.movie_update_status(bot.me.id):
-            await process_and_send_update(bot, media.file_name, media.caption)
+            await process_and_send_update(bot, media.file_name, media.caption, file_runtime_mins)
     except Exception:
         logger.exception("Error processing media")
 
-async def process_and_send_update(bot, filename, caption):
+async def process_and_send_update(bot, filename, caption, file_runtime_mins=None):
     try:
         media_info = extract_media_info(filename, caption)
         base_name = media_info["base_name"]
@@ -391,18 +403,21 @@ async def process_and_send_update(bot, filename, caption):
 
         lock = locks[base_name]
         async with lock:
-            await _process_with_lock(bot, filename, caption, media_info, base_name, processed)
+            await _process_with_lock(bot, filename, caption, media_info, base_name, processed, file_runtime_mins)
     except PyMongoError as e:
         logger.error(f"Database error in process_and_send_update: {e}")
     except Exception as e:
         logger.exception(f"Processing failed in process_and_send_update: {e}")
 
-async def _process_with_lock(bot, filename, caption, media_info, base_name, processed):
+async def _process_with_lock(bot, filename, caption, media_info, base_name, processed, file_runtime_mins=None):
     if not hasattr(db, 'movie_updates'):
         db.movie_updates = db.db.movie_updates
 
     movie_doc = await db.movie_updates.find_one({"_id": base_name})
     error_tmdb = False
+    
+    final_file_runtime = f"{file_runtime_mins}" if file_runtime_mins else "N/A"
+
     file_data = {
         "filename": filename,
         "processed": processed,
@@ -412,7 +427,8 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         "timestamp": datetime.now(),
         "tag": media_info["tag"],
         "season": media_info["season"],
-        "episode": media_info["episode"]
+        "episode": media_info["episode"],
+        "runtime": final_file_runtime
     }
 
     if not movie_doc:
@@ -436,7 +452,12 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
 
         rating = imdb_details.get("rating") if imdb_details.get("rating") and imdb_details.get("rating") != "N/A" else tmdb_details.get("rating", "N/A")
         imdb_url = imdb_details.get("url") if imdb_details.get("url") else tmdb_details.get("tmdb_url", "")
-        runtime = tmdb_details.get("runtime") if tmdb_details.get("runtime") and tmdb_details.get("runtime") != "N/A" else imdb_details.get("runtime", "N/A")
+        
+        runtime = final_file_runtime if final_file_runtime != "N/A" else (
+            tmdb_details.get("runtime") if tmdb_details.get("runtime") and tmdb_details.get("runtime") != "N/A" 
+            else imdb_details.get("runtime", "N/A")
+        )
+        
         certificates = tmdb_details.get("certificates") if tmdb_details.get("certificates") and tmdb_details.get("certificates") != "N/A" else imdb_details.get("certificates", "N/A")
 
         raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
@@ -500,9 +521,13 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     else:
         if any(f["filename"] == filename for f in movie_doc["files"]):
             return
+        update_fields = {"$push": {"files": file_data}}
+        if final_file_runtime != "N/A":
+            update_fields["$set"] = {"runtime": final_file_runtime}
+            
         await db.movie_updates.update_one(
             {"_id": base_name},
-            {"$push": {"files": file_data}}
+            update_fields
         )
         movie_doc["files"].append(file_data)
         schedule_update(bot, base_name)
@@ -712,9 +737,9 @@ def generate_movie_message(movie_doc, base_name):
 
     rating_text = "-" if r == 0.0 else str(rating)
     
-    # Universal runtime calculation for both movies and series
+    # Universal smart runtime formatting applied here
     raw_runtime = movie_doc.get("runtime", "N/A")
-    runtime = format_runtime(raw_runtime, primary_tag)
+    runtime = format_runtime(raw_runtime)
     
     certificates = movie_doc.get("certificates", "N/A")
     filename_display = base_name
