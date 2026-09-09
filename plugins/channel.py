@@ -49,7 +49,6 @@ _BASE_IGNORE_WORDS = {
 
 IGNORE_WORDS = _BASE_IGNORE_WORDS | set(BAD_WORDS if isinstance(BAD_WORDS, (list, tuple, set)) else [])
 
-# Constants
 CAPTION_LANGUAGES = {
     "hin": "Hindi", "hindi": "Hindi",
     "tam": "Tamil", "tamil": "Tamil",
@@ -118,7 +117,6 @@ GENRE_MAPPING = {
     "Reality-TV": "Reality TV"
 }
 
-# Precompiled regex patterns
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
 NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
 QUALITY_PATTERN = re.compile(
@@ -160,17 +158,14 @@ def extract_ott_platform(text: str) -> str:
 def format_runtime(runtime_val):
     if not runtime_val or runtime_val == "N/A":
         return "N/A"
-    
     if isinstance(runtime_val, (list, tuple)):
         if not runtime_val:
             return "N/A"
         runtime_val = runtime_val[0]
-    
     runtime_str = str(runtime_val).strip()
     numbers = re.findall(r'\d+', runtime_str)
     if not numbers:
         return runtime_str
-    
     try:
         if len(numbers) >= 2 and ('hr' in runtime_str.lower() or 'hour' in runtime_str.lower() or 'h' in runtime_str.lower()):
             total_mins = int(numbers[0]) * 60 + int(numbers[1])
@@ -182,10 +177,7 @@ def format_runtime(runtime_val):
     if total_mins >= 60:
         hours = total_mins // 60
         mins = total_mins % 60
-        if mins > 0:
-            return f"{hours}h {mins}m"
-        else:
-            return f"{hours}h"
+        return f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
     else:
         return f"{total_mins}m"
 
@@ -206,7 +198,6 @@ async def get_hdhub4u_genres(base_name: str) -> str:
         result_item = soup.select_one('.archive-posts h2 a, .post-item a, article a, .entry-title a')
         if not result_item or not result_item.get('href'):
             return "N/A"
-            
         movie_page_url = result_item['href']
         
         async with aiohttp.ClientSession() as session:
@@ -224,11 +215,9 @@ async def get_hdhub4u_genres(base_name: str) -> str:
                 if len(parts) > 1:
                     genres = [g.strip() for g in parts[1].split(',') if g.strip()]
                     break
-        
         if not genres:
             cat_links = movie_soup.select('.cat-links a, .genres a, .entry-category a')
             genres = [c.text.strip() for c in cat_links if c.text.strip()]
-            
         if genres:
             return ", ".join(genres)
     except Exception as e:
@@ -241,10 +230,7 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
     for pattern in (RANGE_REGEX, SINGLE_REGEX, NAMED_REGEX):
         if m := pattern.search(filename):
             season = int(m.group(1))
-            if pattern == RANGE_REGEX:
-                ep = f"{m.group(2)}-{m.group(3)}"
-            else:
-                ep = m.group(2)
+            ep = f"{m.group(2)}-{m.group(3)}" if pattern == RANGE_REGEX else m.group(2)
             return season, ep
     return None, None
 
@@ -252,7 +238,6 @@ def schedule_update(bot, base_name, delay=5):
     if handle := pending_updates.get(base_name):
         if not handle.cancelled():
             handle.cancel()
-    
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -505,7 +490,6 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         try:
             await db.movie_updates.insert_one(movie_doc)
             await send_movie_update(bot, base_name)
-            movie_doc = await db.movie_updates.find_one({"_id": base_name})
         except DuplicateKeyError:
             movie_doc = await db.movie_updates.find_one({"_id": base_name})
             if movie_doc:
@@ -566,7 +550,6 @@ async def send_movie_update(bot, base_name):
                     )
                     is_photo = True
                     
-                    # Auto-edit trick for initial send
                     await asyncio.sleep(0.5)
                     await bot.edit_message_caption(
                         chat_id=MOVIE_UPDATE_CHANNEL,
@@ -584,7 +567,6 @@ async def send_movie_update(bot, base_name):
                     )
                     is_photo = False
                     
-                    # Auto-edit trick for initial send
                     await asyncio.sleep(0.5)
                     await msg.edit_text(
                         text=text,
@@ -604,7 +586,6 @@ async def send_movie_update(bot, base_name):
                 msg = await bot.send_message(**send_params)
                 is_photo = False
                 
-                # Auto-edit trick for initial send
                 await asyncio.sleep(0.5)
                 await msg.edit_text(
                     text=text,
@@ -663,7 +644,6 @@ async def update_movie_message(bot, base_name):
                     reply_markup=buttons,
                     parse_mode=enums.ParseMode.HTML
                 )
-                # Auto-edit trick for updates
                 await asyncio.sleep(0.5)
                 await bot.edit_message_caption(
                     chat_id=MOVIE_UPDATE_CHANNEL,
@@ -682,7 +662,6 @@ async def update_movie_message(bot, base_name):
                     invert_media=ABOVE_PREVIEW,
                     disable_web_page_preview=not LINK_PREVIEW
                 )
-                # Auto-edit trick for updates
                 await asyncio.sleep(0.5)
                 await bot.edit_message_text(
                     chat_id=MOVIE_UPDATE_CHANNEL,
@@ -698,7 +677,8 @@ async def update_movie_message(bot, base_name):
             logger.warning(f"Message update skipped due to error: {e}")
             pass
         except Exception as e:
-            logger.error(f"Error updating movie message: {e}")
+            logger.error(f"Error updating movie message (safe edit skipped): {e}")
+            pass
     except Exception as e:
         logger.error(f"Failed to update movie message for {base_name}: {e}")
 
@@ -758,7 +738,7 @@ def generate_movie_message(movie_doc, base_name):
 
         epi_str = "\n".join(episode_lines)
         if epi_str:
-            epi_block = f"📺 ᴇᴘɪsᴏᴅᴇs : <b>{epi_str}</b>"
+            epi_block = f"\n📺 ᴇᴘɪsᴏᴅᴇs : <b>{epi_str}</b>"
 
     genres = movie_doc.get("genres", "N/A")
     quality_str = ", ".join(sorted(all_qualities)) if all_qualities else "N/A"
@@ -793,7 +773,7 @@ def generate_movie_message(movie_doc, base_name):
     certificates = movie_doc.get("certificates", "N/A")
     filename_display = base_name
 
-    return script.MOVIE_UPDATE_NOTIFY_TXT.format(
+    raw_text = script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get("poster_url", ""),
         imdb_url=imdb_url,
         filename=filename_display,
@@ -808,3 +788,5 @@ def generate_movie_message(movie_doc, base_name):
         rating=rating_text,
         search_link=temp.B_LINK
     )
+
+    return "\n".join(line.strip() for line in raw_text.splitlines())
