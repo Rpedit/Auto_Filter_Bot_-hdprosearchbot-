@@ -49,7 +49,6 @@ _BASE_IGNORE_WORDS = {
 
 IGNORE_WORDS = _BASE_IGNORE_WORDS | set(BAD_WORDS if isinstance(BAD_WORDS, (list, tuple, set)) else [])
 
-# Constants (Updated with HQ Dub & Audio tags)
 CAPTION_LANGUAGES = {
     "hin": "Hindi", "hindi": "Hindi",
     "tam": "Tamil", "tamil": "Tamil",
@@ -104,13 +103,6 @@ OTT_PLATFORMS = {
     "tubi": "Tubi"
 }
 
-STANDARD_GENRES = {
-    'Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary',
-    'Drama', 'Family', 'Fantasy', 'Film-Noir', 'History', 'Horror', 'Music',
-    'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Sport', 'Thriller', 'War', 'Western', 'Anime',
-    'Reality', 'Reality-TV', 'Game Show', 'Talk-Show', 'Reality TV', 'Reality Show'
-}
-
 GENRE_MAPPING = {
     "Science Fiction": "Sci-Fi",
     "Action & Adventure": "Action",
@@ -118,7 +110,6 @@ GENRE_MAPPING = {
     "Reality-TV": "Reality TV"
 }
 
-# Precompiled regex patterns
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
 NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
 QUALITY_PATTERN = re.compile(
@@ -158,20 +149,16 @@ def extract_ott_platform(text: str) -> str:
     return " | ".join(sorted(platforms)) if platforms else "N/A"
 
 def format_runtime(runtime_val):
-    """Safely parses runtime from lists, tuples, or strings and formats >=60 mins as 'Xh Ym' and <60 mins as 'Xm'."""
     if not runtime_val or runtime_val == "N/A":
         return "N/A"
-    
     if isinstance(runtime_val, (list, tuple)):
         if not runtime_val:
             return "N/A"
         runtime_val = runtime_val[0]
-    
     runtime_str = str(runtime_val).strip()
     numbers = re.findall(r'\d+', runtime_str)
     if not numbers:
         return runtime_str
-    
     try:
         if len(numbers) >= 2 and ('hr' in runtime_str.lower() or 'hour' in runtime_str.lower() or 'h' in runtime_str.lower()):
             total_mins = int(numbers[0]) * 60 + int(numbers[1])
@@ -183,15 +170,11 @@ def format_runtime(runtime_val):
     if total_mins >= 60:
         hours = total_mins // 60
         mins = total_mins % 60
-        if mins > 0:
-            return f"{hours}h {mins}m"
-        else:
-            return f"{hours}h"
+        return f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
     else:
         return f"{total_mins}m"
 
 async def get_hdhub4u_genres(base_name: str) -> str:
-    """Scrapes genres directly from HDHub4u if TMDB/IMDb fails or returns N/A"""
     try:
         clean_query = re.sub(r'\b(19|20)\d{2}\b', '', base_name).strip()
         search_url = f"https://new5.hdhub4u.cl/?s={clean_query.replace(' ', '+')}"
@@ -374,7 +357,6 @@ async def media_handler(bot, message):
     if not media:
         return
 
-    # Auto-detect file duration from Telegram file properties (in seconds)
     duration_secs = getattr(media, "duration", None)
     if not duration_secs and message.video:
         duration_secs = message.video.duration
@@ -457,8 +439,6 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             tmdb_details.get("runtime") if tmdb_details.get("runtime") and tmdb_details.get("runtime") != "N/A" 
             else imdb_details.get("runtime", "N/A")
         )
-        
-        certificates = tmdb_details.get("certificates") if tmdb_details.get("certificates") and tmdb_details.get("certificates") != "N/A" else imdb_details.get("certificates", "N/A")
 
         raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
         genre_names = []
@@ -493,7 +473,6 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             "genres": genres,
             "rating": rating,
             "runtime": runtime,
-            "certificates": certificates,
             "imdb_url": imdb_url,
             "year": tmdb_details.get("year") or imdb_details.get("year") or media_info["year"],
             "tag": media_info["tag"],
@@ -672,6 +651,7 @@ def generate_movie_message(movie_doc, base_name):
     all_languages = set()
     all_ott_platforms = set()
     all_tags = set()
+    has_hdhub = False
     episodes_by_season = defaultdict(set)
 
     for file in movie_doc["files"]:
@@ -684,6 +664,8 @@ def generate_movie_message(movie_doc, base_name):
             all_ott_platforms.update(platforms)
         if file["tag"]:
             all_tags.add(file["tag"])
+        if "hdhub4u" in file.get("caption", "").lower():
+            has_hdhub = True
         if file.get("season") and file.get("episode"):
             season = file["season"]
             episode = file["episode"]
@@ -737,12 +719,21 @@ def generate_movie_message(movie_doc, base_name):
 
     rating_text = "-" if r == 0.0 else str(rating)
     
-    # Universal smart runtime formatting applied here
     raw_runtime = movie_doc.get("runtime", "N/A")
     runtime = format_runtime(raw_runtime)
     
-    certificates = movie_doc.get("certificates", "N/A")
     filename_display = base_name
+
+    hdhub_url = movie_doc.get("hdhub_url", "")
+    if (has_hdhub or hdhub_url) and hdhub_url:
+        search_url = hdhub_url
+        source_name = "HDHub4u"
+    else:
+        search_url = temp.B_LINK
+        source_name = "HD Pro Search Bot"
+
+    # Properly formatting search_link as an HTML anchor tag
+    search_link = f'<a href="{search_url}">{source_name}</a>'
 
     return script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get("poster_url", ""),
@@ -752,10 +743,9 @@ def generate_movie_message(movie_doc, base_name):
         genres=genres,
         ott=ott_str,
         runtime=runtime,
-        certificates=certificates,
         quality=quality_str,
         language=language_str,
         episodes=epi_block,
         rating=rating_text,
-        search_link=temp.B_LINK
+        search_link=search_link
     )
