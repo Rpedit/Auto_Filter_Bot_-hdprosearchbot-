@@ -19,7 +19,6 @@ from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Precomputed sets for faster lookups
 _BASE_IGNORE_WORDS = {
     "rarbg", "dub", "sub", "sample", "mkv", "mp4", "avi", "aac", "ac3", "eac3", "ddp", "ddp5", "atmos", "dts", 
     "combined", "esub", "msub", "proper", "repack", "unrated", "extended", "imax", "remux", "10bit",
@@ -49,7 +48,6 @@ _BASE_IGNORE_WORDS = {
 
 IGNORE_WORDS = _BASE_IGNORE_WORDS | set(BAD_WORDS if isinstance(BAD_WORDS, (list, tuple, set)) else [])
 
-# Constants (Updated with HQ Dub & Audio tags)
 CAPTION_LANGUAGES = {
     "hin": "Hindi", "hindi": "Hindi",
     "tam": "Tamil", "tamil": "Tamil",
@@ -104,13 +102,6 @@ OTT_PLATFORMS = {
     "tubi": "Tubi"
 }
 
-STANDARD_GENRES = {
-    'Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime', 'Documentary',
-    'Drama', 'Family', 'Fantasy', 'Film-Noir', 'History', 'Horror', 'Music',
-    'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Sport', 'Thriller', 'War', 'Western', 'Anime',
-    'Reality', 'Reality-TV', 'Game Show', 'Talk-Show', 'Reality TV', 'Reality Show'
-}
-
 GENRE_MAPPING = {
     "Science Fiction": "Sci-Fi",
     "Action & Adventure": "Action",
@@ -118,7 +109,6 @@ GENRE_MAPPING = {
     "Reality-TV": "Reality TV"
 }
 
-# Precompiled regex patterns
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
 NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
 QUALITY_PATTERN = re.compile(
@@ -158,20 +148,16 @@ def extract_ott_platform(text: str) -> str:
     return " | ".join(sorted(platforms)) if platforms else "N/A"
 
 def format_runtime(runtime_val):
-    """Safely parses runtime from lists, tuples, or strings and formats >=60 mins as 'Xh Ym' and <60 mins as 'Xm'."""
     if not runtime_val or runtime_val == "N/A":
         return "N/A"
-    
     if isinstance(runtime_val, (list, tuple)):
         if not runtime_val:
             return "N/A"
         runtime_val = runtime_val[0]
-    
     runtime_str = str(runtime_val).strip()
     numbers = re.findall(r'\d+', runtime_str)
     if not numbers:
         return runtime_str
-    
     try:
         if len(numbers) >= 2 and ('hr' in runtime_str.lower() or 'hour' in runtime_str.lower() or 'h' in runtime_str.lower()):
             total_mins = int(numbers[0]) * 60 + int(numbers[1])
@@ -183,15 +169,11 @@ def format_runtime(runtime_val):
     if total_mins >= 60:
         hours = total_mins // 60
         mins = total_mins % 60
-        if mins > 0:
-            return f"{hours}h {mins}m"
-        else:
-            return f"{hours}h"
+        return f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
     else:
         return f"{total_mins}m"
 
 async def get_hdhub4u_url_and_genres(base_name: str) -> Tuple[str, str]:
-    """Scrapes direct movie URL and genres from HDHub4u"""
     try:
         clean_query = re.sub(r'\b(19|20)\d{2}\b', '', base_name).strip()
         search_url = f"https://new5.hdhub4u.cl/?s={clean_query.replace(' ', '+')}"
@@ -254,7 +236,6 @@ def schedule_update(bot, base_name, delay=5):
     if handle := pending_updates.get(base_name):
         if not handle.cancelled():
             handle.cancel()
-    
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -332,7 +313,6 @@ def extract_media_info(filename: str, caption: str):
         if year_match:
             year_part = year_match.group(0)
             name = name[:year_match.start()].strip()
-
         patterns = [
             r'\bS\d{1,2}E\d{1,2}\b', r'\bS\d{1,2}\b', r'\bE\d{1,2}\b',
             r'\b\d{1,2}x\d{1,2}\b', r'\bSeason\s*\d{1,2}\b',
@@ -389,8 +369,7 @@ async def media_handler(bot, message):
         return
 
     try:
-        if await db.movie_update_status(bot.me.id):
-            await process_and_send_update(bot, media.file_name, media.caption, file_runtime_mins)
+        await process_and_send_update(bot, media.file_name, media.caption, file_runtime_mins)
     except Exception:
         logger.exception("Error processing media")
 
@@ -458,7 +437,7 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
             else imdb_details.get("runtime", "N/A")
         )
         
-        certificates = ""  # Cleaned out messy country code ratings
+        certificates = ""
 
         raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
         genre_names = []
