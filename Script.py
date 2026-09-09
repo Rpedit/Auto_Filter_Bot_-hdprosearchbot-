@@ -279,20 +279,8 @@ Mᴇꜱꜱᴀɢᴇ : <b>{}</b>"""
 
 <b>⚙️ sɪᴢᴇ : {file_size}</b>"""
     
-    MOVIE_UPDATE_NOTIFY_TXT = """<b><a href="{poster_url}">📥</a> <a href="{imdb_url}">ɴᴇᴡ {tag} ᴀᴅᴅᴇᴅ</a></b>
+        MOVIE_UPDATE_NOTIFY_TXT = "<b><a href=\"{poster_url}\">📥</a> <a href=\"{imdb_url}\">ɴᴇᴡ {tag} ᴀᴅᴅᴇᴅ</a></b>\n\n✨ ᴛɪᴛʟᴇ : <code>{filename}</code>\n─┉─•✦•─┉─\n<blockquote>🎭 ɢᴇɴʀᴇs  : <b>{genres}</b>\n🍿 ᴏᴛᴛ         : <b>{ott}</b>\n⏱️ ʀᴜɴᴛɪᴍᴇ  : <b>{runtime}</b>\n🎬 ǫᴜᴀʟɪᴛʏ  : <b>{quality}</b>\n🔉 ᴀᴜᴅɪᴏ     : <b>{language}</b>\n🌟 ɪᴍᴅʙ     : <b>{rating}</b>\n{episodes}</blockquote>\n─┉─•✦•─┉─\n\n🔍 <b>Sᴇᴀʀᴄʜ →</b> {search_link}"
 
-✨ ᴛɪᴛʟᴇ : <code>{filename}</code>
-─┉─•✦•─┉─
-<blockquote>🎭 ɢᴇɴʀᴇs  : <b>{genres}</b>
-🍿 ᴏᴛᴛ         : <b>{ott}</b>
-⏱️ ʀᴜɴᴛɪᴍᴇ  : <b>{runtime}</b>
-🎬 ǫᴜᴀʟɪᴛʏ  : <b>{quality}</b>
-🔉 ᴀᴜᴅɪ     : <b>{language}</b>
-🌟 ɪᴍᴅʙ     : <b>{rating}</b>
-{episodes}</blockquote>
-─┉─•✦•─┉─
-
-🔍 <b>Sᴇᴀʀᴄʜ →</b> {search_link}"""
 
     IMDB_TEMPLATE_TXT = """<b><a href={url}>{title} (<a href={url}/releaseinfo>{year}</a>)
 
