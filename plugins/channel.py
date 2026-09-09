@@ -566,15 +566,35 @@ async def send_movie_update(bot, base_name):
                         parse_mode=enums.ParseMode.HTML
                     )
                     is_photo = True
+                    
+                    # --- AUTO-EDIT TRICK TO CLEAN EXTRA SPACES ---
+                    await asyncio.sleep(0.5)
+                    await bot.edit_message_caption(
+                        chat_id=MOVIE_UPDATE_CHANNEL,
+                        message_id=msg.id,
+                        caption=text,
+                        reply_markup=buttons,
+                        parse_mode=enums.ParseMode.HTML
+                    )
+                    # ---------------------------------------------
                 else:
-                    send_params = {
-                        "chat_id": MOVIE_UPDATE_CHANNEL,
-                        "text": text,
-                        "reply_markup": buttons,
-                        "parse_mode": enums.ParseMode.HTML
-                    }
-                    msg = await bot.send_message(**send_params)
+                    msg = await bot.send_message(
+                        chat_id=MOVIE_UPDATE_CHANNEL,
+                        text=text,
+                        reply_markup=buttons,
+                        parse_mode=enums.ParseMode.HTML
+                    )
                     is_photo = False
+                    
+                    # --- AUTO-EDIT TRICK TO CLEAN EXTRA SPACES ---
+                    await asyncio.sleep(0.5)
+                    await msg.edit_text(
+                        text=text,
+                        reply_markup=buttons,
+                        parse_mode=enums.ParseMode.HTML,
+                        disable_web_page_preview=not LINK_PREVIEW
+                    )
+                    # ---------------------------------------------
             else:
                 send_params = {
                     "chat_id": MOVIE_UPDATE_CHANNEL,
@@ -586,6 +606,17 @@ async def send_movie_update(bot, base_name):
                     send_params["invert_media"] = ABOVE_PREVIEW
                 msg = await bot.send_message(**send_params)
                 is_photo = False
+                
+                # --- AUTO-EDIT TRICK TO CLEAN EXTRA SPACES ---
+                await asyncio.sleep(0.5)
+                await msg.edit_text(
+                    text=text,
+                    reply_markup=buttons,
+                    parse_mode=enums.ParseMode.HTML,
+                    invert_media=ABOVE_PREVIEW,
+                    disable_web_page_preview=not LINK_PREVIEW
+                )
+                # ---------------------------------------------
 
             await db.movie_updates.update_one(
                 {"_id": base_name},
