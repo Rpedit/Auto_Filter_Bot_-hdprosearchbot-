@@ -1,4 +1,4 @@
-import re
+Import re
 import logging
 import asyncio
 import aiohttp
@@ -729,13 +729,28 @@ def generate_movie_message(movie_doc, base_name):
     quality_str = ", ".join(sorted(all_qualities)) if all_qualities else "N/A"
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
     ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else "N/A"
-    rating = movie_doc.get("rating", "-")
+    
+    # --- IMDb Rating & Link Formatting ---
+    raw_rating = movie_doc.get("rating", "-")
+    imdb_url = movie_doc.get("imdb_url", "")
+    
     try:
-        r = float(rating)
+        r = float(raw_rating)
     except (TypeError, ValueError):
         r = 0.0
 
-    rating_text = "-" if r == 0.0 else str(rating)
+    if r == 0.0 or not raw_rating or str(raw_rating).upper() in ["N/A", "-", "NONE"]:
+        rating_display = "X/10"
+    else:
+        clean_rating = str(raw_rating).replace("/10", "").strip()
+        rating_display = f"{clean_rating}/10"
+
+    # Wrap rating with IMDb hyperlink if URL is present
+    if imdb_url:
+        rating_text = f'<a href="{imdb_url}">{rating_display}</a>'
+    else:
+        rating_text = rating_display
+    # -------------------------------------
     
     # Universal smart runtime formatting applied here
     raw_runtime = movie_doc.get("runtime", "N/A")
@@ -746,7 +761,7 @@ def generate_movie_message(movie_doc, base_name):
 
     return script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get("poster_url", ""),
-        imdb_url=movie_doc.get("imdb_url", ""),
+        imdb_url=imdb_url,
         filename=filename_display,
         tag=primary_tag,
         genres=genres,
