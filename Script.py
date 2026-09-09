@@ -283,17 +283,15 @@ Mᴇꜱꜱᴀɢᴇ : <b>{}</b>"""
 
 ✨ ᴛɪᴛʟᴇ : <code>{filename}</code>
 ─┉─•✦•─┉─
-<blockquote>🎭 ɢᴇɴʀᴇs  : <b>{genres}</b>
-🍿 ᴏᴛᴛ         : <b>{ott}</b>
-⏱️ ʀᴜɴᴛɪᴍᴇ  : <b>{runtime}</b>
-🎬 ǫᴜᴀʟɪᴛʏ  : <b>{quality}</b>
-🔉 ᴀᴜᴅɪᴏ     : <b>{language}</b>
-🌟 ɪᴍᴅʙ     : <b>{rating}</b>
-{episodes}</blockquote>
+<blockquote>🎭 ɢᴇɴʀᴇs\xa0\xa0: <b>{genres}</b>
+🍿 ᴏᴛᴛ\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0: <b>{ott}</b>
+⏱️ ʀᴜɴᴛɪᴍᴇ\xa0 : <b>{runtime}</b>
+🎬 ǫᴜᴀʟɪᴛʏ\xa0 : <b>{quality}</b>
+🔉 AUDIO\xa0\xa0\xa0\xa0 : <b>{language}</b>
+🌟 ɪᴍᴅʙ\xa0\xa0\xa0\xa0 : <b>{rating}</b>{episodes}</blockquote>
 ─┉─•✦•─┉─
 
 🔍 <b>Sᴇᴀʀᴄʜ →</b> {search_link}"""
-
 
     IMDB_TEMPLATE_TXT = """<b><a href={url}>{title} (<a href={url}/releaseinfo>{year}</a>)
 
