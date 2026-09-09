@@ -155,26 +155,37 @@ def extract_ott_platform(text: str) -> str:
     platforms = {plat for key, plat in OTT_PLATFORMS.items() if re.search(rf"\b{re.escape(key)}\b", text)}
     return " | ".join(sorted(platforms)) if platforms else "N/A"
 
-def format_runtime(runtime_val, primary_tag):
-    """Formats runtime into short format: e.g., '1h 43m' for movies and '27m' for series."""
+def format_runtime(runtime_val, primary_tag=None):
+    """Universal runtime formatter for both movies and series. 
+    Converts minutes >= 60 into Hours & Minutes (e.g., 1h 15m), and < 60 into minutes (e.g., 27m)."""
     if not runtime_val or runtime_val == "N/A":
         return "N/A"
-    try:
-        total_mins = int(runtime_val)
-    except (ValueError, TypeError):
-        return str(runtime_val)
     
-    if primary_tag == "#SERIES":
-        return f"{total_mins}m"
-    else:
+    runtime_str = str(runtime_val).strip()
+    
+    # Extract numbers from the string
+    numbers = re.findall(r'\d+', runtime_str)
+    if not numbers:
+        return runtime_str
+    
+    try:
+        if len(numbers) >= 2 and ('hr' in runtime_str.lower() or 'hour' in runtime_str.lower() or 'h' in runtime_str.lower()):
+            total_mins = int(numbers[0]) * 60 + int(numbers[1])
+        else:
+            total_mins = int(numbers[0])
+    except ValueError:
+        return runtime_str
+
+    # Agar duration 60 minutes ya usse zyada hai, toh hours aur minutes mein breakdown karega (chahe movie ho ya series)
+    if total_mins >= 60:
         hours = total_mins // 60
         mins = total_mins % 60
-        if hours > 0 and mins > 0:
+        if mins > 0:
             return f"{hours}h {mins}m"
-        elif hours > 0:
-            return f"{hours}h"
         else:
-            return f"{mins}m"
+            return f"{hours}h"
+    else:
+        return f"{total_mins}m"
 
 async def get_hdhub4u_genres(base_name: str) -> str:
     """Scrapes genres directly from HDHub4u if TMDB/IMDb fails or returns N/A"""
@@ -701,7 +712,7 @@ def generate_movie_message(movie_doc, base_name):
 
     rating_text = "-" if r == 0.0 else str(rating)
     
-    # Runtime formatting applied here
+    # Universal runtime calculation for both movies and series
     raw_runtime = movie_doc.get("runtime", "N/A")
     runtime = format_runtime(raw_runtime, primary_tag)
     
