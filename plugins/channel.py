@@ -585,7 +585,7 @@ async def send_movie_update(bot, base_name):
             wait_time = e.value + 2
             await asyncio.sleep(wait_time)
         except Exception as e:
-            logger.error(f"Failed to send movie update: {e}")
+            logger.exception(f"❌ EXACT CHANNEL SEND ERROR: {e}")
             break
     return None
 
