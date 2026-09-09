@@ -134,7 +134,6 @@ EP_ONLY_RANGE = re.compile(r'\b(?:EP|Episode)0*(\d{1,3})\s*-\s*0*(\d{1,3})\b', r
 MEDIA_FILTER = filters.document | filters.video | filters.audio
 locks = defaultdict(asyncio.Lock)
 pending_updates = {}
-error_tmdb = False
 
 def clean_mentions_links(text: str) -> str:
     return CLEAN_PATTERN.sub("", text or "").strip()
@@ -385,15 +384,30 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
     }
 
     if not movie_doc:
+        tmdb_details = {}
         if TMDB_POSTER:
-            details = await get_movie_detailsx(base_name)
-            if not details or details.get("error") or (not details.get("poster_url") and not details.get("backdrop_url")):
+            tmdb_details = await get_movie_detailsx(base_name) or {}
+            if not tmdb_details or tmdb_details.get("error"):
                 error_tmdb = True
-                details = await get_movie_details(base_name) or {}
-        else:
-            details = await get_movie_details(base_name) or {}
 
-        raw_genres = details.get("genres", "N/A")
+        imdb_details = await get_movie_details(base_name) or {}
+
+        poster_url = ""
+        is_backdrop = False
+        if LANDSCAPE_POSTER and TMDB_POSTER and tmdb_details.get("backdrop_url") and not error_tmdb:
+            poster_url = tmdb_details.get("backdrop_url")
+            is_backdrop = True
+        elif tmdb_details.get("poster_url") and not error_tmdb:
+            poster_url = tmdb_details.get("poster_url")
+        else:
+            poster_url = imdb_details.get("poster_url") or imdb_details.get("backdrop_url", "")
+
+        rating = imdb_details.get("rating") if imdb_details.get("rating") and imdb_details.get("rating") != "N/A" else tmdb_details.get("rating", "N/A")
+        imdb_url = imdb_details.get("url") if imdb_details.get("url") else tmdb_details.get("tmdb_url", "")
+        runtime = tmdb_details.get("runtime") if tmdb_details.get("runtime") and tmdb_details.get("runtime") != "N/A" else imdb_details.get("runtime", "N/A")
+        certificates = tmdb_details.get("certificates") if tmdb_details.get("certificates") and tmdb_details.get("certificates") != "N/A" else imdb_details.get("certificates", "N/A")
+
+        raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
         genre_names = []
 
         if isinstance(raw_genres, str) and raw_genres != "N/A":
@@ -411,7 +425,6 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
                     if name:
                         genre_names.append(name)
 
-        # If TMDB/IMDb didn't return genres, scrape HDHub4u directly!
         if not genre_names:
             hdhub_genres = await get_hdhub4u_genres(base_name)
             if hdhub_genres != "N/A":
@@ -423,19 +436,19 @@ async def _process_with_lock(bot, filename, caption, media_info, base_name, proc
         movie_doc = {
             "_id": base_name,
             "files": [file_data],
-            "poster_url": details.get("backdrop_url") if LANDSCAPE_POSTER and TMDB_POSTER and details.get("backdrop_url") and not error_tmdb else details.get("poster_url"),
+            "poster_url": poster_url,
             "genres": genres,
-            "rating": details.get("rating", "N/A"),
-            "runtime": details.get("runtime", "N/A"),
-            "certificates": details.get("certificates", "N/A"),
-            "imdb_url": details.get("url", "") if not TMDB_POSTER or error_tmdb else details.get("tmdb_url"),
-            "year": details.get("year") or media_info["year"],
+            "rating": rating,
+            "runtime": runtime,
+            "certificates": certificates,
+            "imdb_url": imdb_url,
+            "year": tmdb_details.get("year") or imdb_details.get("year") or media_info["year"],
             "tag": media_info["tag"],
             "ott_platform": media_info["ott_platform"],
             "message_id": None,
             "is_photo": False,
             "error_tmdb": error_tmdb,
-            "is_backdrop": details.get("backdrop_url")
+            "is_backdrop": is_backdrop
         }
         try:
             await db.movie_updates.insert_one(movie_doc)
@@ -666,7 +679,8 @@ def generate_movie_message(movie_doc, base_name):
         r = 0.0
 
     rating_text = "-" if r == 0.0 else str(rating)
-    year_val = str(movie_doc.get("year") or "")
+    runtime = movie_doc.get("runtime", "N/A")
+    certificates = movie_doc.get("certificates", "N/A")
     filename_display = base_name
 
     return script.MOVIE_UPDATE_NOTIFY_TXT.format(
@@ -674,9 +688,10 @@ def generate_movie_message(movie_doc, base_name):
         imdb_url=movie_doc.get("imdb_url", ""),
         filename=filename_display,
         tag=primary_tag,
-        year=year_val,
         genres=genres,
         ott=ott_str,
+        runtime=runtime,
+        certificates=certificates,
         quality=quality_str,
         language=language_str,
         episodes=epi_block,
