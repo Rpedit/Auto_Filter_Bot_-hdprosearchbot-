@@ -549,7 +549,7 @@ def extract_media_info(filename: str, caption: str):
 
     base_name = _strip_season_episode_tokens(base_name)
 
-    # 🛠️ FIX: Preserve Season in base_name for Series so TMDB/IMDb fetches the correct season poster
+    # Keep Season in base_name so TMDB gets exact season poster & DB keeps seasons separate
     if season is not None:
         season_str = f"Season {season}"
         if season_str.lower() not in base_name.lower() and f"s{season}" not in base_name.lower():
@@ -717,6 +717,7 @@ async def _process_with_lock(
     if not movie_doc:
         tmdb_details = {}
 
+        # 1️⃣ TMDB query uses base_name (which includes Season for precise poster)
         if TMDB_POSTER:
             tmdb_details = await get_movie_detailsx(
                 base_name
@@ -728,8 +729,10 @@ async def _process_with_lock(
             ):
                 error_tmdb = True
 
+        # 2️⃣ IMDb query uses clean name without season for proper IMDb matching & link
+        imdb_query = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip()
         imdb_details = await get_movie_details(
-            base_name
+            imdb_query
         ) or {}
 
         poster_url = ""
@@ -841,7 +844,7 @@ async def _process_with_lock(
 
         if not genre_names:
             hdhub_genres = await get_hdhub4u_genres(
-                base_name
+                imdb_query
             )
 
             if hdhub_genres != "N/A":
@@ -1494,7 +1497,8 @@ def generate_movie_message(movie_doc, base_name):
         "N/A"
     )
 
-    filename_display = base_name
+    # Strip Season X from display title so channel message stays clean
+    filename_display = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip()
 
     raw_text = script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get(
