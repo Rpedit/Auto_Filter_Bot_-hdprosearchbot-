@@ -549,6 +549,12 @@ def extract_media_info(filename: str, caption: str):
 
     base_name = _strip_season_episode_tokens(base_name)
 
+    # 🛠️ FIX: Preserve Season in base_name for Series so TMDB/IMDb fetches the correct season poster
+    if season is not None:
+        season_str = f"Season {season}"
+        if season_str.lower() not in base_name.lower() and f"s{season}" not in base_name.lower():
+            base_name = f"{base_name} Season {season}"
+
     if not base_name:
         base_name = (
             normalize(
