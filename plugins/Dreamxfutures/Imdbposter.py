@@ -127,7 +127,6 @@ async def _fetch_season_poster(tv_id: int, season_number: int, api_key=None):
     """Fetch specific season poster from TMDB if available."""
     try:
         data = await _tmdb_get(f"tv/{tv_id}/season/{season_number}", params={'append_to_response': 'images'}, api_key=api_key)
-        # Check season-specific posters first
         posters = data.get('images', {}).get('posters', [])
         if posters:
             return f"{TMDB_IMAGE_BASE_URL}{posters[0]['file_path']}"
@@ -170,6 +169,7 @@ async def _search_media_id(query: str, api_key=None):
         media_name = r.get('title') or r.get('name')
         if not media_name:
             continue
+        # Strict threshold increased to 0.65 to prevent mismatching
         ratio = get_ratio(media_name, clean_title_for_match)
         if ratio >= 0.65:
             scored_results.append((r, ratio))
@@ -258,11 +258,9 @@ async def _fetch_tmdb_data(query: str, api_key=None):
     images_structured['original_language'] = details.get('original_language')
 
     poster_url = None
-    # 🎯 Check for exact season-specific poster first if it's a TV series and season is provided
     if media_type == 'tv' and season is not None:
         poster_url = await _fetch_season_poster(media_id, season, api_key=api_key)
 
-    # Fallback to general poster if season poster not found
     if not poster_url:
         poster_url = f"{TMDB_IMAGE_BASE_URL}{details.get('poster_path')}" if details.get('poster_path') else None
 
@@ -459,7 +457,8 @@ async def get_movie_detailsx(query, id=False, file=None):
     backdrops = data.get('images', {}).get('backdrops', {})
     original_language = data.get('images', {}).get('original_language')
     backdrop_url = None
-    for key in ('en', original_language, 'xx', 'no_lang'):
+    # 'all' added here to ensure landscape backdrop is captured if available
+    for key in ('en', original_language, 'xx', 'no_lang', 'all'):
         if key and backdrops.get(key):
             backdrop_url = backdrops[key][0]
             break
