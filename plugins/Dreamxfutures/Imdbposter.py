@@ -86,14 +86,15 @@ def _list_to_str_tmdb(data_list, limit=10, key=None):
     return ", ".join(str(item) for item in items if item)
 
 
-def _extract_title_and_year(query: str):
-    """Extract title and optional year from a search query string."""
-    match = re.search(r'^(.*?)(?:\s+(\d{4}))?$', query.strip())
+def _extract_title_year_and_season(query: str):
+    """Extract title, optional season, and year from a search query string."""
+    match = re.search(r'^(.*?)(?:\s+(?:season|s)\s*(\d+))?(?:\s+(\d{4}))?$', query.strip(), re.IGNORECASE)
     if match:
-        title, year_str = match.groups()
+        title, season_str, year_str = match.groups()
+        season = int(season_str) if season_str and season_str.isdigit() else None
         year = int(year_str) if year_str and year_str.isdigit() else None
-        return title.strip(), year
-    return query.strip(), None
+        return title.strip(), season, year
+    return query.strip(), None, None
 
 
 async def _tmdb_get(path, params=None, api_key=None):
@@ -122,18 +123,28 @@ async def _fetch_media_details(media_type: str, media_id: int, api_key=None):
     return await _tmdb_get(f"{media_type}/{media_id}", params=params, api_key=api_key)
 
 
+async def _fetch_season_poster(tv_id: int, season_number: int, api_key=None):
+    """Fetch specific season poster from TMDB if available."""
+    try:
+        data = await _tmdb_get(f"tv/{tv_id}/season/{season_number}", params={'append_to_response': 'images'}, api_key=api_key)
+        # Check season-specific posters first
+        posters = data.get('images', {}).get('posters', [])
+        if posters:
+            return f"{TMDB_IMAGE_BASE_URL}{posters[0]['file_path']}"
+    except Exception:
+        pass
+    return None
+
+
 async def _search_media_id(query: str, api_key=None):
     """Search TMDB for the best matching movie/TV show and return (media_type, media_id)."""
-    title, year = _extract_title_and_year(query)
+    title, season, year = _extract_title_year_and_season(query)
     
-    # Clean up season/part tokens from the title for accurate matching
     clean_title_for_match = re.sub(r'\b(season|part|vol|volume)\b.*', '', title, flags=re.IGNORECASE).strip()
     if not clean_title_for_match:
         clean_title_for_match = title
 
     multi_results = []
-    
-    # 🛑 Fix: Dangerous single-word fallbacks removed to prevent matching unrelated shows like "The Daily Show"
     queries_to_try = [title]
     if clean_title_for_match != title:
         queries_to_try.append(clean_title_for_match)
@@ -159,13 +170,11 @@ async def _search_media_id(query: str, api_key=None):
         media_name = r.get('title') or r.get('name')
         if not media_name:
             continue
-        # Strict matching threshold increased from 0.5 to 0.65 to block unrelated titles
         ratio = get_ratio(media_name, clean_title_for_match)
         if ratio >= 0.65:
             scored_results.append((r, ratio))
 
     if not scored_results and multi_results:
-        # Fallback to top result only if it has a reasonable match
         scored_results = [(multi_results[0], get_ratio(multi_results[0].get('title') or multi_results[0].get('name'), clean_title_for_match))]
 
     today = datetime.utcnow().date()
@@ -222,8 +231,8 @@ def _process_images(images_data):
 async def _fetch_tmdb_data(query: str, api_key=None):
     """
     Core TMDB lookup: search → fetch details → build response dict.
-    This replaces the external tmdb.blazeposters.workers.dev API call.
     """
+    title, season, year_extracted = _extract_title_year_and_season(query)
     media_type, media_id = await _search_media_id(query, api_key=api_key)
     if not media_id:
         return None
@@ -247,6 +256,15 @@ async def _fetch_tmdb_data(query: str, api_key=None):
 
     images_structured = _process_images(details.get('images', {}))
     images_structured['original_language'] = details.get('original_language')
+
+    poster_url = None
+    # 🎯 Check for exact season-specific poster first if it's a TV series and season is provided
+    if media_type == 'tv' and season is not None:
+        poster_url = await _fetch_season_poster(media_id, season, api_key=api_key)
+
+    # Fallback to general poster if season poster not found
+    if not poster_url:
+        poster_url = f"{TMDB_IMAGE_BASE_URL}{details.get('poster_path')}" if details.get('poster_path') else None
 
     output_data = {
         'query': query, 'media_type': media_type, 'media_id': media_id,
@@ -275,7 +293,7 @@ async def _fetch_tmdb_data(query: str, api_key=None):
         'tagline': details.get('tagline'),
         'box_office': details.get('revenue') if details.get('revenue', 0) > 0 else "N/A",
         'distributors': _list_to_str_tmdb(details.get('production_companies', []), key='name'),
-        'poster_url': f"{TMDB_IMAGE_BASE_URL}{details.get('poster_path')}" if details.get('poster_path') else None,
+        'poster_url': poster_url,
         'url': f"https://www.themoviedb.org/{media_type}/{details.get('id')}",
         'images': images_structured,
     }
