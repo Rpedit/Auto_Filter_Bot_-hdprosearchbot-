@@ -19,7 +19,7 @@ warnings.simplefilter("ignore", Image.DecompressionBombWarning)
 #TMDB API ADDED BY @Bharath_boy
 
 # --- TMDB Configuration ---
-TMDB_BEARER_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI2ZGU3YTIyZGU1YjE5YTFjNmUyZGU5ZWEyMzE2ZmQxMCIsIm5iZiI6MTc0NTMyMjQ2Mi41MzMsInN1YiI6IjY4MDc4MWRlYzVjODAzNWZiMDhhNjExNCIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.rMMJ2-PBIv8Y7ybxPIEpIlzTEXzuwrm9ruKxAUCAsbw'
+TMDB_BEARER_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI2ZGU3YTIyZGU1YjE5YTFjNmUyZGU5ZWEyMzE2ZmQxMCIsIm5iZiI6MTc0NSMyMjQ2Mi41MzMsInN1YiI6IjY4MDc4MWRlYzVjODAzNWZiMDhhNjExNCIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.rMMJ2-PBIv8Y7ybxPIEpIlzTEXzuwrm9ruKxAUCAsbw'
 TMDB_BASE_URL = 'https://api.themoviedb.org/3'
 TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/original'
 MIN_RUNTIME = 40
@@ -126,19 +126,19 @@ async def _search_media_id(query: str, api_key=None):
     """Search TMDB for the best matching movie/TV show and return (media_type, media_id)."""
     title, year = _extract_title_and_year(query)
     
+    # Clean up season/part tokens from the title for accurate matching
+    clean_title_for_match = re.sub(r'\b(season|part|vol|volume)\b.*', '', title, flags=re.IGNORECASE).strip()
+    if not clean_title_for_match:
+        clean_title_for_match = title
+
     multi_results = []
-    words = title.split()
     
-    # Generate up to 3 fallback queries to minimize API rate limit usage
+    # 🛑 Fix: Dangerous single-word fallbacks removed to prevent matching unrelated shows like "The Daily Show"
     queries_to_try = [title]
-    if len(words) > 2:
-        queries_to_try.append(" ".join(words[:-1]))  # Drop the last word
-        queries_to_try.append(words[0])              # Keep just the first word
-    elif len(words) == 2:
-        queries_to_try.append(words[0])
-        
-    # Remove any duplicates but preserve order, capping at 3 attempts
-    queries_to_try = list(dict.fromkeys(queries_to_try))[:3]
+    if clean_title_for_match != title:
+        queries_to_try.append(clean_title_for_match)
+    
+    queries_to_try = list(dict.fromkeys(queries_to_try))[:2]
     
     for target_query in queries_to_try:
         if not target_query:
@@ -156,13 +156,17 @@ async def _search_media_id(query: str, api_key=None):
 
     scored_results = []
     for r in multi_results:
-        # Score the string matched against the ORIGINAL title, not the shortened target_query
-        ratio = get_ratio(r.get('title') or r.get('name'), title)
-        if ratio >= 0.5:   # Lowered from 0.6 to 0.5 to allow for dropped/modified words
+        media_name = r.get('title') or r.get('name')
+        if not media_name:
+            continue
+        # Strict matching threshold increased from 0.5 to 0.65 to block unrelated titles
+        ratio = get_ratio(media_name, clean_title_for_match)
+        if ratio >= 0.65:
             scored_results.append((r, ratio))
 
-    if not scored_results:
-        scored_results = [(r, get_ratio(r.get('title') or r.get('name'), title)) for r in multi_results[:10]]
+    if not scored_results and multi_results:
+        # Fallback to top result only if it has a reasonable match
+        scored_results = [(multi_results[0], get_ratio(multi_results[0].get('title') or multi_results[0].get('name'), clean_title_for_match))]
 
     today = datetime.utcnow().date()
     candidates_past, candidates_upcoming = [], []
