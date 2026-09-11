@@ -413,6 +413,11 @@ def extract_media_info(filename: str, caption: str):
 
     season, episode = extract_season_episode(filename)
 
+    # 🎯 FIX: Extract year globally from unified/filename first so years appearing before seasons aren't missed
+    year_match = YEAR_PATTERN.search(unified)
+    if year_match:
+        year = year_match.group(0)
+
     if season is not None:
         tag = "#SERIES"
 
@@ -426,34 +431,15 @@ def extract_media_info(filename: str, caption: str):
         if m:
             match_str = m.group(0)
             start_idx = filename.lower().find(match_str.lower())
-            end_idx = start_idx + len(match_str)
-
-            processed_raw = filename[:end_idx]
+            processed_raw = filename[:start_idx + len(match_str)]
             base_raw = filename[:start_idx]
 
-            year_match = YEAR_PATTERN.search(
-                filename.lower()[end_idx:]
-            )
-
-            if year_match:
-                y = year_match.group(0)
-                yi = filename.lower().find(y, end_idx)
-
-                if yi != -1:
-                    processed_raw = filename[:yi + 4]
-                    base_raw += f" {y}"
-
     else:
-        year_match = YEAR_PATTERN.search(unified)
-
-        if year_match:
-            year = year_match.group(0)
+        if year:
             year_idx = filename.lower().find(year.lower())
-
             if year_idx != -1:
                 processed_raw = filename[:year_idx + 4]
                 base_raw = processed_raw
-
         else:
             qual_match = QUALITY_PATTERN.search(unified)
 
