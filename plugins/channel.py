@@ -96,7 +96,6 @@ OTT_PLATFORMS = {
     "tubi": "Tubi"
 }
 
-# 🎯 Clean Standard Genres without duplicate variations
 STANDARD_GENRES = {
     "Action", "Adventure", "Animation", "Anime", "Biography", "Comedy", 
     "Crime", "Documentary", "Drama", "Family", "Fantasy", "Film-Noir", 
@@ -105,7 +104,6 @@ STANDARD_GENRES = {
     "Thriller", "War", "Western"
 }
 
-# 🎯 Maps duplicate names or tags directly to clean standard names
 GENRE_MAPPING = {
     "Reality": "Reality TV",
     "Reality-TV": "Reality TV",
@@ -252,9 +250,10 @@ async def set_domain_handler(bot, message):
         current_text = f"<code>{current_url}</code>" if current_url else "<i>Not Set Yet!</i>"
         return await message.reply_text(
             f"🌐 **Current HDHub4u URL:** {current_text}\n\n"
-            f"💡 **Usage:** <code>/setdomain https://new-domain.com/</code>"
+            f"💡 **Usage:** <code>/setdomain https://new-domain.com</code>"
         )
-    new_url = message.command[1].strip()
+    # Automatically cleans query parameters (?utm=...) and trailing slashes
+    new_url = message.command[1].strip().split("?")[0].rstrip("/")
     try:
         await db.db.settings.update_one(
             {"_id": "hdhub_base_url"},
@@ -844,12 +843,10 @@ async def _process_with_lock(
         genre_list = []
         for g in genre_names:
             matched = None
-            # Check direct standard match
             for std in STANDARD_GENRES:
                 if g.lower() == std.lower():
                     matched = std
                     break
-            # Check mapping conversion
             if not matched:
                 for map_k, map_v in GENRE_MAPPING.items():
                     if g.lower() == map_k.lower():
