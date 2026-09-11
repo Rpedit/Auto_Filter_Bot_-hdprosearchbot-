@@ -265,7 +265,7 @@ async def set_domain_handler(bot, message):
 
 
 async def get_hdhub4u_genres(base_name: str) -> str:
-    """Scrapes genres directly from HDHub4u post, excluding site menus and garbage."""
+    """Scrapes genres directly from HDHub4u with exact title matching and garbage filtering."""
     try:
         base_url = await get_hdhub_base_url()
         if not base_url:
@@ -292,14 +292,35 @@ async def get_hdhub4u_genres(base_name: str) -> str:
                 html = await resp.text()
 
         soup = BeautifulSoup(html, "html.parser")
-        result_item = soup.select_one(
-            ".archive-posts h2 a, .post-item a, article a, .entry-title a, .thumb a"
+
+        # 🎯 1. Strip headers, sidebars, and trending widgets on search page
+        for tag in soup(["header", "nav", "footer", "aside", "script", "style"]):
+            tag.decompose()
+        for widget in soup.select(".sidebar, #sidebar, .widget, .trending, .slider, .carousel, .featured"):
+            widget.decompose()
+
+        # 🎯 2. Title Match Check: Ensure we only pick a post that matches the search words!
+        query_words = [re.sub(r'[^a-zA-Z0-9]', '', w).lower() for w in clean_query.split()]
+        query_words = [w for w in query_words if len(w) >= 3]
+
+        candidate_links = soup.select(
+            ".archive-posts h2 a, .recent-movies a, .blog-posts a, article a, .post-item a, .entry-title a"
         )
 
-        if not result_item or not result_item.get("href"):
-            return "N/A"
+        movie_page_url = None
+        for a in candidate_links:
+            title_text = f"{a.get('title', '')} {a.get_text()}".lower()
+            href = a.get("href", "")
+            if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
+                continue
 
-        movie_page_url = result_item["href"]
+            if query_words and all(w in title_text for w in query_words):
+                movie_page_url = href
+                break
+
+        # If no post matches the title, DO NOT open a random movie! Fallback to TMDB/IMDb.
+        if not movie_page_url:
+            return "N/A"
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(movie_page_url, headers=headers) as resp:
@@ -309,34 +330,38 @@ async def get_hdhub4u_genres(base_name: str) -> str:
 
         movie_soup = BeautifulSoup(movie_html, "html.parser")
 
-        # 🎯 Strip header, navigation, and dropdowns to prevent menu text scraping
-        for tag in movie_soup(["header", "nav", "footer", "script", "style", "aside"]):
+        for tag in movie_soup(["header", "nav", "footer", "aside", "script", "style"]):
             tag.decompose()
+        for widget in movie_soup.select(".sidebar, #sidebar, .widget, .related-posts, .comments"):
+            widget.decompose()
 
         content = movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
         search_area = content if content else movie_soup
 
-        # 1. Search text lines inside article content
+        # Extract genres from post text
         for elem in search_area.find_all(["p", "div", "span", "strong", "b", "h4"]):
             text = elem.get_text(" ", strip=True)
             if re.search(r'\b(?:Genre|Genres)\b', text, re.IGNORECASE):
                 m = re.search(r'\b(?:Genre|Genres)\s*[:\-]\s*([^\n\r]+)', text, re.IGNORECASE)
                 if m:
                     candidate = m.group(1).strip()
-                    candidate = re.split(r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format)\b', candidate, flags=re.IGNORECASE)[0]
+                    candidate = re.split(
+                        r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline)\b',
+                        candidate, flags=re.IGNORECASE
+                    )[0]
                     candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
                     parts = re.split(r'[,|/•]', candidate)
                     cleaned = [
                         p.strip() for p in parts 
-                        if p.strip() and len(p.strip()) < 30 and not any(bad in p.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search"])
+                        if p.strip() and 2 <= len(p.strip()) <= 25 and not any(
+                            bad in p.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download"]
+                        )
                     ]
                     if cleaned:
                         return ", ".join(cleaned)
 
-        # 2. Check WordPress categories fallback
-        cat_links = search_area.select(
-            ".cat-links a, a[rel='category tag'], .entry-category a, .genres a"
-        )
+        # Fallback to category links
+        cat_links = search_area.select(".cat-links a, a[rel='category tag'], .entry-category a, .genres a")
         ignored_cats = {
             "uncategorized", "movies", "web series", "bollywood",
             "hollywood", "dual audio", "hindi dubbed", "tv shows",
@@ -816,7 +841,7 @@ async def _process_with_lock(
             )
         )
 
-        # 🎯 GENRE PRIORITY 1: HDHub4u First!
+        # 🎯 GENRE PRIORITY 1: HDHub4u First (with strict title match)!
         genre_names = []
         hdhub_genres = await get_hdhub4u_genres(base_name)
 
@@ -828,7 +853,7 @@ async def _process_with_lock(
                 if g.strip() and g.strip() != "N/A" and not any(bad in g.lower() for bad in ["dropdown", "menu", "select"])
             ]
 
-        # 🎯 GENRE PRIORITY 2: Fallback to TMDB / IMDb if HDHub4u yields nothing
+        # 🎯 GENRE PRIORITY 2: Fallback to TMDB / IMDb
         if not genre_names:
             raw_genres = (
                 tmdb_details.get("genres")
@@ -881,7 +906,6 @@ async def _process_with_lock(
                     if formatted_g not in genre_list:
                         genre_list.append(formatted_g)
 
-        # If genre_list is empty due to scraper issues, fallback to TMDB / IMDb
         if not genre_list:
             raw_backup = tmdb_details.get("genres") or imdb_details.get("genres", "")
             if isinstance(raw_backup, str) and raw_backup != "N/A":
