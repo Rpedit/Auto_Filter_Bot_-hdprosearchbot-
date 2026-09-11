@@ -413,11 +413,6 @@ def extract_media_info(filename: str, caption: str):
 
     season, episode = extract_season_episode(filename)
 
-    # 🎯 FIX: Extract year globally from unified/filename first so years appearing before seasons aren't missed
-    year_match = YEAR_PATTERN.search(unified)
-    if year_match:
-        year = year_match.group(0)
-
     if season is not None:
         tag = "#SERIES"
 
@@ -431,15 +426,34 @@ def extract_media_info(filename: str, caption: str):
         if m:
             match_str = m.group(0)
             start_idx = filename.lower().find(match_str.lower())
-            processed_raw = filename[:start_idx + len(match_str)]
+            end_idx = start_idx + len(match_str)
+
+            processed_raw = filename[:end_idx]
             base_raw = filename[:start_idx]
 
+            year_match = YEAR_PATTERN.search(
+                filename.lower()[end_idx:]
+            )
+
+            if year_match:
+                y = year_match.group(0)
+                yi = filename.lower().find(y, end_idx)
+
+                if yi != -1:
+                    processed_raw = filename[:yi + 4]
+                    base_raw += f" {y}"
+
     else:
-        if year:
+        year_match = YEAR_PATTERN.search(unified)
+
+        if year_match:
+            year = year_match.group(0)
             year_idx = filename.lower().find(year.lower())
+
             if year_idx != -1:
                 processed_raw = filename[:year_idx + 4]
                 base_raw = processed_raw
+
         else:
             qual_match = QUALITY_PATTERN.search(unified)
 
@@ -845,9 +859,22 @@ async def _process_with_lock(
             else "N/A"
         )
 
+        # 🎯 FIX: Take official title and year from IMDb/TMDB so the display title is full and correct
+        official_title = (
+            imdb_details.get("title")
+            or tmdb_details.get("title")
+            or base_name
+        )
+        movie_year = (
+            imdb_details.get("year")
+            or tmdb_details.get("year")
+            or media_info["year"]
+        )
+
         movie_doc = {
             "_id": base_name,
             "clean_title": clean_title,
+            "title": official_title,
             "files": [file_data],
             "poster_url": poster_url,
             "genres": genres,
@@ -855,11 +882,7 @@ async def _process_with_lock(
             "runtime": runtime,
             "certificates": certificates,
             "imdb_url": imdb_url,
-            "year": (
-                tmdb_details.get("year")
-                or imdb_details.get("year")
-                or media_info["year"]
-            ),
+            "year": movie_year,
             "tag": media_info["tag"],
             "ott_platform": media_info["ott_platform"],
             "message_id": None,
@@ -1472,7 +1495,14 @@ def generate_movie_message(movie_doc, base_name):
         "N/A"
     )
 
-    filename_display = base_name
+    # 🎯 FIX: Use the stored official title and year from IMDb/TMDB instead of raw base_name
+    stored_title = movie_doc.get("title", base_name)
+    movie_year = movie_doc.get("year")
+    
+    if movie_year and str(movie_year) not in str(stored_title):
+        filename_display = f"{stored_title} {movie_year}"
+    else:
+        filename_display = stored_title
 
     raw_text = script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get(
