@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 _BASE_IGNORE_WORDS = {
     "rarbg", "dub", "sub", "sample", "mkv", "mp4", "avi", "aac", "ac3", "eac3", "ddp", "ddp5", "atmos", "dts",
-    "combined", "esub", "msub", "proper", "repack", "unrated", "extended", "imax", "remux", "10bit",
+    "combined", "esub", "msub", "proper", "repack", "unrated", "extended", "imax", "remux", "10bit", "10-bit",
     "x264", "x265", "h264", "h265", "hevc", "avc", "dovi", "hdr", "hdr10",
     "action", "adventure", "animation", "biography", "comedy", "crime",
     "documentary", "drama", "fantasy", "film-noir", "history",
@@ -30,8 +30,9 @@ _BASE_IGNORE_WORDS = {
     "telesync", "dvdscr", "dvdrip", "predvd", "webrip", "web-dl", "tvrip",
     "hdtv", "web dl", "webdl", "bluray", "brrip", "bdrip", "360p", "480p",
     "720p", "1080p", "2160p", "4k", "1440p", "540p", "240p", "140p",
-    "hdrip", "hq-hdrip", "hq-hdtc",
+    "hdrip", "hq-hdrip", "hq-hdtc", "hq-cam", "hq-ts", "hq-predvd",
     "dual", "multi", "audio",
+    "v1", "v2", "v3", "v4", "v5", "v6", "version", "ver", "cleaned", "clean",
     "nf", "netflix", "sonyliv", "sony", "sliv", "amzn", "prime",
     "primevideo", "hotstar", "zee5", "jio", "jhs", "aha", "hbo", "paramount",
     "apple", "atv", "atvp", "appletv", "hoichoi", "sunnxt", "viki", "cr", "crunchyroll", "hulu",
@@ -69,7 +70,9 @@ CAPTION_LANGUAGES = {
     "ind": "Indonesian", "indonesian": "Indonesian",
     "dual": "Dual Audio", "multi": "Multi Audio",
     "hq dub": "HQ Dub", "hq-dub": "HQ Dub",
-    "hq audio": "HQ Audio", "hq-audio": "HQ Audio"
+    "hq audio": "HQ Audio", "hq-audio": "HQ Audio",
+    "line audio": "Line Audio", "hq line": "HQ Line", "hq-line": "HQ Line",
+    "mic audio": "Mic Audio", "clean audio": "Clean Audio"
 }
 
 OTT_PLATFORMS = {
@@ -125,12 +128,16 @@ GENRE_MAPPING = {
 
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
 NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
+
+# 🎯 Quality pattern with automatic version (V2, V3, etc.) capture
 QUALITY_PATTERN = re.compile(
-    r"\b(?:HDCam|HD-Cam|HDTC|HD-TC|HQ-HDTC|CamRip|CAM|TS|HDTS|TC|TeleSync|DVDScr|DVDRip|PreDVD|"
+    r"\b(?:HDCam|HD-Cam|HQ-HDCam|HDTC|HD-TC|HQ-HDTC|CamRip|CAM|HQ-CAM|TS|HDTS|HQ-TS|TC|TeleSync|DVDScr|DVDRip|PreDVD|HQ-PreDVD|"
     r"WEBRip|WEB-DL|TVRip|HDTV|WEB DL|WebDl|BluRay|BRRip|BDRip|Remux|IMAX|"
-    r"360p|480p|720p|1080p|2160p|4K|1440p|540p|240p|140p|HEVC|10Bit|HDRip|HQ-HDRip|HDR10\+|HDR10|HDR|DV|DoVi)\b",
+    r"360p|480p|720p|1080p|2160p|4K|1440p|540p|240p|140p|HEVC|10Bit|10-Bit|HDRip|HQ-HDRip|HDR10\+|HDR10|HDR|DV|DoVi)"
+    r"(?:[\s._-]*(?:[vV]\d+|ver\.?\s*\d+|version\s*\d+))?\b",
     re.IGNORECASE
 )
+VERSION_STANDALONE = re.compile(r"\b(?:[vV]\d+|ver\.?\s*\d+|version\s*\d+)\b", re.IGNORECASE)
 YEAR_PATTERN = re.compile(r"(?<![A-Za-z0-9])(?:19|20)\d{2}(?![A-Za-z0-9])")
 RANGE_REGEX = re.compile(
     r'\bS(\d{1,2})[^\w\n\r]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})',
@@ -174,8 +181,42 @@ def remove_ignored_words(text: str) -> str:
 
 
 def get_qualities(text: str) -> str:
-    qualities = QUALITY_PATTERN.findall(text)
-    return ", ".join(qualities) if qualities else "N/A"
+    if not text:
+        return "N/A"
+
+    raw_qualities = QUALITY_PATTERN.findall(text)
+
+    # Standalone version check (e.g. filename has V2 separately)
+    v_match = VERSION_STANDALONE.search(text)
+    version_str = None
+    if v_match:
+        raw_v = v_match.group(0).upper()
+        raw_v = re.sub(r'^(?:VER\.?|VERSION)\s*', 'V', raw_v)
+        version_str = raw_v
+
+    cleaned_qualities = []
+    has_version_attached = False
+
+    for q in raw_qualities:
+        q_clean = re.sub(r"[._]+", " ", q).strip()
+        q_clean = re.sub(r"\b[vV](\d+)\b", r"V\1", q_clean)
+        if re.search(r"\bV\d+\b", q_clean):
+            has_version_attached = True
+        if q_clean and q_clean not in cleaned_qualities:
+            cleaned_qualities.append(q_clean)
+
+    # Agar standalone V2/V3 mila aur quality mein juda nahi hai, toh Cam/Rip quality ke saath jod do
+    if version_str and not has_version_attached and cleaned_qualities:
+        attached = False
+        for idx, q in enumerate(cleaned_qualities):
+            if any(k in q.upper() for k in ["HDTC", "CAM", "TS", "PREDVD", "WEBRIP", "WEB-DL", "RIP"]):
+                cleaned_qualities[idx] = f"{q} {version_str}"
+                attached = True
+                break
+        if not attached:
+            cleaned_qualities.append(version_str)
+
+    return ", ".join(cleaned_qualities) if cleaned_qualities else "N/A"
 
 
 def extract_ott_platform(text: str) -> str:
@@ -193,8 +234,8 @@ def get_clean_title(name: str) -> str:
     return normalize(t).lower()
 
 
-def format_runtime(runtime_val):
-    if not runtime_val or runtime_val == "N/A":
+def format_runtime(runtime_val, is_series: bool = False) -> str:
+    if not runtime_val or str(runtime_val).strip().upper() in ("N/A", "NONE", "0", "-", ""):
         return "N/A"
 
     if isinstance(runtime_val, (list, tuple)):
@@ -203,32 +244,40 @@ def format_runtime(runtime_val):
         runtime_val = runtime_val[0]
 
     runtime_str = str(runtime_val).strip()
-    numbers = re.findall(r"\d+", runtime_str)
 
-    if not numbers:
-        return runtime_str
+    if "/ Ep" in runtime_str:
+        return runtime_str if is_series else runtime_str.replace(" / Ep", "").strip()
 
+    total_mins = 0
     try:
-        if (
-            len(numbers) >= 2
-            and (
-                "hr" in runtime_str.lower()
-                or "hour" in runtime_str.lower()
-                or re.search(r"\bh\b", runtime_str.lower())
-            )
-        ):
-            total_mins = int(numbers[0]) * 60 + int(numbers[1])
+        if runtime_str.isdigit():
+            total_mins = int(runtime_str)
         else:
-            total_mins = int(numbers[0])
-    except ValueError:
-        return runtime_str
+            hours_match = re.search(r"(\d+)\s*(?:h|hr|hour)s?", runtime_str, re.IGNORECASE)
+            mins_match = re.search(r"(\d+)\s*(?:m|min|minute)s?", runtime_str, re.IGNORECASE)
+
+            if hours_match or mins_match:
+                hours = int(hours_match.group(1)) if hours_match else 0
+                mins = int(mins_match.group(1)) if mins_match else 0
+                total_mins = (hours * 60) + mins
+            else:
+                numbers = re.findall(r"\d+", runtime_str)
+                if numbers:
+                    total_mins = int(numbers[0])
+    except Exception:
+        return "N/A"
+
+    if total_mins <= 0:
+        return "N/A"
 
     if total_mins >= 60:
         hours = total_mins // 60
         mins = total_mins % 60
-        return f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
+        formatted = f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
+    else:
+        formatted = f"{total_mins}m"
 
-    return f"{total_mins}m"
+    return f"{formatted} / Ep" if is_series else formatted
 
 
 async def get_hdhub_base_url() -> Optional[str]:
@@ -265,7 +314,6 @@ async def set_domain_handler(bot, message):
 
 
 async def get_hdhub4u_genres(base_name: str) -> str:
-    """Scrapes genres directly from HDHub4u with exact title matching and garbage filtering."""
     try:
         base_url = await get_hdhub_base_url()
         if not base_url:
@@ -293,13 +341,11 @@ async def get_hdhub4u_genres(base_name: str) -> str:
 
         soup = BeautifulSoup(html, "html.parser")
 
-        # 🎯 1. Strip headers, sidebars, and trending widgets on search page
         for tag in soup(["header", "nav", "footer", "aside", "script", "style"]):
             tag.decompose()
         for widget in soup.select(".sidebar, #sidebar, .widget, .trending, .slider, .carousel, .featured"):
             widget.decompose()
 
-        # 🎯 2. Title Match Check: Ensure we only pick a post that matches the search words!
         query_words = [re.sub(r'[^a-zA-Z0-9]', '', w).lower() for w in clean_query.split()]
         query_words = [w for w in query_words if len(w) >= 3]
 
@@ -318,7 +364,6 @@ async def get_hdhub4u_genres(base_name: str) -> str:
                 movie_page_url = href
                 break
 
-        # If no post matches the title, DO NOT open a random movie! Fallback to TMDB/IMDb.
         if not movie_page_url:
             return "N/A"
 
@@ -338,7 +383,6 @@ async def get_hdhub4u_genres(base_name: str) -> str:
         content = movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
         search_area = content if content else movie_soup
 
-        # Extract genres from post text
         for elem in search_area.find_all(["p", "div", "span", "strong", "b", "h4"]):
             text = elem.get_text(" ", strip=True)
             if re.search(r'\b(?:Genre|Genres)\b', text, re.IGNORECASE):
@@ -360,7 +404,6 @@ async def get_hdhub4u_genres(base_name: str) -> str:
                     if cleaned:
                         return ", ".join(cleaned)
 
-        # Fallback to category links
         cat_links = search_area.select(".cat-links a, a[rel='category tag'], .entry-category a, .genres a")
         ignored_cats = {
             "uncategorized", "movies", "web series", "bollywood",
@@ -562,7 +605,9 @@ def extract_media_info(filename: str, caption: str):
             r"\bSeason\s*\d{1,2}\b",
             r"\bEp(?:isode)?\.?\s*\d{1,3}\b",
             r"\bEpisode\s*\d{1,3}\b",
-            r"\bPart\s*\d{1,2}\b"
+            r"\bPart\s*\d{1,2}\b",
+            r"\b[vV]\d+\b",                   # V1, V2, V3 remove karega
+            r"\b(?:version|ver)\.?\s*\d+\b"   # Version 2, Ver 2 remove karega
         ]
 
         for p in patterns:
@@ -820,16 +865,27 @@ async def _process_with_lock(
             else tmdb_details.get("tmdb_url", "")
         )
 
-        runtime = (
-            final_file_runtime
-            if final_file_runtime != "N/A"
-            else (
-                tmdb_details.get("runtime")
-                if tmdb_details.get("runtime")
-                and tmdb_details.get("runtime") != "N/A"
-                else imdb_details.get("runtime", "N/A")
-            )
+        # 🎯 DIRECT IMDb / TMDB RUNTIME PRIORITY
+        is_series = media_info["tag"] == "#SERIES"
+
+        imdb_r = imdb_details.get("runtime")
+        tmdb_r = (
+            tmdb_details.get("episode_run_time")
+            if is_series and tmdb_details.get("episode_run_time")
+            else tmdb_details.get("runtime")
         )
+
+        if isinstance(imdb_r, (list, tuple)) and imdb_r:
+            imdb_r = imdb_r[0]
+        if isinstance(tmdb_r, (list, tuple)) and tmdb_r:
+            tmdb_r = tmdb_r[0]
+
+        if imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
+            runtime = str(imdb_r).strip()
+        elif tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
+            runtime = str(tmdb_r).strip()
+        else:
+            runtime = final_file_runtime if final_file_runtime != "N/A" else "N/A"
 
         certificates = (
             tmdb_details.get("certificates")
@@ -841,7 +897,7 @@ async def _process_with_lock(
             )
         )
 
-        # 🎯 GENRE PRIORITY 1: HDHub4u First (with strict title match)!
+        # 🎯 GENRE PRIORITY 1: HDHub4u First
         genre_names = []
         hdhub_genres = await get_hdhub4u_genres(base_name)
 
@@ -1007,7 +1063,9 @@ async def _process_with_lock(
             }
         }
 
-        if final_file_runtime != "N/A":
+        # Agar pehle se DB me runtime missing ya N/A tha, sirf tabhi update karein
+        current_db_runtime = movie_doc.get("runtime")
+        if (not current_db_runtime or str(current_db_runtime).strip().upper() in ("N/A", "NONE", "0", "")) and final_file_runtime != "N/A":
             update_fields["$set"] = {
                 "runtime": final_file_runtime
             }
@@ -1371,6 +1429,8 @@ def generate_movie_message(movie_doc, base_name):
         else "#MOVIE"
     )
 
+    is_series = (primary_tag == "#SERIES")
+
     epi_block = ""
 
     if episodes_by_season:
@@ -1543,7 +1603,8 @@ def generate_movie_message(movie_doc, base_name):
     )
 
     runtime = format_runtime(
-        raw_runtime
+        raw_runtime,
+        is_series=is_series
     )
 
     certificates = movie_doc.get(
