@@ -707,15 +707,17 @@ async def _process_with_lock(
     if not movie_doc:
         tmdb_details = {}
 
-        # 🎯 Pehle IMDb details lao taaki exact official title mil sake
         imdb_details = await get_movie_details(
             base_name
         ) or {}
 
         official_search_title = imdb_details.get("title") or base_name
         
-        # 🎯 TMDB ko sirf clean official title bhejo taaki exact main show ka poster aaye
-        tmdb_query = official_search_title
+        # 🎯 FIX: Explicitly target Hindi for Bigg Boss so it never picks Malayalam/other regional posters
+        if "bigg boss" in official_search_title.lower():
+            tmdb_query = "Bigg Boss Hindi"
+        else:
+            tmdb_query = official_search_title
 
         if TMDB_POSTER:
             tmdb_details = await get_movie_detailsx(
