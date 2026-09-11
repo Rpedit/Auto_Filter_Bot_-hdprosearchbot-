@@ -707,7 +707,14 @@ async def _process_with_lock(
     if not movie_doc:
         tmdb_details = {}
 
-        tmdb_query = f"{base_name} Season {media_info['season']}" if media_info["season"] is not None else base_name
+        # 🎯 Pehle IMDb details lao taaki exact official title mil sake (Jaise friend ke bot mein hota hai)
+        imdb_details = await get_movie_details(
+            base_name
+        ) or {}
+
+        official_search_title = imdb_details.get("title") or base_name
+
+        tmdb_query = f"{official_search_title} Season {media_info['season']}" if media_info["season"] is not None else official_search_title
 
         if TMDB_POSTER:
             tmdb_details = await get_movie_detailsx(
@@ -719,10 +726,6 @@ async def _process_with_lock(
                 or tmdb_details.get("error")
             ):
                 error_tmdb = True
-
-        imdb_details = await get_movie_details(
-            base_name
-        ) or {}
 
         poster_url = ""
         is_backdrop = False
@@ -859,7 +862,6 @@ async def _process_with_lock(
             else "N/A"
         )
 
-        # 🎯 FIX: Take official title and year from IMDb/TMDB so the display title is full and correct
         official_title = (
             imdb_details.get("title")
             or tmdb_details.get("title")
@@ -1495,11 +1497,10 @@ def generate_movie_message(movie_doc, base_name):
         "N/A"
     )
 
-    # 🎯 FIX: Use the stored official title and year from IMDb/TMDB instead of raw base_name
     stored_title = movie_doc.get("title", base_name)
     movie_year = movie_doc.get("year")
     
-    if movie_year and str(movie_year) not in str(stored_title):
+    if movie_year and str(movie_year) not in str(stored_title) and primary_tag != "#SERIES":
         filename_display = f"{stored_title} {movie_year}"
     else:
         filename_display = stored_title
