@@ -165,21 +165,34 @@ async def _search_media_id(query: str, api_key=None):
         return SequenceMatcher(None, s1.lower(), s2.lower()).ratio()
 
     scored_results = []
+    query_words = set(clean_title_for_match.lower().split())
+
     for r in multi_results:
         media_name = r.get('title') or r.get('name')
         if not media_name:
             continue
-        # Strict threshold increased to 0.65 to prevent mismatching
         ratio = get_ratio(media_name, clean_title_for_match)
-        if ratio >= 0.65:
-            scored_results.append((r, ratio))
+        media_words = set(media_name.lower().split())
+        
+        # Check keyword overlap to ensure regional/specific tags aren't ignored
+        overlap = len(query_words.intersection(media_words))
+        
+        if ratio >= 0.5 or (query_words and overlap >= len(query_words) * 0.5):
+            scored_results.append((r, ratio, overlap))
 
+    # Fallback using keyword overlap instead of blindly picking index 0 (main popular show)
     if not scored_results and multi_results:
-        scored_results = [(multi_results[0], get_ratio(multi_results[0].get('title') or multi_results[0].get('name'), clean_title_for_match))]
+        best_fallback = max(
+            multi_results, 
+            key=lambda x: len(query_words.intersection(set((x.get('title') or x.get('name', '')).lower().split())))
+        )
+        scored_results = [(best_fallback, get_ratio(best_fallback.get('title') or best_fallback.get('name'), clean_title_for_match), 1)]
 
     today = datetime.utcnow().date()
     candidates_past, candidates_upcoming = [], []
-    for r, ratio in scored_results:
+    for item in scored_results:
+        r = item[0]
+        ratio = item[1]
         mtype = r.get('media_type')
         rd_str = r.get('release_date') or r.get('first_air_date')
         if not (rd_str and mtype in ['movie', 'tv']):
@@ -281,7 +294,7 @@ async def _fetch_tmdb_data(query: str, api_key=None):
         'genres': _list_to_str_tmdb(details.get('genres', []), key='name'),
         'languages': _list_to_str_tmdb(details.get('spoken_languages', []), key='english_name'),
         'countries': _list_to_str_tmdb(details.get('production_countries', []), key='name'),
-        'director': _list_to_str_tmdb([p for p in crew if p.get('job') == 'Director'], key='name'),
+        'director': _list_to_str_tmdb([p for p in crew if p.get('job'] == 'Director'], key='name'),
         'writer': _list_to_str_tmdb([p for p in crew if p.get('job') in ['Screenplay', 'Writer', 'Story']], key='name'),
         'producer': _list_to_str_tmdb([p for p in crew if p.get('job') == 'Producer'], key='name'),
         'composer': _list_to_str_tmdb([p for p in crew if p.get('job') == 'Original Music Composer'], key='name'),
@@ -457,7 +470,6 @@ async def get_movie_detailsx(query, id=False, file=None):
     backdrops = data.get('images', {}).get('backdrops', {})
     original_language = data.get('images', {}).get('original_language')
     backdrop_url = None
-    # 'all' added here to ensure landscape backdrop is captured if available
     for key in ('en', original_language, 'xx', 'no_lang', 'all'):
         if key and backdrops.get(key):
             backdrop_url = backdrops[key][0]
