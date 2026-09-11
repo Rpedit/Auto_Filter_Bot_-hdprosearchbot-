@@ -167,7 +167,7 @@ EMOJI_MODE = is_enabled(environ.get('EMOJI_MODE', "True"), True)  # Emoji status
 BUTTON_MODE = is_enabled((environ.get('BUTTON_MODE', "False")), False) # pm & Group button or link mode (True) / Off (False)
 STREAM_MODE = is_enabled(environ.get('STREAM_MODE', "True"), True) # Set Stream mode True or False
 PREMIUM_STREAM_MODE = is_enabled(environ.get('PREMIUM_STREAM_MODE', "False"), False) # Set Stream mode True or False only for premium users
-MAINTENANCE = is_enabled(environ.get('MAINTENANCE', "True"), False)
+MAINTENANCE = is_enabled(environ.get('MAINTENANCE', "False"), False)
 
 # ============================
 # Bot Configuration
