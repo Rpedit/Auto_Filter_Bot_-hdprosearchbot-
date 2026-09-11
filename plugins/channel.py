@@ -252,7 +252,6 @@ async def set_domain_handler(bot, message):
             f"🌐 **Current HDHub4u URL:** {current_text}\n\n"
             f"💡 **Usage:** <code>/setdomain https://new-domain.com</code>"
         )
-    # Automatically cleans query parameters (?utm=...) and trailing slashes
     new_url = message.command[1].strip().split("?")[0].rstrip("/")
     try:
         await db.db.settings.update_one(
@@ -266,7 +265,7 @@ async def set_domain_handler(bot, message):
 
 
 async def get_hdhub4u_genres(base_name: str) -> str:
-    """Scrapes genres directly from HDHub4u post with robust parsing."""
+    """Scrapes genres directly from HDHub4u post, excluding site menus and garbage."""
     try:
         base_url = await get_hdhub_base_url()
         if not base_url:
@@ -310,28 +309,43 @@ async def get_hdhub4u_genres(base_name: str) -> str:
 
         movie_soup = BeautifulSoup(movie_html, "html.parser")
 
-        # 1. Look for Genre line inside post content
-        genre_match = re.search(r'(?:Genre|Genres)\s*[:|-]\s*([^\n\r<]+)', movie_html, re.IGNORECASE)
-        if genre_match:
-            raw_text = BeautifulSoup(genre_match.group(1), "html.parser").get_text().strip()
-            parts = re.split(r'[,|/]', raw_text)
-            cleaned = [p.strip() for p in parts if p.strip() and len(p.strip()) < 25]
-            if cleaned:
-                return ", ".join(cleaned)
+        # 🎯 Strip header, navigation, and dropdowns to prevent menu text scraping
+        for tag in movie_soup(["header", "nav", "footer", "script", "style", "aside"]):
+            tag.decompose()
 
-        # 2. Check WordPress categories
-        cat_links = movie_soup.select(
+        content = movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
+        search_area = content if content else movie_soup
+
+        # 1. Search text lines inside article content
+        for elem in search_area.find_all(["p", "div", "span", "strong", "b", "h4"]):
+            text = elem.get_text(" ", strip=True)
+            if re.search(r'\b(?:Genre|Genres)\b', text, re.IGNORECASE):
+                m = re.search(r'\b(?:Genre|Genres)\s*[:\-]\s*([^\n\r]+)', text, re.IGNORECASE)
+                if m:
+                    candidate = m.group(1).strip()
+                    candidate = re.split(r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format)\b', candidate, flags=re.IGNORECASE)[0]
+                    candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
+                    parts = re.split(r'[,|/•]', candidate)
+                    cleaned = [
+                        p.strip() for p in parts 
+                        if p.strip() and len(p.strip()) < 30 and not any(bad in p.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search"])
+                    ]
+                    if cleaned:
+                        return ", ".join(cleaned)
+
+        # 2. Check WordPress categories fallback
+        cat_links = search_area.select(
             ".cat-links a, a[rel='category tag'], .entry-category a, .genres a"
         )
         ignored_cats = {
             "uncategorized", "movies", "web series", "bollywood",
             "hollywood", "dual audio", "hindi dubbed", "tv shows",
-            "720p", "480p", "1080p", "hevc", "south hindi"
+            "720p", "480p", "1080p", "hevc", "south hindi", "series", "dropdown"
         }
         genres = [
             c.text.strip()
             for c in cat_links
-            if c.text.strip() and c.text.strip().lower() not in ignored_cats
+            if c.text.strip() and c.text.strip().lower() not in ignored_cats and "<" not in c.text and ">" not in c.text
         ]
 
         if genres:
@@ -807,13 +821,14 @@ async def _process_with_lock(
         hdhub_genres = await get_hdhub4u_genres(base_name)
 
         if hdhub_genres and hdhub_genres != "N/A":
+            raw_parts = re.split(r'[,|/•]', hdhub_genres)
             genre_names = [
                 g.strip()
-                for g in re.split(r'[,|/]', hdhub_genres)
-                if g.strip() and g.strip() != "N/A"
+                for g in raw_parts
+                if g.strip() and g.strip() != "N/A" and not any(bad in g.lower() for bad in ["dropdown", "menu", "select"])
             ]
 
-        # 🎯 GENRE PRIORITY 2: Fallback to TMDB / IMDb
+        # 🎯 GENRE PRIORITY 2: Fallback to TMDB / IMDb if HDHub4u yields nothing
         if not genre_names:
             raw_genres = (
                 tmdb_details.get("genres")
@@ -842,23 +857,39 @@ async def _process_with_lock(
 
         genre_list = []
         for g in genre_names:
+            clean_g = re.sub(r'["\'<>{}[\]\\]', '', g).strip()
+            if not clean_g or any(bad in clean_g.lower() for bad in ["dropdown", "menu", "select"]):
+                continue
+
             matched = None
             for std in STANDARD_GENRES:
-                if g.lower() == std.lower():
+                if clean_g.lower() == std.lower():
                     matched = std
                     break
             if not matched:
                 for map_k, map_v in GENRE_MAPPING.items():
-                    if g.lower() == map_k.lower():
+                    if clean_g.lower() == map_k.lower():
                         matched = map_v
                         break
+
             if matched:
                 if matched not in genre_list:
                     genre_list.append(matched)
             else:
-                formatted_g = g.title()
-                if formatted_g not in genre_list:
-                    genre_list.append(formatted_g)
+                if re.match(r'^[A-Za-z\s-]+$', clean_g) and 3 <= len(clean_g) <= 20:
+                    formatted_g = clean_g.title()
+                    if formatted_g not in genre_list:
+                        genre_list.append(formatted_g)
+
+        # If genre_list is empty due to scraper issues, fallback to TMDB / IMDb
+        if not genre_list:
+            raw_backup = tmdb_details.get("genres") or imdb_details.get("genres", "")
+            if isinstance(raw_backup, str) and raw_backup != "N/A":
+                for item in raw_backup.split(","):
+                    t_name = item.strip()
+                    for std in STANDARD_GENRES:
+                        if t_name.lower() == std.lower() and std not in genre_list:
+                            genre_list.append(std)
 
         genres = (
             ", ".join(genre_list)
