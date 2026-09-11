@@ -145,15 +145,12 @@ locks = defaultdict(asyncio.Lock)
 pending_updates = {}
 sending_updates = set()
 
-
 def clean_mentions_links(text: str) -> str:
     return CLEAN_PATTERN.sub("", text or "").strip()
-
 
 def normalize(s: str) -> str:
     s = NORMALIZE_PATTERN.sub(" ", s)
     return re.sub(r"\s+", " ", s).strip()
-
 
 def remove_ignored_words(text: str) -> str:
     ignore_words_lower = {w.lower() for w in IGNORE_WORDS}
@@ -162,11 +159,9 @@ def remove_ignored_words(text: str) -> str:
         if word.lower() not in ignore_words_lower
     )
 
-
 def get_qualities(text: str) -> str:
     qualities = QUALITY_PATTERN.findall(text)
     return ", ".join(qualities) if qualities else "N/A"
-
 
 def extract_ott_platform(text: str) -> str:
     text = text.lower()
@@ -177,11 +172,9 @@ def extract_ott_platform(text: str) -> str:
     }
     return " | ".join(sorted(platforms)) if platforms else "N/A"
 
-
 def get_clean_title(name: str) -> str:
     t = re.sub(r'\b(19|20)\d{2}\b', '', name)
     return normalize(t).lower()
-
 
 def format_runtime(runtime_val):
     if not runtime_val or runtime_val == "N/A":
@@ -220,7 +213,6 @@ def format_runtime(runtime_val):
 
     return f"{total_mins}m"
 
-
 async def get_hdhub_base_url() -> Optional[str]:
     try:
         if not hasattr(db, 'db'):
@@ -231,7 +223,6 @@ async def get_hdhub_base_url() -> Optional[str]:
     except Exception:
         pass
     return None
-
 
 @Client.on_message(filters.command("setdomain"))
 async def set_domain_handler(bot, message):
@@ -252,7 +243,6 @@ async def set_domain_handler(bot, message):
         await message.reply_text(f"✅ **HDHub4u base URL successfully updated to:**\n<code>{new_url}</code>")
     except Exception as e:
         await message.reply_text(f"❌ Failed to update domain: {e}")
-
 
 async def get_hdhub4u_genres(base_name: str) -> str:
     try:
@@ -328,7 +318,6 @@ async def get_hdhub4u_genres(base_name: str) -> str:
 
     return "N/A"
 
-
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
     if m := EP_ONLY_RANGE.search(filename):
         return 1, f"{int(m.group(1))}-{int(m.group(2))}"
@@ -345,7 +334,6 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
             return season, episode
 
     return None, None
-
 
 def schedule_update(bot, base_name, delay=5):
     if handle := pending_updates.get(base_name):
@@ -367,7 +355,6 @@ def schedule_update(bot, base_name, delay=5):
         delay,
         lambda: asyncio.create_task(wrapper())
     )
-
 
 def extract_media_info(filename: str, caption: str):
     filename = normalize(clean_mentions_links(filename).title())
@@ -567,7 +554,6 @@ def extract_media_info(filename: str, caption: str):
         "language": language
     }
 
-
 @Client.on_message(filters.chat(CHANNELS) & MEDIA_FILTER)
 async def media_handler(bot, message):
     media = next(
@@ -622,7 +608,6 @@ async def media_handler(bot, message):
             "Error processing media"
         )
 
-
 async def process_and_send_update(
     bot,
     filename,
@@ -660,7 +645,6 @@ async def process_and_send_update(
         logger.exception(
             f"Processing failed in process_and_send_update: {e}"
         )
-
 
 async def _process_with_lock(
     bot,
@@ -712,17 +696,18 @@ async def _process_with_lock(
         ) or {}
 
         official_search_title = imdb_details.get("title") or base_name
+        imdb_id = imdb_details.get("imdb_id")
         
-        # 🎯 FIX: Explicitly target Hindi for Bigg Boss so it never picks Malayalam/other regional posters
-        if "bigg boss" in official_search_title.lower():
-            tmdb_query = "Bigg Boss Hindi"
-        else:
-            tmdb_query = official_search_title
+        # Universal IMDb ID anchoring
+        tmdb_query = imdb_id if (imdb_id and imdb_id.startswith("tt")) else official_search_title
 
         if TMDB_POSTER:
             tmdb_details = await get_movie_detailsx(
                 tmdb_query
             ) or {}
+
+            if (not tmdb_details or tmdb_details.get("error")) and imdb_id:
+                tmdb_details = await get_movie_detailsx(official_search_title) or {}
 
             if (
                 not tmdb_details
@@ -739,18 +724,14 @@ async def _process_with_lock(
             and tmdb_details.get("backdrop_url")
             and not error_tmdb
         ):
-            poster_url = tmdb_details.get(
-                "backdrop_url"
-            )
+            poster_url = tmdb_details.get("backdrop_url")
             is_backdrop = True
 
         elif (
             tmdb_details.get("poster_url")
             and not error_tmdb
         ):
-            poster_url = tmdb_details.get(
-                "poster_url"
-            )
+            poster_url = tmdb_details.get("poster_url")
 
         else:
             poster_url = (
@@ -966,7 +947,6 @@ async def _process_with_lock(
             base_name
         )
 
-
 async def send_movie_update(bot, base_name):
     if base_name in sending_updates:
         logger.warning(
@@ -1135,7 +1115,6 @@ async def send_movie_update(bot, base_name):
     finally:
         sending_updates.discard(base_name)
 
-
 async def update_movie_message(bot, base_name):
     try:
         movie_doc = await db.movie_updates.find_one(
@@ -1256,7 +1235,6 @@ async def update_movie_message(bot, base_name):
         logger.error(
             f"Failed to update movie message for {base_name}: {e}"
         )
-
 
 def generate_movie_message(movie_doc, base_name):
     all_qualities = set()
