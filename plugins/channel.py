@@ -96,21 +96,33 @@ OTT_PLATFORMS = {
     "tubi": "Tubi"
 }
 
+# 🎯 Clean Standard Genres without duplicate variations
 STANDARD_GENRES = {
-    "Action", "Adventure", "Animation", "Biography", "Comedy", "Crime", "Documentary",
-    "Drama", "Family", "Fantasy", "Film-Noir", "History", "Horror", "Music",
-    "Musical", "Mystery", "Romance", "Sci-Fi", "Sport", "Thriller", "War", "Western", "Anime",
-    "Reality TV", "Reality Show", "Reality-TV", "Game Show", "Talk-Show", "Talk Show", "News"
+    "Action", "Adventure", "Animation", "Anime", "Biography", "Comedy", 
+    "Crime", "Documentary", "Drama", "Family", "Fantasy", "Film-Noir", 
+    "Game Show", "History", "Horror", "Music", "Musical", "Mystery", 
+    "News", "Reality TV", "Romance", "Sci-Fi", "Sport", "Talk Show", 
+    "Thriller", "War", "Western"
 }
 
+# 🎯 Maps duplicate names or tags directly to clean standard names
 GENRE_MAPPING = {
-    "Science Fiction": "Sci-Fi",
-    "Action & Adventure": "Action",
-    "Sci-Fi & Fantasy": "Sci-Fi",
-    "Reality-TV": "Reality TV",
     "Reality": "Reality TV",
-    "Talk": "Talk-Show",
-    "Game": "Game Show"
+    "Reality-TV": "Reality TV",
+    "Reality Show": "Reality TV",
+    "Reality-Tv": "Reality TV",
+    "Reality Tv": "Reality TV",
+    "Talk": "Talk Show",
+    "Talk-Show": "Talk Show",
+    "Game": "Game Show",
+    "Game-Show": "Game Show",
+    "Science Fiction": "Sci-Fi",
+    "Sci-Fi & Fantasy": "Sci-Fi",
+    "Action & Adventure": "Action",
+    "Romantic": "Romance",
+    "Suspense": "Thriller",
+    "Historical": "History",
+    "Kids": "Family"
 }
 
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
@@ -145,12 +157,15 @@ locks = defaultdict(asyncio.Lock)
 pending_updates = {}
 sending_updates = set()
 
+
 def clean_mentions_links(text: str) -> str:
     return CLEAN_PATTERN.sub("", text or "").strip()
+
 
 def normalize(s: str) -> str:
     s = NORMALIZE_PATTERN.sub(" ", s)
     return re.sub(r"\s+", " ", s).strip()
+
 
 def remove_ignored_words(text: str) -> str:
     ignore_words_lower = {w.lower() for w in IGNORE_WORDS}
@@ -159,9 +174,11 @@ def remove_ignored_words(text: str) -> str:
         if word.lower() not in ignore_words_lower
     )
 
+
 def get_qualities(text: str) -> str:
     qualities = QUALITY_PATTERN.findall(text)
     return ", ".join(qualities) if qualities else "N/A"
+
 
 def extract_ott_platform(text: str) -> str:
     text = text.lower()
@@ -172,9 +189,11 @@ def extract_ott_platform(text: str) -> str:
     }
     return " | ".join(sorted(platforms)) if platforms else "N/A"
 
+
 def get_clean_title(name: str) -> str:
     t = re.sub(r'\b(19|20)\d{2}\b', '', name)
     return normalize(t).lower()
+
 
 def format_runtime(runtime_val):
     if not runtime_val or runtime_val == "N/A":
@@ -213,6 +232,7 @@ def format_runtime(runtime_val):
 
     return f"{total_mins}m"
 
+
 async def get_hdhub_base_url() -> Optional[str]:
     try:
         if not hasattr(db, 'db'):
@@ -223,6 +243,7 @@ async def get_hdhub_base_url() -> Optional[str]:
     except Exception:
         pass
     return None
+
 
 @Client.on_message(filters.command("setdomain"))
 async def set_domain_handler(bot, message):
@@ -244,13 +265,16 @@ async def set_domain_handler(bot, message):
     except Exception as e:
         await message.reply_text(f"❌ Failed to update domain: {e}")
 
+
 async def get_hdhub4u_genres(base_name: str) -> str:
+    """Scrapes genres directly from HDHub4u post with robust parsing."""
     try:
         base_url = await get_hdhub_base_url()
         if not base_url:
             return "N/A"
 
         clean_query = re.sub(r"\b(19|20)\d{2}\b", "", base_name).strip()
+        clean_query = re.sub(r"[._]+|[()\[\]{}:;'–!,.?_]", " ", clean_query).strip()
         search_url = f"{base_url.rstrip('/')}/?s={clean_query.replace(' ', '+')}"
 
         headers = {
@@ -258,18 +282,20 @@ async def get_hdhub4u_genres(base_name: str) -> str:
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/120.0.0.0 Safari/537.36"
-            )
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(search_url, headers=headers, timeout=8) as resp:
+        timeout = aiohttp.ClientTimeout(total=8)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(search_url, headers=headers) as resp:
                 if resp.status != 200:
                     return "N/A"
                 html = await resp.text()
 
         soup = BeautifulSoup(html, "html.parser")
         result_item = soup.select_one(
-            ".archive-posts h2 a, .post-item a, article a, .entry-title a"
+            ".archive-posts h2 a, .post-item a, article a, .entry-title a, .thumb a"
         )
 
         if not result_item or not result_item.get("href"):
@@ -277,38 +303,37 @@ async def get_hdhub4u_genres(base_name: str) -> str:
 
         movie_page_url = result_item["href"]
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(movie_page_url, headers=headers, timeout=8) as resp:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(movie_page_url, headers=headers) as resp:
                 if resp.status != 200:
                     return "N/A"
                 movie_html = await resp.text()
 
         movie_soup = BeautifulSoup(movie_html, "html.parser")
-        genres = []
 
-        for p in movie_soup.find_all(["p", "div", "span"]):
-            text = p.text.strip()
+        # 1. Look for Genre line inside post content
+        genre_match = re.search(r'(?:Genre|Genres)\s*[:|-]\s*([^\n\r<]+)', movie_html, re.IGNORECASE)
+        if genre_match:
+            raw_text = BeautifulSoup(genre_match.group(1), "html.parser").get_text().strip()
+            parts = re.split(r'[,|/]', raw_text)
+            cleaned = [p.strip() for p in parts if p.strip() and len(p.strip()) < 25]
+            if cleaned:
+                return ", ".join(cleaned)
 
-            if text.lower().startswith("genre") or "genres:" in text.lower():
-                parts = text.split(":")
-
-                if len(parts) > 1:
-                    genres = [
-                        g.strip()
-                        for g in parts[1].split(",")
-                        if g.strip()
-                    ]
-                    break
-
-        if not genres:
-            cat_links = movie_soup.select(
-                ".cat-links a, .genres a, .entry-category a"
-            )
-            genres = [
-                c.text.strip()
-                for c in cat_links
-                if c.text.strip()
-            ]
+        # 2. Check WordPress categories
+        cat_links = movie_soup.select(
+            ".cat-links a, a[rel='category tag'], .entry-category a, .genres a"
+        )
+        ignored_cats = {
+            "uncategorized", "movies", "web series", "bollywood",
+            "hollywood", "dual audio", "hindi dubbed", "tv shows",
+            "720p", "480p", "1080p", "hevc", "south hindi"
+        }
+        genres = [
+            c.text.strip()
+            for c in cat_links
+            if c.text.strip() and c.text.strip().lower() not in ignored_cats
+        ]
 
         if genres:
             return ", ".join(genres)
@@ -317,6 +342,7 @@ async def get_hdhub4u_genres(base_name: str) -> str:
         logger.error(f"Error scraping HDHub4u genres: {e}")
 
     return "N/A"
+
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
     if m := EP_ONLY_RANGE.search(filename):
@@ -334,6 +360,7 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
             return season, episode
 
     return None, None
+
 
 def schedule_update(bot, base_name, delay=5):
     if handle := pending_updates.get(base_name):
@@ -355,6 +382,7 @@ def schedule_update(bot, base_name, delay=5):
         delay,
         lambda: asyncio.create_task(wrapper())
     )
+
 
 def extract_media_info(filename: str, caption: str):
     filename = normalize(clean_mentions_links(filename).title())
@@ -554,6 +582,7 @@ def extract_media_info(filename: str, caption: str):
         "language": language
     }
 
+
 @Client.on_message(filters.chat(CHANNELS) & MEDIA_FILTER)
 async def media_handler(bot, message):
     media = next(
@@ -608,6 +637,7 @@ async def media_handler(bot, message):
             "Error processing media"
         )
 
+
 async def process_and_send_update(
     bot,
     filename,
@@ -645,6 +675,7 @@ async def process_and_send_update(
         logger.exception(
             f"Processing failed in process_and_send_update: {e}"
         )
+
 
 async def _process_with_lock(
     bot,
@@ -697,8 +728,7 @@ async def _process_with_lock(
 
         official_search_title = imdb_details.get("title") or base_name
         imdb_id = imdb_details.get("imdb_id")
-        
-        # Universal IMDb ID anchoring
+
         tmdb_query = imdb_id if (imdb_id and imdb_id.startswith("tt")) else official_search_title
 
         if TMDB_POSTER:
@@ -773,72 +803,65 @@ async def _process_with_lock(
             )
         )
 
-        raw_genres = (
-            tmdb_details.get("genres")
-            or imdb_details.get("genres", "N/A")
-        )
-
+        # 🎯 GENRE PRIORITY 1: HDHub4u First!
         genre_names = []
+        hdhub_genres = await get_hdhub4u_genres(base_name)
 
-        if (
-            isinstance(raw_genres, str)
-            and raw_genres != "N/A"
-        ):
+        if hdhub_genres and hdhub_genres != "N/A":
             genre_names = [
                 g.strip()
-                for g in raw_genres.split(",")
-                if g.strip()
-                and g.strip() != "N/A"
+                for g in re.split(r'[,|/]', hdhub_genres)
+                if g.strip() and g.strip() != "N/A"
             ]
 
-        elif isinstance(
-            raw_genres,
-            (list, tuple)
-        ):
-            for g in raw_genres:
-                if isinstance(g, dict):
-                    name = (
-                        g.get("name")
-                        or g.get("genre")
-                    )
-
-                    if name:
-                        genre_names.append(
-                            str(name).strip()
-                        )
-
-                elif isinstance(g, str):
-                    genre_names.append(
-                        g.strip()
-                    )
-
-                else:
-                    name = str(g).strip()
-
-                    if name:
-                        genre_names.append(name)
-
+        # 🎯 GENRE PRIORITY 2: Fallback to TMDB / IMDb
         if not genre_names:
-            hdhub_genres = await get_hdhub4u_genres(
-                base_name
+            raw_genres = (
+                tmdb_details.get("genres")
+                or imdb_details.get("genres", "N/A")
             )
 
-            if hdhub_genres != "N/A":
+            if isinstance(raw_genres, str) and raw_genres != "N/A":
                 genre_names = [
                     g.strip()
-                    for g in hdhub_genres.split(",")
-                    if g.strip()
+                    for g in raw_genres.split(",")
+                    if g.strip() and g.strip() != "N/A"
                 ]
 
-        genre_list = [
-            GENRE_MAPPING.get(g, g)
-            for g in genre_names
-            if g in STANDARD_GENRES
-            or g in GENRE_MAPPING
-        ]
+            elif isinstance(raw_genres, (list, tuple)):
+                for g in raw_genres:
+                    if isinstance(g, dict):
+                        name = g.get("name") or g.get("genre")
+                        if name:
+                            genre_names.append(str(name).strip())
+                    elif isinstance(g, str):
+                        genre_names.append(g.strip())
+                    else:
+                        name = str(g).strip()
+                        if name:
+                            genre_names.append(name)
 
-        if not genre_list and genre_names:
-            genre_list = genre_names
+        genre_list = []
+        for g in genre_names:
+            matched = None
+            # Check direct standard match
+            for std in STANDARD_GENRES:
+                if g.lower() == std.lower():
+                    matched = std
+                    break
+            # Check mapping conversion
+            if not matched:
+                for map_k, map_v in GENRE_MAPPING.items():
+                    if g.lower() == map_k.lower():
+                        matched = map_v
+                        break
+            if matched:
+                if matched not in genre_list:
+                    genre_list.append(matched)
+            else:
+                formatted_g = g.title()
+                if formatted_g not in genre_list:
+                    genre_list.append(formatted_g)
 
         genres = (
             ", ".join(genre_list)
@@ -946,6 +969,7 @@ async def _process_with_lock(
             bot,
             base_name
         )
+
 
 async def send_movie_update(bot, base_name):
     if base_name in sending_updates:
@@ -1115,6 +1139,7 @@ async def send_movie_update(bot, base_name):
     finally:
         sending_updates.discard(base_name)
 
+
 async def update_movie_message(bot, base_name):
     try:
         movie_doc = await db.movie_updates.find_one(
@@ -1235,6 +1260,7 @@ async def update_movie_message(bot, base_name):
         logger.error(
             f"Failed to update movie message for {base_name}: {e}"
         )
+
 
 def generate_movie_message(movie_doc, base_name):
     all_qualities = set()
