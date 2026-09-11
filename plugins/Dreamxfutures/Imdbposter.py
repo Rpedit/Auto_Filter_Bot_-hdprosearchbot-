@@ -174,13 +174,11 @@ async def _search_media_id(query: str, api_key=None):
         ratio = get_ratio(media_name, clean_title_for_match)
         media_words = set(media_name.lower().split())
         
-        # Check keyword overlap to ensure regional/specific tags aren't ignored
         overlap = len(query_words.intersection(media_words))
         
         if ratio >= 0.5 or (query_words and overlap >= len(query_words) * 0.5):
             scored_results.append((r, ratio, overlap))
 
-    # Fallback using keyword overlap instead of blindly picking index 0 (main popular show)
     if not scored_results and multi_results:
         best_fallback = max(
             multi_results, 
@@ -242,9 +240,6 @@ def _process_images(images_data):
 
 
 async def _fetch_tmdb_data(query: str, api_key=None):
-    """
-    Core TMDB lookup: search → fetch details → build response dict.
-    """
     title, season, year_extracted = _extract_title_year_and_season(query)
     media_type, media_id = await _search_media_id(query, api_key=api_key)
     if not media_id:
@@ -294,7 +289,7 @@ async def _fetch_tmdb_data(query: str, api_key=None):
         'genres': _list_to_str_tmdb(details.get('genres', []), key='name'),
         'languages': _list_to_str_tmdb(details.get('spoken_languages', []), key='english_name'),
         'countries': _list_to_str_tmdb(details.get('production_countries', []), key='name'),
-        'director': _list_to_str_tmdb([p for p in crew if p.get('job'] == 'Director'], key='name'),
+        'director': _list_to_str_tmdb([p for p in crew if p.get('job') == 'Director'], key='name'),
         'writer': _list_to_str_tmdb([p for p in crew if p.get('job') in ['Screenplay', 'Writer', 'Story']], key='name'),
         'producer': _list_to_str_tmdb([p for p in crew if p.get('job') == 'Producer'], key='name'),
         'composer': _list_to_str_tmdb([p for p in crew if p.get('job') == 'Original Music Composer'], key='name'),
@@ -417,10 +412,6 @@ async def get_movie_details(query, bulk=False, id=False, file=None):
 
 
 async def get_movie_detailsx(query, id=False, file=None):
-    """
-    Primary movie details fetcher using direct TMDB API calls.
-    Falls back to IMDb-based get_movie_details() on failure.
-    """
     q = str(query).strip()
     try:
         data = await _fetch_tmdb_data(q, api_key=TMDB_API_KEY or None)
@@ -431,7 +422,6 @@ async def get_movie_detailsx(query, id=False, file=None):
         logger.info(f"TMDB direct call failed → fallback IMDb: {e}")
         return await get_movie_details(q)
 
-    # Normalize fields
     details = {}
     details['title'] = data.get('title') or data.get('localized_title')
     details['year'] = (data.get('year', 0)) if data.get('year') else None
