@@ -221,7 +221,6 @@ def format_runtime(runtime_val):
     return f"{total_mins}m"
 
 
-# --- DYNAMIC DOMAIN FUNCTIONS (NO HARDCODED LINK) ---
 async def get_hdhub_base_url() -> Optional[str]:
     try:
         if not hasattr(db, 'db'):
@@ -708,7 +707,6 @@ async def _process_with_lock(
     if not movie_doc:
         tmdb_details = {}
 
-        # 1️⃣ TMDB query with season attached (for correct season poster) but base_name stays clean
         tmdb_query = f"{base_name} Season {media_info['season']}" if media_info["season"] is not None else base_name
 
         if TMDB_POSTER:
@@ -722,7 +720,6 @@ async def _process_with_lock(
             ):
                 error_tmdb = True
 
-        # 2️⃣ IMDb query uses clean base_name for correct link
         imdb_details = await get_movie_details(
             base_name
         ) or {}
