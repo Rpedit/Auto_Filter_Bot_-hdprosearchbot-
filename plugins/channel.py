@@ -127,52 +127,51 @@ GENRE_MAPPING = {
     "Kids": "Family"
 }
 
+STANDARD_FORMATS = {
+    "hdtc": "HDTC", "hd-tc": "HDTC", "hq-hdtc": "HQ-HDTC",
+    "hdcam": "HDCam", "hd-cam": "HDCam", "hq-hdcam": "HQ-HDCam",
+    "cam": "CAM", "camrip": "CamRip", "hq-cam": "HQ-CAM",
+    "ts": "TS", "hdts": "HDTS", "hq-ts": "HQ-TS", "tc": "TC",
+    "telesync": "TeleSync", "predvd": "PreDVD", "hq-predvd": "HQ-PreDVD",
+    "dvdrip": "DVDRip", "dvdscr": "DVDScr",
+    "webrip": "WEBRip", "web-dl": "WEB-DL", "webdl": "WEB-DL", "web dl": "WEB-DL",
+    "bluray": "BluRay", "brrip": "BRRip", "bdrip": "BDRip",
+    "remux": "Remux", "imax": "IMAX",
+    "hdrip": "HDRip", "hq-hdrip": "HQ-HDRip",
+    "hdtv": "HDTV", "tvrip": "TVRip",
+    "hevc": "HEVC", "10bit": "10-Bit", "10-bit": "10-Bit",
+    "hdr": "HDR", "hdr10": "HDR10", "hdr10+": "HDR10+",
+    "dv": "Dolby Vision", "dovi": "Dolby Vision"
+}
+
+RES_ORDER = {
+    "140p": 140, "240p": 240, "360p": 360, "480p": 480,
+    "540p": 540, "720p": 720, "1080p": 1080, "1440p": 1440,
+    "2160p": 2160, "4k": 2160
+}
+
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
 NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
 
-QUALITY_PATTERN = re.compile(
+RESOLUTION_PATTERN = re.compile(r"\b(?:2160p|4K|1440p|1080p|720p|540p|480p|360p|240p|140p)\b", re.IGNORECASE)
+SOURCE_PATTERN = re.compile(
     r"\b(?:HDCam|HD-Cam|HQ-HDCam|HDTC|HD-TC|HQ-HDTC|CamRip|CAM|HQ-CAM|TS|HDTS|HQ-TS|TC|TeleSync|DVDScr|DVDRip|PreDVD|HQ-PreDVD|"
     r"WEBRip|WEB-DL|TVRip|HDTV|WEB DL|WebDl|BluRay|BRRip|BDRip|Remux|IMAX|"
-    r"360p|480p|720p|1080p|2160p|4K|1440p|540p|240p|140p|HEVC|10Bit|10-Bit|HDRip|HQ-HDRip|HDR10\+|HDR10|HDR|DV|DoVi)"
-    r"(?:[\s._-]*(?:[vV]\d+|ver\.?\s*\d+|version\s*\d+))?\b",
+    r"HEVC|10Bit|10-Bit|HDRip|HQ-HDRip|HDR10\+|HDR10|HDR|DV|DoVi)\b",
     re.IGNORECASE
 )
 VERSION_STANDALONE = re.compile(r"\b(?:[vV]\d+|ver\.?\s*\d+|version\s*\d+)\b", re.IGNORECASE)
 YEAR_PATTERN = re.compile(r"(?<![A-Za-z0-9])(?:19|20)\d{2}(?![A-Za-z0-9])")
 
-# 🎯 Episode & Season Patterns (Including Bigg Boss / Reality Formats)
-RANGE_REGEX = re.compile(
-    r'\bS(\d{1,2})[^\w\n\r]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})',
-    re.IGNORECASE
-)
-SINGLE_REGEX = re.compile(
-    r'\bS(\d{1,2})[^\w\n\r]*E(?:p(?:isode)?)?0*(\d{1,3})',
-    re.IGNORECASE
-)
-NAMED_REGEX = re.compile(
-    r'Season\s*0*(\d{1,2})[\s\-,:]*Ep(?:isode)?\s*0*(\d{1,3})',
-    re.IGNORECASE
-)
-X_REGEX = re.compile(
-    r'\b0*(\d{1,2})\s*x\s*0*(\d{1,3})\b',
-    re.IGNORECASE
-)
-DAY_REGEX = re.compile(
-    r'\b(?:S(?:eason)?\s*0*(\d{1,2})[^\w\n\r]*)?(?:Day|D)\s*0*(\d{1,3})\b',
-    re.IGNORECASE
-)
-NO_S_REGEX = re.compile(
-    r'\b(?:Season\s*)?0*(\d{1,2})[\s._-]+E(?:p(?:isode)?)?0*(\d{1,3})\b',
-    re.IGNORECASE
-)
-EP_ONLY_RANGE = re.compile(
-    r'\b(?:EP|Episode)0*(\d{1,3})\s*-\s*0*(\d{1,3})\b',
-    re.IGNORECASE
-)
-EP_ONLY_SINGLE = re.compile(
-    r'\b(?:EP|Episode)\.?\s*0*(\d{1,3})\b',
-    re.IGNORECASE
-)
+# Episode & Season Patterns
+RANGE_REGEX = re.compile(r'\bS(\d{1,2})[^\w\n\r]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})', re.IGNORECASE)
+SINGLE_REGEX = re.compile(r'\bS(\d{1,2})[^\w\n\r]*E(?:p(?:isode)?)?0*(\d{1,3})', re.IGNORECASE)
+NAMED_REGEX = re.compile(r'Season\s*0*(\d{1,2})[\s\-,:]*Ep(?:isode)?\s*0*(\d{1,3})', re.IGNORECASE)
+X_REGEX = re.compile(r'\b0*(\d{1,2})\s*x\s*0*(\d{1,3})\b', re.IGNORECASE)
+DAY_REGEX = re.compile(r'\b(?:S(?:eason)?\s*0*(\d{1,2})[^\w\n\r]*)?(?:Day|D)\s*0*(\d{1,3})\b', re.IGNORECASE)
+NO_S_REGEX = re.compile(r'\b(?:Season\s*)?0*(\d{1,2})[\s._-]+E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
+EP_ONLY_RANGE = re.compile(r'\b(?:EP|Episode)0*(\d{1,3})\s*-\s*0*(\d{1,3})\b', re.IGNORECASE)
+EP_ONLY_SINGLE = re.compile(r'\b(?:EP|Episode)\.?\s*0*(\d{1,3})\b', re.IGNORECASE)
 
 MEDIA_FILTER = filters.document | filters.video | filters.audio
 
@@ -243,36 +242,110 @@ def get_qualities(text: str) -> str:
     if not text:
         return "N/A"
 
-    raw_qualities = QUALITY_PATTERN.findall(text)
     v_match = VERSION_STANDALONE.search(text)
     version_str = None
     if v_match:
         raw_v = v_match.group(0).upper()
         raw_v = re.sub(r'^(?:VER\.?|VERSION)\s*', 'V', raw_v)
+        if not raw_v.startswith("V"):
+            raw_v = f"V{raw_v}"
         version_str = raw_v
 
-    cleaned_qualities = []
-    has_version_attached = False
+    resolutions = []
+    for r in RESOLUTION_PATTERN.findall(text):
+        norm_r = r.lower() if r.lower() != "4k" else "4K"
+        if norm_r not in resolutions:
+            resolutions.append(norm_r)
 
-    for q in raw_qualities:
-        q_clean = re.sub(r"[._]+", " ", q).strip()
-        q_clean = re.sub(r"\b[vV](\d+)\b", r"V\1", q_clean)
-        if re.search(r"\bV\d+\b", q_clean):
-            has_version_attached = True
-        if q_clean and q_clean not in cleaned_qualities:
-            cleaned_qualities.append(q_clean)
+    sources = []
+    for s in SOURCE_PATTERN.findall(text):
+        s_norm = re.sub(r"[._]+", "-", s).strip().lower()
+        formatted = STANDARD_FORMATS.get(s_norm, s.upper())
+        if formatted not in sources:
+            sources.append(formatted)
 
-    if version_str and not has_version_attached and cleaned_qualities:
+    if version_str:
         attached = False
-        for idx, q in enumerate(cleaned_qualities):
-            if any(k in q.upper() for k in ["HDTC", "CAM", "TS", "PREDVD", "WEBRIP", "WEB-DL", "RIP"]):
-                cleaned_qualities[idx] = f"{q} {version_str}"
+        for idx, s in enumerate(sources):
+            if any(k in s.upper() for k in ["HDTC", "CAM", "TS", "PREDVD", "WEBRIP", "WEB-DL", "RIP", "BLURAY"]):
+                sources[idx] = f"{s} {version_str}"
                 attached = True
                 break
         if not attached:
-            cleaned_qualities.append(version_str)
+            sources.append(version_str)
 
-    return ", ".join(cleaned_qualities) if cleaned_qualities else "N/A"
+    all_items = resolutions + sources
+    return ", ".join(all_items) if all_items else "N/A"
+
+
+def format_movie_qualities(quality_list: list) -> str:
+    if not quality_list:
+        return "N/A"
+
+    resolutions = set()
+    sources = set()
+    versions = set()
+
+    for item in quality_list:
+        if not item or item == "N/A":
+            continue
+
+        v_matches = VERSION_STANDALONE.findall(item)
+        for vm in v_matches:
+            v_num = re.sub(r"\D", "", vm)
+            if v_num:
+                versions.add(int(v_num))
+
+        for r in RESOLUTION_PATTERN.findall(item):
+            norm_r = r.lower() if r.lower() != "4k" else "4K"
+            resolutions.add(norm_r)
+
+        for s in SOURCE_PATTERN.findall(item):
+            s_norm = re.sub(r"[._]+", "-", s).strip().lower()
+            formatted = STANDARD_FORMATS.get(s_norm, s.upper())
+            sources.add(formatted)
+
+    # Deduplicate hierarchy (Remove lower duplicates if HQ exists)
+    if "HQ-HDTC" in sources and "HDTC" in sources:
+        sources.remove("HDTC")
+    if "HQ-CAM" in sources:
+        sources.discard("CAM")
+        sources.discard("HDCam")
+    if "HDCam" in sources and "CAM" in sources:
+        sources.remove("CAM")
+    if "HQ-TS" in sources:
+        sources.discard("TS")
+        sources.discard("HDTS")
+    if "HDTS" in sources and "TS" in sources:
+        sources.remove("TS")
+    if "HQ-PreDVD" in sources and "PreDVD" in sources:
+        sources.remove("PreDVD")
+    if "HDR10+" in sources:
+        sources.discard("HDR10")
+        sources.discard("HDR")
+    elif "HDR10" in sources:
+        sources.discard("HDR")
+
+    sorted_res = sorted(resolutions, key=lambda x: RES_ORDER.get(x.lower(), 9999))
+    version_str = f"V{max(versions)}" if versions else ""
+
+    source_list = []
+    for s in sorted(sources):
+        if s and s not in source_list:
+            source_list.append(s)
+
+    if version_str:
+        attached = False
+        for idx, s in enumerate(source_list):
+            if any(k in s.upper() for k in ["HDTC", "CAM", "TS", "PREDVD", "WEBRIP", "WEB-DL", "RIP", "BLURAY"]):
+                source_list[idx] = f"{s} {version_str}"
+                attached = True
+                break
+        if not attached:
+            source_list.append(version_str)
+
+    final_parts = sorted_res + source_list
+    return ", ".join(final_parts) if final_parts else "N/A"
 
 
 def extract_ott_platform(text: str) -> str:
@@ -620,8 +693,8 @@ def extract_media_info(filename: str, caption: str):
     base_raw = filename
 
     quality = (
-        get_qualities(caption_clean)
-        or get_qualities(filename.lower())
+        get_qualities(caption)
+        or get_qualities(filename)
         or "N/A"
     )
 
@@ -696,7 +769,7 @@ def extract_media_info(filename: str, caption: str):
                 base_raw = processed_raw
 
         else:
-            qual_match = QUALITY_PATTERN.search(unified)
+            qual_match = SOURCE_PATTERN.search(unified) or RESOLUTION_PATTERN.search(unified)
 
             if qual_match:
                 qual_str = qual_match.group(0)
@@ -770,6 +843,7 @@ def extract_media_info(filename: str, caption: str):
         return name.strip()
 
     base_name = _strip_season_episode_tokens(base_name)
+    base_name = re.sub(r'(\b(?:19|20)\d{2}\b)(?:\s+\1)+', r'\1', base_name).strip()
 
     if not base_name:
         base_name = (
@@ -839,7 +913,7 @@ async def media_handler(bot, message):
         if await db.movie_update_status(bot.me.id):
             await process_and_send_update(
                 bot,
-                media.file_name,
+                media.file_name or message.caption or "Unknown",
                 media.caption,
                 file_runtime_mins
             )
@@ -1367,34 +1441,31 @@ async def update_movie_message(bot, base_name):
 
 
 def generate_movie_message(movie_doc, base_name):
-    all_qualities = set()
+    all_raw_qualities = []
     all_languages = set()
     all_ott_platforms = set()
     all_tags = set()
     episodes_by_season = defaultdict(set)
 
     for file in movie_doc.get("files", []):
-        if file.get("quality") != "N/A":
-            all_qualities.update(
-                q.strip()
-                for q in file.get("quality", "").split(",")
-                if q.strip()
-            )
+        if file.get("quality") and file.get("quality") != "N/A":
+            all_raw_qualities.append(file.get("quality"))
 
-        if file.get("language") != "N/A":
-            all_languages.update(
-                lang.strip()
-                for lang in file.get("language", "").split(",")
-                if lang.strip()
-            )
+        lang_val = file.get("language")
+        if lang_val and lang_val != "N/A":
+            for lang in lang_val.split(","):
+                clean_l = lang.strip()
+                if clean_l and clean_l != "N/A":
+                    norm_l = CAPTION_LANGUAGES.get(clean_l.lower(), clean_l.title())
+                    all_languages.add(norm_l)
 
-        if file.get("ott_platform") != "N/A":
-            platforms = [
-                p.strip()
-                for p in file.get("ott_platform", "").split("|")
-                if p.strip()
-            ]
-            all_ott_platforms.update(platforms)
+        ott_val = file.get("ott_platform")
+        if ott_val and ott_val != "N/A":
+            for plat in ott_val.split("|"):
+                clean_p = plat.strip()
+                if clean_p and clean_p != "N/A":
+                    norm_p = OTT_PLATFORMS.get(clean_p.lower(), clean_p)
+                    all_ott_platforms.add(norm_p)
 
         if file.get("tag"):
             all_tags.add(file.get("tag"))
@@ -1403,6 +1474,15 @@ def generate_movie_message(movie_doc, base_name):
             season = file.get("season")
             episode = str(file.get("episode"))
             episodes_by_season[season].add(episode)
+
+    # Clean redundant OTT platforms
+    if "Disney+ Hotstar" in all_ott_platforms and "Disney+" in all_ott_platforms:
+        all_ott_platforms.remove("Disney+")
+    if "JioHotstar" in all_ott_platforms:
+        all_ott_platforms.discard("Disney+ Hotstar")
+        all_ott_platforms.discard("Disney+")
+    if "HBO Max" in all_ott_platforms and "Max" in all_ott_platforms:
+        all_ott_platforms.remove("Max")
 
     primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
     is_series = (primary_tag == "#SERIES")
@@ -1416,65 +1496,41 @@ def generate_movie_message(movie_doc, base_name):
             episodes_by_season.items(),
             key=lambda x: int(x[0])
         ):
-            singles = []
-            ranges = []
-
+            all_ep_numbers = set()
             for ep in episodes:
-                if "-" in ep:
-                    ranges.append(ep)
-                else:
+                ep_str = str(ep).strip()
+                if "-" in ep_str:
                     try:
-                        singles.append(int(ep))
+                        p1, p2 = ep_str.split("-")
+                        all_ep_numbers.update(range(int(p1), int(p2) + 1))
                     except ValueError:
-                        ranges.append(ep)
+                        pass
+                elif ep_str.isdigit():
+                    all_ep_numbers.add(int(ep_str))
 
-            singles.sort()
-
+            sorted_eps = sorted(all_ep_numbers)
             collapsed = []
-            start = None
-            end = None
+            if sorted_eps:
+                start = end = sorted_eps[0]
+                for num in sorted_eps[1:]:
+                    if num == end + 1:
+                        end = num
+                    else:
+                        collapsed.append(str(start) if start == end else f"{start}-{end}")
+                        start = end = num
+                collapsed.append(str(start) if start == end else f"{start}-{end}")
 
-            for num in singles:
-                if start is None:
-                    start = end = num
-                elif num == end + 1:
-                    end = num
-                else:
-                    collapsed.append(
-                        str(start)
-                        if start == end
-                        else f"{start}-{end}"
-                    )
-                    start = end = num
-
-            if start is not None:
-                collapsed.append(
-                    str(start)
-                    if start == end
-                    else f"{start}-{end}"
-                )
-
-            all_ep_parts = (
-                collapsed
-                + sorted(
-                    ranges,
-                    key=lambda s: int(s.split("-")[0])
-                )
-            )
-
-            episode_lines.append(
-                f"S{int(season)}: "
-                f"{', '.join(all_ep_parts)}"
-            )
+            if collapsed:
+                episode_lines.append(f"S{int(season)}: {', '.join(collapsed)}")
 
         epi_str = "\n".join(episode_lines)
         if epi_str:
             epi_block = f"\n📺 ᴇᴘɪsᴏᴅᴇs : <b>{epi_str}</b>"
 
     genres = movie_doc.get("genres", "N/A")
-    quality_str = ", ".join(sorted(all_qualities)) if all_qualities else "N/A"
+    quality_str = format_movie_qualities(all_raw_qualities)
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
-    ott_str = ", ".join(sorted(all_ott_platforms)) if all_ott_platforms else "N/A"
+    ott_str = " | ".join(sorted(all_ott_platforms)) if all_ott_platforms else "N/A"
 
     raw_rating = movie_doc.get("rating", "-")
     imdb_url = movie_doc.get("imdb_url", "")
