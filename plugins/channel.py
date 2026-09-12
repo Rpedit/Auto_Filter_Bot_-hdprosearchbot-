@@ -180,7 +180,6 @@ def remove_ignored_words(text: str) -> str:
 
 
 def is_title_match(file_name: str, candidate_name: str) -> bool:
-    """Exact aur strict check taaki 'The Rebel' se 'Rebel Ridge' match na ho sake"""
     if not file_name or not candidate_name:
         return False
 
@@ -194,11 +193,9 @@ def is_title_match(file_name: str, candidate_name: str) -> bool:
     if f_words == c_words:
         return True
 
-    # Agar file title me 1 ya 2 words hain, toh exact match hona padega (Rebel != Rebel Ridge)
     if len(f_words) <= 2:
         return f_words == c_words
 
-    # Bade titles ke liye 80% similarity check
     s_f, s_c = set(f_words), set(c_words)
     intersection = s_f.intersection(s_c)
     return (len(intersection) / len(s_f) >= 0.8) and abs(len(f_words) - len(c_words)) <= 1
@@ -265,7 +262,6 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
             return "N/A"
         runtime_val = runtime_val[0]
 
-    # / Ep permanently remove
     runtime_str = re.sub(r"\s*/\s*ep\b", "", str(runtime_val), flags=re.IGNORECASE).strip()
 
     total_mins = 0
@@ -720,6 +716,14 @@ async def media_handler(bot, message):
 
     media.caption = message.caption or ""
 
+    # 🎯 File ke sath thumbnail laga hai toh uska direct file_id le lo
+    custom_thumb = None
+    if getattr(media, "thumbs", None) and len(media.thumbs) > 0:
+        try:
+            custom_thumb = media.thumbs[-1].file_id
+        except Exception:
+            pass
+
     success, info = await save_file(media)
 
     if not success:
@@ -731,7 +735,8 @@ async def media_handler(bot, message):
                 bot,
                 media.file_name,
                 media.caption,
-                file_runtime_mins
+                file_runtime_mins,
+                custom_thumb=custom_thumb
             )
     except Exception:
         logger.exception(
@@ -743,7 +748,8 @@ async def process_and_send_update(
     bot,
     filename,
     caption,
-    file_runtime_mins=None
+    file_runtime_mins=None,
+    custom_thumb=None
 ):
     try:
         media_info = extract_media_info(
@@ -764,7 +770,8 @@ async def process_and_send_update(
                 media_info,
                 base_name,
                 processed,
-                file_runtime_mins
+                file_runtime_mins,
+                custom_thumb=custom_thumb
             )
 
     except PyMongoError as e:
@@ -785,7 +792,8 @@ async def _process_with_lock(
     media_info,
     base_name,
     processed,
-    file_runtime_mins=None
+    file_runtime_mins=None,
+    custom_thumb=None
 ):
     if not hasattr(db, "movie_updates"):
         db.movie_updates = db.db.movie_updates
@@ -824,20 +832,17 @@ async def _process_with_lock(
         tmdb_details = {}
         is_series = media_info["tag"] == "#SERIES"
 
-        # Caption ka Title 100% file ke naam se aayega
         official_search_title = base_name.strip().title()
 
         imdb_details = {}
         imdb_id = None
 
-        # Agar series hai toh series keyword pehle try karenge taaki movies reject ho jayein
         search_queries = [f"{base_name} series", base_name] if is_series else [base_name]
 
         for sq in search_queries:
             res = await get_movie_details(sq) or {}
             res_title = (res.get("title") or "").strip()
             if res_title and is_title_match(base_name, res_title):
-                # Agar series upload ki hai par IMDb ne explicitly movie di hai, toh discard karo
                 if is_series and res.get("kind") in ["movie", "feature"]:
                     continue
                 imdb_details = res
@@ -845,7 +850,6 @@ async def _process_with_lock(
                 official_search_title = res_title
                 break
 
-        # TMDB query hamesha base_name ya verified imdb_id se hogi
         tmdb_query = imdb_id if (imdb_id and str(imdb_id).startswith("tt")) else base_name
 
         if TMDB_POSTER:
@@ -863,8 +867,6 @@ async def _process_with_lock(
             if not tmdb_details or tmdb_details.get("error"):
                 error_tmdb = True
 
-            # 🎯 Agar IMDb search fail hua par TMDB ne exact series dhoondh li aur usme IMDb ID hai:
-            # Toh us exact ID se real IMDb details fetch karo!
             if (not imdb_details or not imdb_details.get("rating")) and tmdb_details.get("imdb_id"):
                 exact_id = str(tmdb_details["imdb_id"]).strip()
                 if exact_id.startswith("tt"):
@@ -876,7 +878,13 @@ async def _process_with_lock(
         poster_url = ""
         is_backdrop = False
 
-        if (
+        # 🎯 PRIORITY 1: File ka apna custom thumbnail (sabse pehle aayega)
+        if custom_thumb:
+            poster_url = custom_thumb
+            is_backdrop = False
+
+        # PRIORITY 2: TMDB Landscape poster
+        elif (
             LANDSCAPE_POSTER
             and TMDB_POSTER
             and tmdb_details.get("backdrop_url")
@@ -885,12 +893,14 @@ async def _process_with_lock(
             poster_url = tmdb_details.get("backdrop_url")
             is_backdrop = True
 
+        # PRIORITY 3: TMDB Portrait poster
         elif (
             tmdb_details.get("poster_url")
             and not error_tmdb
         ):
             poster_url = tmdb_details.get("poster_url")
 
+        # PRIORITY 4: IMDb Poster fallback
         else:
             poster_url = (
                 imdb_details.get("poster_url")
@@ -903,7 +913,6 @@ async def _process_with_lock(
             else tmdb_details.get("rating", "N/A")
         )
 
-        # 🎯 STRICT IMDb URL: KABHI BHI TMDB URL NAHI HOGA!
         imdb_url = ""
         raw_imdb_link = imdb_details.get("url") or ""
         if "imdb.com" in raw_imdb_link:
@@ -1106,15 +1115,17 @@ async def _process_with_lock(
             }
         }
 
-        # Purane document ka Title bhi file name se reset kar dega
         update_fields["$set"] = {
             "title": base_name.strip().title()
         }
 
-        # Purane document me agar galat TMDB link tha toh use bhi saaf kar dega
         old_url = movie_doc.get("imdb_url", "")
         if old_url and "imdb.com" not in str(old_url):
             update_fields["$set"]["imdb_url"] = ""
+
+        # Agar pehle poster nahi tha aur ab custom thumbnail mila, toh update kar dega
+        if custom_thumb and not movie_doc.get("poster_url"):
+            update_fields["$set"]["poster_url"] = custom_thumb
 
         current_db_runtime = movie_doc.get("runtime")
         if (not current_db_runtime or str(current_db_runtime).strip().upper() in ("N/A", "NONE", "0", "")) and final_file_runtime != "N/A":
@@ -1215,12 +1226,22 @@ async def send_movie_update(bot, base_name):
                     (853, 1280)
                 )
 
-                if (
-                    movie_doc.get("poster_url")
-                    and not LINK_PREVIEW
-                ):
+                p_url = movie_doc.get("poster_url")
+
+                # 🎯 Agar thumbnail Telegram ka file_id hai toh direct send hoga
+                if p_url and not str(p_url).startswith("http"):
+                    msg = await bot.send_photo(
+                        chat_id=MOVIE_UPDATE_CHANNEL,
+                        photo=p_url,
+                        caption=text,
+                        reply_markup=buttons,
+                        parse_mode=enums.ParseMode.HTML
+                    )
+                    is_photo = True
+
+                elif p_url and not LINK_PREVIEW:
                     resized_poster = await fetch_image(
-                        movie_doc["poster_url"],
+                        p_url,
                         size
                     )
 
@@ -1232,9 +1253,7 @@ async def send_movie_update(bot, base_name):
                             reply_markup=buttons,
                             parse_mode=enums.ParseMode.HTML
                         )
-
                         is_photo = True
-
                     else:
                         msg = await bot.send_message(
                             chat_id=MOVIE_UPDATE_CHANNEL,
@@ -1242,7 +1261,6 @@ async def send_movie_update(bot, base_name):
                             reply_markup=buttons,
                             parse_mode=enums.ParseMode.HTML
                         )
-
                         is_photo = False
 
                 else:
@@ -1253,16 +1271,12 @@ async def send_movie_update(bot, base_name):
                         "parse_mode": enums.ParseMode.HTML
                     }
 
-                    if (
-                        movie_doc.get("poster_url")
-                        and LINK_PREVIEW
-                    ):
+                    if p_url and LINK_PREVIEW:
                         send_params["invert_media"] = ABOVE_PREVIEW
 
                     msg = await bot.send_message(
                         **send_params
                     )
-
                     is_photo = False
 
                 await db.movie_updates.update_one(
@@ -1592,7 +1606,6 @@ def generate_movie_message(movie_doc, base_name):
         "-"
     )
 
-    # 🎯 Agar URL me 'imdb.com' nahi hai toh usko reject karega
     raw_imdb_url = movie_doc.get("imdb_url", "")
     imdb_url = raw_imdb_url if "imdb.com" in str(raw_imdb_url) else ""
 
@@ -1637,7 +1650,6 @@ def generate_movie_message(movie_doc, base_name):
             f"<small>{clean_rating}/10</small>"
         )
 
-    # Agar valid IMDb link hai toh hyperlink banega, warna plain text
     if imdb_url:
         rating_text = (
             f'<a href="{imdb_url}">'
@@ -1662,7 +1674,6 @@ def generate_movie_message(movie_doc, base_name):
         "N/A"
     )
 
-    # Title hamesha clean file name se
     filename_display = base_name.strip().title()
     movie_year = movie_doc.get("year")
 
