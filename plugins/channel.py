@@ -1,3 +1,4 @@
+import os
 import re
 import logging
 import asyncio
@@ -716,7 +717,6 @@ async def media_handler(bot, message):
 
     media.caption = message.caption or ""
 
-    # 🎯 File ke sath thumbnail laga hai toh uska direct file_id le lo
     custom_thumb = None
     if getattr(media, "thumbs", None) and len(media.thumbs) > 0:
         try:
@@ -878,12 +878,12 @@ async def _process_with_lock(
         poster_url = ""
         is_backdrop = False
 
-        # 🎯 PRIORITY 1: File ka apna custom thumbnail (sabse pehle aayega)
+        # Priority 1: File custom thumbnail
         if custom_thumb:
             poster_url = custom_thumb
             is_backdrop = False
 
-        # PRIORITY 2: TMDB Landscape poster
+        # Priority 2: TMDB Backdrop Landscape
         elif (
             LANDSCAPE_POSTER
             and TMDB_POSTER
@@ -893,14 +893,14 @@ async def _process_with_lock(
             poster_url = tmdb_details.get("backdrop_url")
             is_backdrop = True
 
-        # PRIORITY 3: TMDB Portrait poster
+        # Priority 3: TMDB Portrait Poster
         elif (
             tmdb_details.get("poster_url")
             and not error_tmdb
         ):
             poster_url = tmdb_details.get("poster_url")
 
-        # PRIORITY 4: IMDb Poster fallback
+        # Priority 4: IMDb Poster
         else:
             poster_url = (
                 imdb_details.get("poster_url")
@@ -1123,7 +1123,6 @@ async def _process_with_lock(
         if old_url and "imdb.com" not in str(old_url):
             update_fields["$set"]["imdb_url"] = ""
 
-        # Agar pehle poster nahi tha aur ab custom thumbnail mila, toh update kar dega
         if custom_thumb and not movie_doc.get("poster_url"):
             update_fields["$set"]["poster_url"] = custom_thumb
 
@@ -1227,19 +1226,34 @@ async def send_movie_update(bot, base_name):
                 )
 
                 p_url = movie_doc.get("poster_url")
+                msg = None
+                is_photo = False
 
-                # 🎯 Agar thumbnail Telegram ka file_id hai toh direct send hoga
+                # 🎯 1. Custom Telegram Thumbnail fix (download -> send photo -> delete temp)
                 if p_url and not str(p_url).startswith("http"):
-                    msg = await bot.send_photo(
-                        chat_id=MOVIE_UPDATE_CHANNEL,
-                        photo=p_url,
-                        caption=text,
-                        reply_markup=buttons,
-                        parse_mode=enums.ParseMode.HTML
-                    )
-                    is_photo = True
+                    downloaded_file = None
+                    try:
+                        downloaded_file = await bot.download_media(p_url)
+                        if downloaded_file:
+                            msg = await bot.send_photo(
+                                chat_id=MOVIE_UPDATE_CHANNEL,
+                                photo=downloaded_file,
+                                caption=text,
+                                reply_markup=buttons,
+                                parse_mode=enums.ParseMode.HTML
+                            )
+                            is_photo = True
+                    except Exception as e:
+                        logger.error(f"Failed to send local downloaded thumbnail: {e}")
+                    finally:
+                        if downloaded_file and os.path.exists(downloaded_file):
+                            try:
+                                os.remove(downloaded_file)
+                            except Exception:
+                                pass
 
-                elif p_url and not LINK_PREVIEW:
+                # 2. Web URL Poster (TMDB / IMDb)
+                if not msg and p_url and str(p_url).startswith("http") and not LINK_PREVIEW:
                     resized_poster = await fetch_image(
                         p_url,
                         size
@@ -1254,16 +1268,9 @@ async def send_movie_update(bot, base_name):
                             parse_mode=enums.ParseMode.HTML
                         )
                         is_photo = True
-                    else:
-                        msg = await bot.send_message(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            text=text,
-                            reply_markup=buttons,
-                            parse_mode=enums.ParseMode.HTML
-                        )
-                        is_photo = False
 
-                else:
+                # 3. Fallback: Text message
+                if not msg:
                     send_params = {
                         "chat_id": MOVIE_UPDATE_CHANNEL,
                         "text": text,
@@ -1271,7 +1278,7 @@ async def send_movie_update(bot, base_name):
                         "parse_mode": enums.ParseMode.HTML
                     }
 
-                    if p_url and LINK_PREVIEW:
+                    if p_url and str(p_url).startswith("http") and LINK_PREVIEW:
                         send_params["invert_media"] = ABOVE_PREVIEW
 
                     msg = await bot.send_message(
