@@ -127,9 +127,9 @@ GENRE_MAPPING = {
 }
 
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
-NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'â€“!,.?_]")
+NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
 
-# ðŸŽ¯ Quality pattern with automatic version (V2, V3, etc.) capture
+# 🎯 Quality pattern with automatic version (V2, V3, etc.) capture
 QUALITY_PATTERN = re.compile(
     r"\b(?:HDCam|HD-Cam|HQ-HDCam|HDTC|HD-TC|HQ-HDTC|CamRip|CAM|HQ-CAM|TS|HDTS|HQ-TS|TC|TeleSync|DVDScr|DVDRip|PreDVD|HQ-PreDVD|"
     r"WEBRip|WEB-DL|TVRip|HDTV|WEB DL|WebDl|BluRay|BRRip|BDRip|Remux|IMAX|"
@@ -298,8 +298,8 @@ async def set_domain_handler(bot, message):
         current_url = await get_hdhub_base_url()
         current_text = f"<code>{current_url}</code>" if current_url else "<i>Not Set Yet!</i>"
         return await message.reply_text(
-            f"ðŸŒ **Current HDHub4u URL:** {current_text}\n\n"
-            f"ðŸ’¡ **Usage:** <code>/setdomain https://new-domain.com</code>"
+            f"🌐 **Current HDHub4u URL:** {current_text}\n\n"
+            f"💡 **Usage:** <code>/setdomain https://new-domain.com</code>"
         )
     new_url = message.command[1].strip().split("?")[0].rstrip("/")
     try:
@@ -308,9 +308,9 @@ async def set_domain_handler(bot, message):
             {"$set": {"url": new_url}},
             upsert=True
         )
-        await message.reply_text(f"âœ… **HDHub4u base URL successfully updated to:**\n<code>{new_url}</code>")
+        await message.reply_text(f"✅ **HDHub4u base URL successfully updated to:**\n<code>{new_url}</code>")
     except Exception as e:
-        await message.reply_text(f"âŒ Failed to update domain: {e}")
+        await message.reply_text(f"❌ Failed to update domain: {e}")
 
 
 async def get_hdhub4u_genres(base_name: str) -> str:
@@ -320,7 +320,7 @@ async def get_hdhub4u_genres(base_name: str) -> str:
             return "N/A"
 
         clean_query = re.sub(r"\b(19|20)\d{2}\b", "", base_name).strip()
-        clean_query = re.sub(r"[._]+|[()\[\]{}:;'â€“!,.?_]", " ", clean_query).strip()
+        clean_query = re.sub(r"[._]+|[()\[\]{}:;'–!,.?_]", " ", clean_query).strip()
         search_url = f"{base_url.rstrip('/')}/?s={clean_query.replace(' ', '+')}"
 
         headers = {
@@ -394,7 +394,7 @@ async def get_hdhub4u_genres(base_name: str) -> str:
                         candidate, flags=re.IGNORECASE
                     )[0]
                     candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
-                    parts = re.split(r'[,|/â€¢]', candidate)
+                    parts = re.split(r'[,|/•]', candidate)
                     cleaned = [
                         p.strip() for p in parts 
                         if p.strip() and 2 <= len(p.strip()) <= 25 and not any(
@@ -865,7 +865,7 @@ async def _process_with_lock(
             else tmdb_details.get("tmdb_url", "")
         )
 
-        # ðŸŽ¯ DIRECT IMDb / TMDB RUNTIME PRIORITY
+        # 🎯 DIRECT IMDb / TMDB RUNTIME PRIORITY
         is_series = media_info["tag"] == "#SERIES"
 
         imdb_r = imdb_details.get("runtime")
@@ -897,19 +897,19 @@ async def _process_with_lock(
             )
         )
 
-        # ðŸŽ¯ GENRE PRIORITY 1: HDHub4u First
+        # 🎯 GENRE PRIORITY 1: HDHub4u First
         genre_names = []
         hdhub_genres = await get_hdhub4u_genres(base_name)
 
         if hdhub_genres and hdhub_genres != "N/A":
-            raw_parts = re.split(r'[,|/â€¢]', hdhub_genres)
+            raw_parts = re.split(r'[,|/•]', hdhub_genres)
             genre_names = [
                 g.strip()
                 for g in raw_parts
                 if g.strip() and g.strip() != "N/A" and not any(bad in g.lower() for bad in ["dropdown", "menu", "select"])
             ]
 
-        # ðŸŽ¯ GENRE PRIORITY 2: Fallback to TMDB / IMDb
+        # 🎯 GENRE PRIORITY 2: Fallback to TMDB / IMDb
         if not genre_names:
             raw_genres = (
                 tmdb_details.get("genres")
@@ -1142,7 +1142,7 @@ async def send_movie_update(bot, base_name):
                 buttons = InlineKeyboardMarkup(
                     [[
                         InlineKeyboardButton(
-                            "É¢á´‡á´› Ò“ÉªÊŸá´‡s",
+                            "ɢᴇᴛ ғɪʟᴇs",
                             url=(
                                 f"https://t.me/{temp.U_NAME}"
                                 f"?start=getfile-"
@@ -1285,7 +1285,7 @@ async def update_movie_message(bot, base_name):
         buttons = InlineKeyboardMarkup(
             [[
                 InlineKeyboardButton(
-                    "É¢á´‡á´› Ò“ÉªÊŸá´‡s",
+                    "ɢᴇᴛ ғɪʟᴇs",
                     url=(
                         f"https://t.me/{temp.U_NAME}"
                         f"?start=getfile-"
@@ -1504,7 +1504,7 @@ def generate_movie_message(movie_doc, base_name):
 
         if epi_str:
             epi_block = (
-                f"\nðŸ“º á´‡á´˜Éªsá´á´…á´‡s : "
+                f"\n📺 ᴇᴘɪsᴏᴅᴇs : "
                 f"<b>{epi_str}</b>"
             )
 
