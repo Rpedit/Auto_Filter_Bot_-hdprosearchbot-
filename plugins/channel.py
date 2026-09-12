@@ -179,6 +179,23 @@ def remove_ignored_words(text: str) -> str:
     )
 
 
+def is_title_match(name1: str, name2: str) -> bool:
+    """Check karta hai ki IMDb/TMDB title sach me file name se match karta hai ya nahi"""
+    if not name1 or not name2:
+        return False
+    w1 = [w for w in re.findall(r'[a-zA-Z0-9]+', name1.lower()) if w not in {"the", "a", "an"}]
+    w2 = [w for w in re.findall(r'[a-zA-Z0-9]+', name2.lower()) if w not in {"the", "a", "an"}]
+    if not w1 or not w2:
+        return False
+    s1, s2 = set(w1), set(w2)
+    if s1 == s2:
+        return True
+    diff = s1.symmetric_difference(s2)
+    ignored_diff = {"part", "season", "series", "movie", "vol", "volume", "edition", "hindi", "dubbed"}
+    meaningful_diff = {w for w in diff if w not in ignored_diff and not w.isdigit()}
+    return len(meaningful_diff) == 0
+
+
 def get_qualities(text: str) -> str:
     if not text:
         return "N/A"
@@ -240,7 +257,7 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
             return "N/A"
         runtime_val = runtime_val[0]
 
-    # / Ep ya /Ep ko strip karega
+    # / Ep ya /Ep ko strip karta hai
     runtime_str = re.sub(r"\s*/\s*ep\b", "", str(runtime_val), flags=re.IGNORECASE).strip()
 
     total_mins = 0
@@ -798,27 +815,39 @@ async def _process_with_lock(
     if not movie_doc:
         tmdb_details = {}
 
-        imdb_details = await get_movie_details(
-            base_name
-        ) or {}
+        # 🎯 File name always title ki priority rahega
+        official_search_title = base_name.strip().title()
 
-        official_search_title = imdb_details.get("title") or base_name
+        imdb_details = await get_movie_details(base_name) or {}
+        imdb_title = (imdb_details.get("title") or "").strip()
         imdb_id = imdb_details.get("imdb_id")
 
-        tmdb_query = imdb_id if (imdb_id and imdb_id.startswith("tt")) else official_search_title
+        # Agar IMDb ne bilkul alag movie/series pakad li (jaise The Rebel -> Rebel Ridge)
+        if imdb_title and not is_title_match(base_name, imdb_title):
+            logger.warning(f"IMDb title mismatch! File: '{base_name}' vs IMDb: '{imdb_title}'. Rejecting IMDb.")
+            imdb_details = {}
+            imdb_id = None
+        elif imdb_title:
+            official_search_title = imdb_title
+
+        # TMDB query hamesha base_name (file name) se hogi taaki galat ID na jaye
+        tmdb_query = imdb_id if (imdb_id and imdb_id.startswith("tt")) else base_name
 
         if TMDB_POSTER:
-            tmdb_details = await get_movie_detailsx(
-                tmdb_query
-            ) or {}
+            tmdb_details = await get_movie_detailsx(tmdb_query) or {}
 
             if (not tmdb_details or tmdb_details.get("error")) and imdb_id:
-                tmdb_details = await get_movie_detailsx(official_search_title) or {}
+                tmdb_details = await get_movie_detailsx(base_name) or {}
 
-            if (
-                not tmdb_details
-                or tmdb_details.get("error")
-            ):
+            tmdb_title = (tmdb_details.get("title") or tmdb_details.get("name") or "").strip()
+            if tmdb_title and not is_title_match(base_name, tmdb_title):
+                logger.warning(f"TMDB title mismatch! File: '{base_name}' vs TMDB: '{tmdb_title}'. Rejecting TMDB.")
+                tmdb_details = {}
+                error_tmdb = True
+            elif tmdb_title and not imdb_title:
+                official_search_title = tmdb_title
+
+            if not tmdb_details or tmdb_details.get("error"):
                 error_tmdb = True
 
         poster_url = ""
@@ -847,8 +876,7 @@ async def _process_with_lock(
 
         rating = (
             imdb_details.get("rating")
-            if imdb_details.get("rating")
-            and imdb_details.get("rating") != "N/A"
+            if imdb_details.get("rating") and imdb_details.get("rating") != "N/A"
             else tmdb_details.get("rating", "N/A")
         )
 
