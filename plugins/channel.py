@@ -184,9 +184,13 @@ def is_title_match(file_name: str, candidate_name: str) -> bool:
     if not file_name or not candidate_name:
         return False
 
-    stop_words = {"the", "a", "an", "and", "or", "of", "in", "to", "part", "season", "series", "tv"}
-    f_words = [w for w in re.findall(r'[a-zA-Z0-9]+', file_name.lower()) if w not in stop_words]
-    c_words = [w for w in re.findall(r'[a-zA-Z0-9]+', candidate_name.lower()) if w not in stop_words]
+    # Comparison se pehle release years (1900-2099) ko strip karega
+    clean_f = re.sub(r'\b(19|20)\d{2}\b', '', file_name)
+    clean_c = re.sub(r'\b(19|20)\d{2}\b', '', candidate_name)
+
+    stop_words = {"the", "a", "an", "and", "or", "of", "in", "to", "part", "season", "series", "tv", "movie"}
+    f_words = [w for w in re.findall(r'[a-zA-Z0-9]+', clean_f.lower()) if w not in stop_words]
+    c_words = [w for w in re.findall(r'[a-zA-Z0-9]+', clean_c.lower()) if w not in stop_words]
 
     if not f_words or not c_words:
         return False
@@ -194,12 +198,16 @@ def is_title_match(file_name: str, candidate_name: str) -> bool:
     if f_words == c_words:
         return True
 
-    if len(f_words) <= 2:
+    s_f, s_c = set(f_words), set(c_words)
+    if s_f == s_c:
+        return True
+
+    # Short titles (1 ya 2 words) must be identical
+    if len(f_words) <= 2 or len(c_words) <= 2:
         return f_words == c_words
 
-    s_f, s_c = set(f_words), set(c_words)
     intersection = s_f.intersection(s_c)
-    return (len(intersection) / len(s_f) >= 0.8) and abs(len(f_words) - len(c_words)) <= 1
+    return (len(intersection) / max(len(s_f), len(s_c))) >= 0.75
 
 
 def get_qualities(text: str) -> str:
@@ -717,16 +725,23 @@ async def media_handler(bot, message):
 
     media.caption = message.caption or ""
 
+    # 🎯 Direct Thumbnail download (Object pass kiya hai, file_id decode issue khatam)
     custom_thumb = None
     if getattr(media, "thumbs", None) and len(media.thumbs) > 0:
         try:
-            custom_thumb = media.thumbs[-1].file_id
-        except Exception:
-            pass
+            custom_thumb = await bot.download_media(media.thumbs[-1])
+        except Exception as e:
+            logger.error(f"Error downloading file thumb: {e}")
+            custom_thumb = None
 
     success, info = await save_file(media)
 
     if not success:
+        if custom_thumb and os.path.exists(custom_thumb):
+            try:
+                os.remove(custom_thumb)
+            except Exception:
+                pass
         return
 
     try:
@@ -1229,30 +1244,47 @@ async def send_movie_update(bot, base_name):
                 msg = None
                 is_photo = False
 
-                # 🎯 1. Custom Telegram Thumbnail fix (download -> send photo -> delete temp)
-                if p_url and not str(p_url).startswith("http"):
-                    downloaded_file = None
+                # 🎯 1. Local downloaded thumbnail file
+                if p_url and os.path.exists(str(p_url)):
                     try:
-                        downloaded_file = await bot.download_media(p_url)
-                        if downloaded_file:
-                            msg = await bot.send_photo(
-                                chat_id=MOVIE_UPDATE_CHANNEL,
-                                photo=downloaded_file,
-                                caption=text,
-                                reply_markup=buttons,
-                                parse_mode=enums.ParseMode.HTML
+                        msg = await bot.send_photo(
+                            chat_id=MOVIE_UPDATE_CHANNEL,
+                            photo=p_url,
+                            caption=text,
+                            reply_markup=buttons,
+                            parse_mode=enums.ParseMode.HTML
+                        )
+                        is_photo = True
+                        if msg and msg.photo:
+                            # Save official Telegram Photo file_id for editing
+                            await db.movie_updates.update_one(
+                                {"_id": base_name},
+                                {"$set": {"poster_url": msg.photo.file_id}}
                             )
-                            is_photo = True
                     except Exception as e:
                         logger.error(f"Failed to send local downloaded thumbnail: {e}")
                     finally:
-                        if downloaded_file and os.path.exists(downloaded_file):
-                            try:
-                                os.remove(downloaded_file)
-                            except Exception:
-                                pass
+                        try:
+                            if os.path.exists(str(p_url)):
+                                os.remove(str(p_url))
+                        except Exception:
+                            pass
 
-                # 2. Web URL Poster (TMDB / IMDb)
+                # 2. Telegram Official Photo File ID (previously saved)
+                elif p_url and not str(p_url).startswith("http"):
+                    try:
+                        msg = await bot.send_photo(
+                            chat_id=MOVIE_UPDATE_CHANNEL,
+                            photo=p_url,
+                            caption=text,
+                            reply_markup=buttons,
+                            parse_mode=enums.ParseMode.HTML
+                        )
+                        is_photo = True
+                    except Exception as e:
+                        logger.error(f"Failed to send cached photo file_id: {e}")
+
+                # 3. Web URL Poster (TMDB / IMDb)
                 if not msg and p_url and str(p_url).startswith("http") and not LINK_PREVIEW:
                     resized_poster = await fetch_image(
                         p_url,
@@ -1269,7 +1301,7 @@ async def send_movie_update(bot, base_name):
                         )
                         is_photo = True
 
-                # 3. Fallback: Text message
+                # 4. Fallback: Text message
                 if not msg:
                     send_params = {
                         "chat_id": MOVIE_UPDATE_CHANNEL,
