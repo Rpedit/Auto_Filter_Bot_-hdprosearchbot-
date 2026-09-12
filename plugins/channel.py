@@ -179,21 +179,29 @@ def remove_ignored_words(text: str) -> str:
     )
 
 
-def is_title_match(name1: str, name2: str) -> bool:
-    """Check karta hai ki IMDb/TMDB title sach me file name se match karta hai ya nahi"""
-    if not name1 or not name2:
+def is_title_match(file_name: str, candidate_name: str) -> bool:
+    """Exact aur strict check taaki 'The Rebel' se 'Rebel Ridge' match na ho sake"""
+    if not file_name or not candidate_name:
         return False
-    w1 = [w for w in re.findall(r'[a-zA-Z0-9]+', name1.lower()) if w not in {"the", "a", "an"}]
-    w2 = [w for w in re.findall(r'[a-zA-Z0-9]+', name2.lower()) if w not in {"the", "a", "an"}]
-    if not w1 or not w2:
+
+    stop_words = {"the", "a", "an", "and", "or", "of", "in", "to", "part", "season", "series", "tv"}
+    f_words = [w for w in re.findall(r'[a-zA-Z0-9]+', file_name.lower()) if w not in stop_words]
+    c_words = [w for w in re.findall(r'[a-zA-Z0-9]+', candidate_name.lower()) if w not in stop_words]
+
+    if not f_words or not c_words:
         return False
-    s1, s2 = set(w1), set(w2)
-    if s1 == s2:
+
+    if f_words == c_words:
         return True
-    diff = s1.symmetric_difference(s2)
-    ignored_diff = {"part", "season", "series", "movie", "vol", "volume", "edition", "hindi", "dubbed"}
-    meaningful_diff = {w for w in diff if w not in ignored_diff and not w.isdigit()}
-    return len(meaningful_diff) == 0
+
+    # Agar file title me 1 ya 2 words hain, toh exact match hona padega (Rebel != Rebel Ridge)
+    if len(f_words) <= 2:
+        return f_words == c_words
+
+    # Bade titles ke liye 80% similarity check
+    s_f, s_c = set(f_words), set(c_words)
+    intersection = s_f.intersection(s_c)
+    return (len(intersection) / len(s_f) >= 0.8) and abs(len(f_words) - len(c_words)) <= 1
 
 
 def get_qualities(text: str) -> str:
@@ -257,7 +265,7 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
             return "N/A"
         runtime_val = runtime_val[0]
 
-    # / Ep ya /Ep ko strip karta hai
+    # / Ep permanently remove
     runtime_str = re.sub(r"\s*/\s*ep\b", "", str(runtime_val), flags=re.IGNORECASE).strip()
 
     total_mins = 0
@@ -814,24 +822,31 @@ async def _process_with_lock(
 
     if not movie_doc:
         tmdb_details = {}
+        is_series = media_info["tag"] == "#SERIES"
 
-        # 🎯 File name always title ki priority rahega
+        # Caption ka Title 100% file ke naam se aayega
         official_search_title = base_name.strip().title()
 
-        imdb_details = await get_movie_details(base_name) or {}
-        imdb_title = (imdb_details.get("title") or "").strip()
-        imdb_id = imdb_details.get("imdb_id")
+        imdb_details = {}
+        imdb_id = None
 
-        # Agar IMDb ne bilkul alag movie/series pakad li (jaise The Rebel -> Rebel Ridge)
-        if imdb_title and not is_title_match(base_name, imdb_title):
-            logger.warning(f"IMDb title mismatch! File: '{base_name}' vs IMDb: '{imdb_title}'. Rejecting IMDb.")
-            imdb_details = {}
-            imdb_id = None
-        elif imdb_title:
-            official_search_title = imdb_title
+        # Agar series hai toh series keyword pehle try karenge taaki movies reject ho jayein
+        search_queries = [f"{base_name} series", base_name] if is_series else [base_name]
 
-        # TMDB query hamesha base_name (file name) se hogi taaki galat ID na jaye
-        tmdb_query = imdb_id if (imdb_id and imdb_id.startswith("tt")) else base_name
+        for sq in search_queries:
+            res = await get_movie_details(sq) or {}
+            res_title = (res.get("title") or "").strip()
+            if res_title and is_title_match(base_name, res_title):
+                # Agar series upload ki hai par IMDb ne explicitly movie di hai, toh discard karo
+                if is_series and res.get("kind") in ["movie", "feature"]:
+                    continue
+                imdb_details = res
+                imdb_id = res.get("imdb_id")
+                official_search_title = res_title
+                break
+
+        # TMDB query hamesha base_name ya verified imdb_id se hogi
+        tmdb_query = imdb_id if (imdb_id and str(imdb_id).startswith("tt")) else base_name
 
         if TMDB_POSTER:
             tmdb_details = await get_movie_detailsx(tmdb_query) or {}
@@ -841,14 +856,22 @@ async def _process_with_lock(
 
             tmdb_title = (tmdb_details.get("title") or tmdb_details.get("name") or "").strip()
             if tmdb_title and not is_title_match(base_name, tmdb_title):
-                logger.warning(f"TMDB title mismatch! File: '{base_name}' vs TMDB: '{tmdb_title}'. Rejecting TMDB.")
+                logger.warning(f"TMDB mismatch discarded! Base: '{base_name}', Got: '{tmdb_title}'")
                 tmdb_details = {}
                 error_tmdb = True
-            elif tmdb_title and not imdb_title:
-                official_search_title = tmdb_title
 
             if not tmdb_details or tmdb_details.get("error"):
                 error_tmdb = True
+
+            # 🎯 Agar IMDb search fail hua par TMDB ne exact series dhoondh li aur usme IMDb ID hai:
+            # Toh us exact ID se real IMDb details fetch karo!
+            if (not imdb_details or not imdb_details.get("rating")) and tmdb_details.get("imdb_id"):
+                exact_id = str(tmdb_details["imdb_id"]).strip()
+                if exact_id.startswith("tt"):
+                    exact_imdb = await get_movie_details(exact_id) or {}
+                    if exact_imdb and not exact_imdb.get("error"):
+                        imdb_details = exact_imdb
+                        imdb_id = exact_id
 
         poster_url = ""
         is_backdrop = False
@@ -880,13 +903,15 @@ async def _process_with_lock(
             else tmdb_details.get("rating", "N/A")
         )
 
-        imdb_url = (
-            imdb_details.get("url")
-            if imdb_details.get("url")
-            else tmdb_details.get("tmdb_url", "")
-        )
-
-        is_series = media_info["tag"] == "#SERIES"
+        # 🎯 STRICT IMDb URL: KABHI BHI TMDB URL NAHI HOGA!
+        imdb_url = ""
+        raw_imdb_link = imdb_details.get("url") or ""
+        if "imdb.com" in raw_imdb_link:
+            imdb_url = raw_imdb_link
+        elif imdb_id and str(imdb_id).startswith("tt"):
+            imdb_url = f"https://www.imdb.com/title/{imdb_id}/"
+        elif tmdb_details.get("imdb_id") and str(tmdb_details.get("imdb_id")).startswith("tt"):
+            imdb_url = f"https://www.imdb.com/title/{tmdb_details['imdb_id']}/"
 
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
@@ -1081,11 +1106,19 @@ async def _process_with_lock(
             }
         }
 
+        # Purane document ka Title bhi file name se reset kar dega
+        update_fields["$set"] = {
+            "title": base_name.strip().title()
+        }
+
+        # Purane document me agar galat TMDB link tha toh use bhi saaf kar dega
+        old_url = movie_doc.get("imdb_url", "")
+        if old_url and "imdb.com" not in str(old_url):
+            update_fields["$set"]["imdb_url"] = ""
+
         current_db_runtime = movie_doc.get("runtime")
         if (not current_db_runtime or str(current_db_runtime).strip().upper() in ("N/A", "NONE", "0", "")) and final_file_runtime != "N/A":
-            update_fields["$set"] = {
-                "runtime": final_file_runtime
-            }
+            update_fields["$set"]["runtime"] = final_file_runtime
 
         await db.movie_updates.update_one(
             {"_id": base_name},
@@ -1559,10 +1592,9 @@ def generate_movie_message(movie_doc, base_name):
         "-"
     )
 
-    imdb_url = movie_doc.get(
-        "imdb_url",
-        ""
-    )
+    # 🎯 Agar URL me 'imdb.com' nahi hai toh usko reject karega
+    raw_imdb_url = movie_doc.get("imdb_url", "")
+    imdb_url = raw_imdb_url if "imdb.com" in str(raw_imdb_url) else ""
 
     try:
         r = float(
@@ -1605,6 +1637,7 @@ def generate_movie_message(movie_doc, base_name):
             f"<small>{clean_rating}/10</small>"
         )
 
+    # Agar valid IMDb link hai toh hyperlink banega, warna plain text
     if imdb_url:
         rating_text = (
             f'<a href="{imdb_url}">'
@@ -1629,13 +1662,12 @@ def generate_movie_message(movie_doc, base_name):
         "N/A"
     )
 
-    stored_title = movie_doc.get("title", base_name)
+    # Title hamesha clean file name se
+    filename_display = base_name.strip().title()
     movie_year = movie_doc.get("year")
-    
-    if movie_year and str(movie_year) not in str(stored_title) and primary_tag != "#SERIES":
-        filename_display = f"{stored_title} {movie_year}"
-    else:
-        filename_display = stored_title
+
+    if movie_year and str(movie_year) not in filename_display and primary_tag != "#SERIES":
+        filename_display = f"{filename_display} {movie_year}"
 
     raw_text = script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get(
