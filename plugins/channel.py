@@ -1,4 +1,3 @@
-import os
 import re
 import logging
 import asyncio
@@ -128,8 +127,9 @@ GENRE_MAPPING = {
 }
 
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
-NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
+NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'â€“!,.?_]")
 
+# ðŸŽ¯ Quality pattern with automatic version (V2, V3, etc.) capture
 QUALITY_PATTERN = re.compile(
     r"\b(?:HDCam|HD-Cam|HQ-HDCam|HDTC|HD-TC|HQ-HDTC|CamRip|CAM|HQ-CAM|TS|HDTS|HQ-TS|TC|TeleSync|DVDScr|DVDRip|PreDVD|HQ-PreDVD|"
     r"WEBRip|WEB-DL|TVRip|HDTV|WEB DL|WebDl|BluRay|BRRip|BDRip|Remux|IMAX|"
@@ -180,42 +180,13 @@ def remove_ignored_words(text: str) -> str:
     )
 
 
-def is_title_match(file_name: str, candidate_name: str) -> bool:
-    if not file_name or not candidate_name:
-        return False
-
-    # Comparison se pehle release years (1900-2099) ko strip karega
-    clean_f = re.sub(r'\b(19|20)\d{2}\b', '', file_name)
-    clean_c = re.sub(r'\b(19|20)\d{2}\b', '', candidate_name)
-
-    stop_words = {"the", "a", "an", "and", "or", "of", "in", "to", "part", "season", "series", "tv", "movie"}
-    f_words = [w for w in re.findall(r'[a-zA-Z0-9]+', clean_f.lower()) if w not in stop_words]
-    c_words = [w for w in re.findall(r'[a-zA-Z0-9]+', clean_c.lower()) if w not in stop_words]
-
-    if not f_words or not c_words:
-        return False
-
-    if f_words == c_words:
-        return True
-
-    s_f, s_c = set(f_words), set(c_words)
-    if s_f == s_c:
-        return True
-
-    # Short titles (1 ya 2 words) must be identical
-    if len(f_words) <= 2 or len(c_words) <= 2:
-        return f_words == c_words
-
-    intersection = s_f.intersection(s_c)
-    return (len(intersection) / max(len(s_f), len(s_c))) >= 0.75
-
-
 def get_qualities(text: str) -> str:
     if not text:
         return "N/A"
 
     raw_qualities = QUALITY_PATTERN.findall(text)
 
+    # Standalone version check (e.g. filename has V2 separately)
     v_match = VERSION_STANDALONE.search(text)
     version_str = None
     if v_match:
@@ -234,6 +205,7 @@ def get_qualities(text: str) -> str:
         if q_clean and q_clean not in cleaned_qualities:
             cleaned_qualities.append(q_clean)
 
+    # Agar standalone V2/V3 mila aur quality mein juda nahi hai, toh Cam/Rip quality ke saath jod do
     if version_str and not has_version_attached and cleaned_qualities:
         attached = False
         for idx, q in enumerate(cleaned_qualities):
@@ -271,7 +243,10 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
             return "N/A"
         runtime_val = runtime_val[0]
 
-    runtime_str = re.sub(r"\s*/\s*ep\b", "", str(runtime_val), flags=re.IGNORECASE).strip()
+    runtime_str = str(runtime_val).strip()
+
+    if "/ Ep" in runtime_str:
+        return runtime_str if is_series else runtime_str.replace(" / Ep", "").strip()
 
     total_mins = 0
     try:
@@ -298,9 +273,11 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
     if total_mins >= 60:
         hours = total_mins // 60
         mins = total_mins % 60
-        return f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
+        formatted = f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
     else:
-        return f"{total_mins}m"
+        formatted = f"{total_mins}m"
+
+    return f"{formatted} / Ep" if is_series else formatted
 
 
 async def get_hdhub_base_url() -> Optional[str]:
@@ -321,8 +298,8 @@ async def set_domain_handler(bot, message):
         current_url = await get_hdhub_base_url()
         current_text = f"<code>{current_url}</code>" if current_url else "<i>Not Set Yet!</i>"
         return await message.reply_text(
-            f"🌐 **Current HDHub4u URL:** {current_text}\n\n"
-            f"💡 **Usage:** <code>/setdomain https://new-domain.com</code>"
+            f"ðŸŒ **Current HDHub4u URL:** {current_text}\n\n"
+            f"ðŸ’¡ **Usage:** <code>/setdomain https://new-domain.com</code>"
         )
     new_url = message.command[1].strip().split("?")[0].rstrip("/")
     try:
@@ -331,9 +308,9 @@ async def set_domain_handler(bot, message):
             {"$set": {"url": new_url}},
             upsert=True
         )
-        await message.reply_text(f"✅ **HDHub4u base URL successfully updated to:**\n<code>{new_url}</code>")
+        await message.reply_text(f"âœ… **HDHub4u base URL successfully updated to:**\n<code>{new_url}</code>")
     except Exception as e:
-        await message.reply_text(f"❌ Failed to update domain: {e}")
+        await message.reply_text(f"âŒ Failed to update domain: {e}")
 
 
 async def get_hdhub4u_genres(base_name: str) -> str:
@@ -343,7 +320,7 @@ async def get_hdhub4u_genres(base_name: str) -> str:
             return "N/A"
 
         clean_query = re.sub(r"\b(19|20)\d{2}\b", "", base_name).strip()
-        clean_query = re.sub(r"[._]+|[()\[\]{}:;'–!,.?_]", " ", clean_query).strip()
+        clean_query = re.sub(r"[._]+|[()\[\]{}:;'â€“!,.?_]", " ", clean_query).strip()
         search_url = f"{base_url.rstrip('/')}/?s={clean_query.replace(' ', '+')}"
 
         headers = {
@@ -417,7 +394,7 @@ async def get_hdhub4u_genres(base_name: str) -> str:
                         candidate, flags=re.IGNORECASE
                     )[0]
                     candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
-                    parts = re.split(r'[,|/•]', candidate)
+                    parts = re.split(r'[,|/â€¢]', candidate)
                     cleaned = [
                         p.strip() for p in parts 
                         if p.strip() and 2 <= len(p.strip()) <= 25 and not any(
@@ -629,8 +606,8 @@ def extract_media_info(filename: str, caption: str):
             r"\bEp(?:isode)?\.?\s*\d{1,3}\b",
             r"\bEpisode\s*\d{1,3}\b",
             r"\bPart\s*\d{1,2}\b",
-            r"\b[vV]\d+\b",
-            r"\b(?:version|ver)\.?\s*\d+\b"
+            r"\b[vV]\d+\b",                   # V1, V2, V3 remove karega
+            r"\b(?:version|ver)\.?\s*\d+\b"   # Version 2, Ver 2 remove karega
         ]
 
         for p in patterns:
@@ -725,23 +702,9 @@ async def media_handler(bot, message):
 
     media.caption = message.caption or ""
 
-    # 🎯 Direct Thumbnail download (Object pass kiya hai, file_id decode issue khatam)
-    custom_thumb = None
-    if getattr(media, "thumbs", None) and len(media.thumbs) > 0:
-        try:
-            custom_thumb = await bot.download_media(media.thumbs[-1])
-        except Exception as e:
-            logger.error(f"Error downloading file thumb: {e}")
-            custom_thumb = None
-
     success, info = await save_file(media)
 
     if not success:
-        if custom_thumb and os.path.exists(custom_thumb):
-            try:
-                os.remove(custom_thumb)
-            except Exception:
-                pass
         return
 
     try:
@@ -750,8 +713,7 @@ async def media_handler(bot, message):
                 bot,
                 media.file_name,
                 media.caption,
-                file_runtime_mins,
-                custom_thumb=custom_thumb
+                file_runtime_mins
             )
     except Exception:
         logger.exception(
@@ -763,8 +725,7 @@ async def process_and_send_update(
     bot,
     filename,
     caption,
-    file_runtime_mins=None,
-    custom_thumb=None
+    file_runtime_mins=None
 ):
     try:
         media_info = extract_media_info(
@@ -785,8 +746,7 @@ async def process_and_send_update(
                 media_info,
                 base_name,
                 processed,
-                file_runtime_mins,
-                custom_thumb=custom_thumb
+                file_runtime_mins
             )
 
     except PyMongoError as e:
@@ -807,8 +767,7 @@ async def _process_with_lock(
     media_info,
     base_name,
     processed,
-    file_runtime_mins=None,
-    custom_thumb=None
+    file_runtime_mins=None
 ):
     if not hasattr(db, "movie_updates"):
         db.movie_updates = db.db.movie_updates
@@ -845,61 +804,34 @@ async def _process_with_lock(
 
     if not movie_doc:
         tmdb_details = {}
-        is_series = media_info["tag"] == "#SERIES"
 
-        official_search_title = base_name.strip().title()
+        imdb_details = await get_movie_details(
+            base_name
+        ) or {}
 
-        imdb_details = {}
-        imdb_id = None
+        official_search_title = imdb_details.get("title") or base_name
+        imdb_id = imdb_details.get("imdb_id")
 
-        search_queries = [f"{base_name} series", base_name] if is_series else [base_name]
-
-        for sq in search_queries:
-            res = await get_movie_details(sq) or {}
-            res_title = (res.get("title") or "").strip()
-            if res_title and is_title_match(base_name, res_title):
-                if is_series and res.get("kind") in ["movie", "feature"]:
-                    continue
-                imdb_details = res
-                imdb_id = res.get("imdb_id")
-                official_search_title = res_title
-                break
-
-        tmdb_query = imdb_id if (imdb_id and str(imdb_id).startswith("tt")) else base_name
+        tmdb_query = imdb_id if (imdb_id and imdb_id.startswith("tt")) else official_search_title
 
         if TMDB_POSTER:
-            tmdb_details = await get_movie_detailsx(tmdb_query) or {}
+            tmdb_details = await get_movie_detailsx(
+                tmdb_query
+            ) or {}
 
             if (not tmdb_details or tmdb_details.get("error")) and imdb_id:
-                tmdb_details = await get_movie_detailsx(base_name) or {}
+                tmdb_details = await get_movie_detailsx(official_search_title) or {}
 
-            tmdb_title = (tmdb_details.get("title") or tmdb_details.get("name") or "").strip()
-            if tmdb_title and not is_title_match(base_name, tmdb_title):
-                logger.warning(f"TMDB mismatch discarded! Base: '{base_name}', Got: '{tmdb_title}'")
-                tmdb_details = {}
+            if (
+                not tmdb_details
+                or tmdb_details.get("error")
+            ):
                 error_tmdb = True
-
-            if not tmdb_details or tmdb_details.get("error"):
-                error_tmdb = True
-
-            if (not imdb_details or not imdb_details.get("rating")) and tmdb_details.get("imdb_id"):
-                exact_id = str(tmdb_details["imdb_id"]).strip()
-                if exact_id.startswith("tt"):
-                    exact_imdb = await get_movie_details(exact_id) or {}
-                    if exact_imdb and not exact_imdb.get("error"):
-                        imdb_details = exact_imdb
-                        imdb_id = exact_id
 
         poster_url = ""
         is_backdrop = False
 
-        # Priority 1: File custom thumbnail
-        if custom_thumb:
-            poster_url = custom_thumb
-            is_backdrop = False
-
-        # Priority 2: TMDB Backdrop Landscape
-        elif (
+        if (
             LANDSCAPE_POSTER
             and TMDB_POSTER
             and tmdb_details.get("backdrop_url")
@@ -908,14 +840,12 @@ async def _process_with_lock(
             poster_url = tmdb_details.get("backdrop_url")
             is_backdrop = True
 
-        # Priority 3: TMDB Portrait Poster
         elif (
             tmdb_details.get("poster_url")
             and not error_tmdb
         ):
             poster_url = tmdb_details.get("poster_url")
 
-        # Priority 4: IMDb Poster
         else:
             poster_url = (
                 imdb_details.get("poster_url")
@@ -924,18 +854,19 @@ async def _process_with_lock(
 
         rating = (
             imdb_details.get("rating")
-            if imdb_details.get("rating") and imdb_details.get("rating") != "N/A"
+            if imdb_details.get("rating")
+            and imdb_details.get("rating") != "N/A"
             else tmdb_details.get("rating", "N/A")
         )
 
-        imdb_url = ""
-        raw_imdb_link = imdb_details.get("url") or ""
-        if "imdb.com" in raw_imdb_link:
-            imdb_url = raw_imdb_link
-        elif imdb_id and str(imdb_id).startswith("tt"):
-            imdb_url = f"https://www.imdb.com/title/{imdb_id}/"
-        elif tmdb_details.get("imdb_id") and str(tmdb_details.get("imdb_id")).startswith("tt"):
-            imdb_url = f"https://www.imdb.com/title/{tmdb_details['imdb_id']}/"
+        imdb_url = (
+            imdb_details.get("url")
+            if imdb_details.get("url")
+            else tmdb_details.get("tmdb_url", "")
+        )
+
+        # ðŸŽ¯ DIRECT IMDb / TMDB RUNTIME PRIORITY
+        is_series = media_info["tag"] == "#SERIES"
 
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
@@ -966,17 +897,19 @@ async def _process_with_lock(
             )
         )
 
+        # ðŸŽ¯ GENRE PRIORITY 1: HDHub4u First
         genre_names = []
         hdhub_genres = await get_hdhub4u_genres(base_name)
 
         if hdhub_genres and hdhub_genres != "N/A":
-            raw_parts = re.split(r'[,|/•]', hdhub_genres)
+            raw_parts = re.split(r'[,|/â€¢]', hdhub_genres)
             genre_names = [
                 g.strip()
                 for g in raw_parts
                 if g.strip() and g.strip() != "N/A" and not any(bad in g.lower() for bad in ["dropdown", "menu", "select"])
             ]
 
+        # ðŸŽ¯ GENRE PRIORITY 2: Fallback to TMDB / IMDb
         if not genre_names:
             raw_genres = (
                 tmdb_details.get("genres")
@@ -1130,20 +1063,12 @@ async def _process_with_lock(
             }
         }
 
-        update_fields["$set"] = {
-            "title": base_name.strip().title()
-        }
-
-        old_url = movie_doc.get("imdb_url", "")
-        if old_url and "imdb.com" not in str(old_url):
-            update_fields["$set"]["imdb_url"] = ""
-
-        if custom_thumb and not movie_doc.get("poster_url"):
-            update_fields["$set"]["poster_url"] = custom_thumb
-
+        # Agar pehle se DB me runtime missing ya N/A tha, sirf tabhi update karein
         current_db_runtime = movie_doc.get("runtime")
         if (not current_db_runtime or str(current_db_runtime).strip().upper() in ("N/A", "NONE", "0", "")) and final_file_runtime != "N/A":
-            update_fields["$set"]["runtime"] = final_file_runtime
+            update_fields["$set"] = {
+                "runtime": final_file_runtime
+            }
 
         await db.movie_updates.update_one(
             {"_id": base_name},
@@ -1217,7 +1142,7 @@ async def send_movie_update(bot, base_name):
                 buttons = InlineKeyboardMarkup(
                     [[
                         InlineKeyboardButton(
-                            "ɢᴇᴛ ғɪʟᴇs",
+                            "É¢á´‡á´› Ò“ÉªÊŸá´‡s",
                             url=(
                                 f"https://t.me/{temp.U_NAME}"
                                 f"?start=getfile-"
@@ -1240,54 +1165,12 @@ async def send_movie_update(bot, base_name):
                     (853, 1280)
                 )
 
-                p_url = movie_doc.get("poster_url")
-                msg = None
-                is_photo = False
-
-                # 🎯 1. Local downloaded thumbnail file
-                if p_url and os.path.exists(str(p_url)):
-                    try:
-                        msg = await bot.send_photo(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            photo=p_url,
-                            caption=text,
-                            reply_markup=buttons,
-                            parse_mode=enums.ParseMode.HTML
-                        )
-                        is_photo = True
-                        if msg and msg.photo:
-                            # Save official Telegram Photo file_id for editing
-                            await db.movie_updates.update_one(
-                                {"_id": base_name},
-                                {"$set": {"poster_url": msg.photo.file_id}}
-                            )
-                    except Exception as e:
-                        logger.error(f"Failed to send local downloaded thumbnail: {e}")
-                    finally:
-                        try:
-                            if os.path.exists(str(p_url)):
-                                os.remove(str(p_url))
-                        except Exception:
-                            pass
-
-                # 2. Telegram Official Photo File ID (previously saved)
-                elif p_url and not str(p_url).startswith("http"):
-                    try:
-                        msg = await bot.send_photo(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            photo=p_url,
-                            caption=text,
-                            reply_markup=buttons,
-                            parse_mode=enums.ParseMode.HTML
-                        )
-                        is_photo = True
-                    except Exception as e:
-                        logger.error(f"Failed to send cached photo file_id: {e}")
-
-                # 3. Web URL Poster (TMDB / IMDb)
-                if not msg and p_url and str(p_url).startswith("http") and not LINK_PREVIEW:
+                if (
+                    movie_doc.get("poster_url")
+                    and not LINK_PREVIEW
+                ):
                     resized_poster = await fetch_image(
-                        p_url,
+                        movie_doc["poster_url"],
                         size
                     )
 
@@ -1299,10 +1182,20 @@ async def send_movie_update(bot, base_name):
                             reply_markup=buttons,
                             parse_mode=enums.ParseMode.HTML
                         )
+
                         is_photo = True
 
-                # 4. Fallback: Text message
-                if not msg:
+                    else:
+                        msg = await bot.send_message(
+                            chat_id=MOVIE_UPDATE_CHANNEL,
+                            text=text,
+                            reply_markup=buttons,
+                            parse_mode=enums.ParseMode.HTML
+                        )
+
+                        is_photo = False
+
+                else:
                     send_params = {
                         "chat_id": MOVIE_UPDATE_CHANNEL,
                         "text": text,
@@ -1310,12 +1203,16 @@ async def send_movie_update(bot, base_name):
                         "parse_mode": enums.ParseMode.HTML
                     }
 
-                    if p_url and str(p_url).startswith("http") and LINK_PREVIEW:
+                    if (
+                        movie_doc.get("poster_url")
+                        and LINK_PREVIEW
+                    ):
                         send_params["invert_media"] = ABOVE_PREVIEW
 
                     msg = await bot.send_message(
                         **send_params
                     )
+
                     is_photo = False
 
                 await db.movie_updates.update_one(
@@ -1388,7 +1285,7 @@ async def update_movie_message(bot, base_name):
         buttons = InlineKeyboardMarkup(
             [[
                 InlineKeyboardButton(
-                    "ɢᴇᴛ ғɪʟᴇs",
+                    "É¢á´‡á´› Ò“ÉªÊŸá´‡s",
                     url=(
                         f"https://t.me/{temp.U_NAME}"
                         f"?start=getfile-"
@@ -1607,7 +1504,7 @@ def generate_movie_message(movie_doc, base_name):
 
         if epi_str:
             epi_block = (
-                f"\n📺 ᴇᴘɪsᴏᴅᴇs : "
+                f"\nðŸ“º á´‡á´˜Éªsá´á´…á´‡s : "
                 f"<b>{epi_str}</b>"
             )
 
@@ -1645,8 +1542,10 @@ def generate_movie_message(movie_doc, base_name):
         "-"
     )
 
-    raw_imdb_url = movie_doc.get("imdb_url", "")
-    imdb_url = raw_imdb_url if "imdb.com" in str(raw_imdb_url) else ""
+    imdb_url = movie_doc.get(
+        "imdb_url",
+        ""
+    )
 
     try:
         r = float(
@@ -1713,11 +1612,13 @@ def generate_movie_message(movie_doc, base_name):
         "N/A"
     )
 
-    filename_display = base_name.strip().title()
+    stored_title = movie_doc.get("title", base_name)
     movie_year = movie_doc.get("year")
-
-    if movie_year and str(movie_year) not in filename_display and primary_tag != "#SERIES":
-        filename_display = f"{filename_display} {movie_year}"
+    
+    if movie_year and str(movie_year) not in str(stored_title) and primary_tag != "#SERIES":
+        filename_display = f"{stored_title} {movie_year}"
+    else:
+        filename_display = stored_title
 
     raw_text = script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get(
