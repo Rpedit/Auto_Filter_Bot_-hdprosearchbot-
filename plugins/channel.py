@@ -129,7 +129,6 @@ GENRE_MAPPING = {
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
 NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
 
-# 🎯 Quality pattern with automatic version (V2, V3, etc.) capture
 QUALITY_PATTERN = re.compile(
     r"\b(?:HDCam|HD-Cam|HQ-HDCam|HDTC|HD-TC|HQ-HDTC|CamRip|CAM|HQ-CAM|TS|HDTS|HQ-TS|TC|TeleSync|DVDScr|DVDRip|PreDVD|HQ-PreDVD|"
     r"WEBRip|WEB-DL|TVRip|HDTV|WEB DL|WebDl|BluRay|BRRip|BDRip|Remux|IMAX|"
@@ -186,7 +185,6 @@ def get_qualities(text: str) -> str:
 
     raw_qualities = QUALITY_PATTERN.findall(text)
 
-    # Standalone version check (e.g. filename has V2 separately)
     v_match = VERSION_STANDALONE.search(text)
     version_str = None
     if v_match:
@@ -205,7 +203,6 @@ def get_qualities(text: str) -> str:
         if q_clean and q_clean not in cleaned_qualities:
             cleaned_qualities.append(q_clean)
 
-    # Agar standalone V2/V3 mila aur quality mein juda nahi hai, toh Cam/Rip quality ke saath jod do
     if version_str and not has_version_attached and cleaned_qualities:
         attached = False
         for idx, q in enumerate(cleaned_qualities):
@@ -243,10 +240,8 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
             return "N/A"
         runtime_val = runtime_val[0]
 
-    runtime_str = str(runtime_val).strip()
-
-    if "/ Ep" in runtime_str:
-        return runtime_str if is_series else runtime_str.replace(" / Ep", "").strip()
+    # / Ep ya /Ep ko strip karega
+    runtime_str = re.sub(r"\s*/\s*ep\b", "", str(runtime_val), flags=re.IGNORECASE).strip()
 
     total_mins = 0
     try:
@@ -273,11 +268,9 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
     if total_mins >= 60:
         hours = total_mins // 60
         mins = total_mins % 60
-        formatted = f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
+        return f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
     else:
-        formatted = f"{total_mins}m"
-
-    return f"{formatted} / Ep" if is_series else formatted
+        return f"{total_mins}m"
 
 
 async def get_hdhub_base_url() -> Optional[str]:
@@ -606,8 +599,8 @@ def extract_media_info(filename: str, caption: str):
             r"\bEp(?:isode)?\.?\s*\d{1,3}\b",
             r"\bEpisode\s*\d{1,3}\b",
             r"\bPart\s*\d{1,2}\b",
-            r"\b[vV]\d+\b",                   # V1, V2, V3 remove karega
-            r"\b(?:version|ver)\.?\s*\d+\b"   # Version 2, Ver 2 remove karega
+            r"\b[vV]\d+\b",
+            r"\b(?:version|ver)\.?\s*\d+\b"
         ]
 
         for p in patterns:
@@ -865,7 +858,6 @@ async def _process_with_lock(
             else tmdb_details.get("tmdb_url", "")
         )
 
-        # 🎯 DIRECT IMDb / TMDB RUNTIME PRIORITY
         is_series = media_info["tag"] == "#SERIES"
 
         imdb_r = imdb_details.get("runtime")
@@ -897,7 +889,6 @@ async def _process_with_lock(
             )
         )
 
-        # 🎯 GENRE PRIORITY 1: HDHub4u First
         genre_names = []
         hdhub_genres = await get_hdhub4u_genres(base_name)
 
@@ -909,7 +900,6 @@ async def _process_with_lock(
                 if g.strip() and g.strip() != "N/A" and not any(bad in g.lower() for bad in ["dropdown", "menu", "select"])
             ]
 
-        # 🎯 GENRE PRIORITY 2: Fallback to TMDB / IMDb
         if not genre_names:
             raw_genres = (
                 tmdb_details.get("genres")
@@ -1063,7 +1053,6 @@ async def _process_with_lock(
             }
         }
 
-        # Agar pehle se DB me runtime missing ya N/A tha, sirf tabhi update karein
         current_db_runtime = movie_doc.get("runtime")
         if (not current_db_runtime or str(current_db_runtime).strip().upper() in ("N/A", "NONE", "0", "")) and final_file_runtime != "N/A":
             update_fields["$set"] = {
