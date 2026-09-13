@@ -163,7 +163,6 @@ SOURCE_PATTERN = re.compile(
 VERSION_STANDALONE = re.compile(r"\b(?:[vV]\d+|ver\.?\s*\d+|version\s*\d+)\b", re.IGNORECASE)
 YEAR_PATTERN = re.compile(r"(?<![A-Za-z0-9])(?:19|20)\d{2}(?![A-Za-z0-9])")
 
-# Episode & Season Patterns
 RANGE_REGEX = re.compile(r'\bS(\d{1,2})[^\w\n\r]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})', re.IGNORECASE)
 SINGLE_REGEX = re.compile(r'\bS(\d{1,2})[^\w\n\r]*E(?:p(?:isode)?)?0*(\d{1,3})', re.IGNORECASE)
 NAMED_REGEX = re.compile(r'Season\s*0*(\d{1,2})[\s\-,:]*Ep(?:isode)?\s*0*(\d{1,3})', re.IGNORECASE)
@@ -305,7 +304,6 @@ def format_movie_qualities(quality_list: list) -> str:
             formatted = STANDARD_FORMATS.get(s_norm, s.upper())
             sources.add(formatted)
 
-    # Deduplicate hierarchy (Remove lower duplicates if HQ exists)
     if "HQ-HDTC" in sources and "HDTC" in sources:
         sources.remove("HDTC")
     if "HQ-CAM" in sources:
@@ -377,20 +375,26 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
 
     total_mins = 0
     try:
-        if runtime_str.isdigit():
-            total_mins = int(runtime_str)
-        else:
-            hours_match = re.search(r"(\d+)\s*(?:h|hr|hour)s?", runtime_str, re.IGNORECASE)
-            mins_match = re.search(r"(\d+)\s*(?:m|min|minute)s?", runtime_str, re.IGNORECASE)
-
-            if hours_match or mins_match:
-                hours = int(hours_match.group(1)) if hours_match else 0
-                mins = int(mins_match.group(1)) if mins_match else 0
+        try:
+            total_mins = int(float(runtime_str))
+        except ValueError:
+            colon_match = re.match(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$", runtime_str)
+            if colon_match:
+                hours = int(colon_match.group(1))
+                mins = int(colon_match.group(2))
                 total_mins = (hours * 60) + mins
             else:
-                numbers = re.findall(r"\d+", runtime_str)
-                if numbers:
-                    total_mins = int(numbers[0])
+                hours_match = re.search(r"(\d+)\s*(?:h|hr|hour)s?", runtime_str, re.IGNORECASE)
+                mins_match = re.search(r"(\d+)\s*(?:m|min|minute)s?", runtime_str, re.IGNORECASE)
+
+                if hours_match or mins_match:
+                    hours = int(hours_match.group(1)) if hours_match else 0
+                    mins = int(mins_match.group(1)) if mins_match else 0
+                    total_mins = (hours * 60) + mins
+                else:
+                    numbers = re.findall(r"\d+", runtime_str)
+                    if numbers:
+                        total_mins = int(numbers[0])
     except Exception:
         return "N/A"
 
@@ -1076,12 +1080,23 @@ async def _process_with_lock(
         if isinstance(tmdb_r, (list, tuple)) and tmdb_r:
             tmdb_r = tmdb_r[0]
 
-        if imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
-            runtime = str(imdb_r).strip()
-        elif tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
-            runtime = str(tmdb_r).strip()
+        # Smart priority: Series gets TMDb per-episode/file runtime first, Movie gets IMDb first
+        if is_series:
+            if tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
+                runtime = str(tmdb_r).strip()
+            elif final_file_runtime != "N/A":
+                runtime = final_file_runtime
+            elif imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
+                runtime = str(imdb_r).strip()
+            else:
+                runtime = "N/A"
         else:
-            runtime = final_file_runtime if final_file_runtime != "N/A" else "N/A"
+            if imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
+                runtime = str(imdb_r).strip()
+            elif tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
+                runtime = str(tmdb_r).strip()
+            else:
+                runtime = final_file_runtime if final_file_runtime != "N/A" else "N/A"
 
         certificates = (
             tmdb_details.get("certificates")
@@ -1475,7 +1490,6 @@ def generate_movie_message(movie_doc, base_name):
             episode = str(file.get("episode"))
             episodes_by_season[season].add(episode)
 
-    # Clean redundant OTT platforms
     if "Disney+ Hotstar" in all_ott_platforms and "Disney+" in all_ott_platforms:
         all_ott_platforms.remove("Disney+")
     if "JioHotstar" in all_ott_platforms:
