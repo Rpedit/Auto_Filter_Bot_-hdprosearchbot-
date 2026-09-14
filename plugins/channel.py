@@ -24,6 +24,7 @@ _BASE_IGNORE_WORDS = {
     "rarbg", "dub", "sub", "sample", "mkv", "mp4", "avi", "aac", "ac3", "eac3", "ddp", "ddp5", "atmos", "dts",
     "combined", "esub", "msub", "proper", "repack", "unrated", "extended", "imax", "remux", "10bit", "10-bit",
     "x264", "x265", "h264", "h265", "hevc", "avc", "dovi", "hdr", "hdr10",
+    "web", "dl", "bonus", "special",
     "action", "adventure", "animation", "biography", "comedy", "crime",
     "documentary", "drama", "fantasy", "film-noir", "history",
     "horror", "music", "musical", "mystery", "romance", "sci-fi", "sport",
@@ -163,10 +164,12 @@ SOURCE_PATTERN = re.compile(
 VERSION_STANDALONE = re.compile(r"\b(?:[vV]\d+|ver\.?\s*\d+|version\s*\d+)\b", re.IGNORECASE)
 YEAR_PATTERN = re.compile(r"(?<![A-Za-z0-9])(?:19|20)\d{2}(?![A-Za-z0-9])")
 
-RANGE_REGEX = re.compile(r'\bS(\d{1,2})[^\w\n\r]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})', re.IGNORECASE)
-SINGLE_REGEX = re.compile(r'\bS(\d{1,2})[^\w\n\r]*E(?:p(?:isode)?)?0*(\d{1,3})', re.IGNORECASE)
-NAMED_REGEX = re.compile(r'Season\s*0*(\d{1,2})[\s\-,:]*Ep(?:isode)?\s*0*(\d{1,3})', re.IGNORECASE)
-X_REGEX = re.compile(r'\b0*(\d{1,2})\s*x\s*0*(\d{1,3})\b', re.IGNORECASE)
+# Season & Episode Patterns with Bonus & Codec protections
+BONUS_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
+RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special|Part)?[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})', re.IGNORECASE)
+SINGLE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special|Part)?[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
+NAMED_REGEX = re.compile(r'Season\s*0*(\d{1,2})[\s\-,:]*(?:Bonus|Special|Part)?[\s\-,:]*Ep(?:isode)?\s*0*(\d{1,3})\b', re.IGNORECASE)
+X_REGEX = re.compile(r'\b0*([1-9]\d?)\s*[xX]\s*0*(\d{1,2})\b', re.IGNORECASE)
 DAY_REGEX = re.compile(r'\b(?:S(?:eason)?\s*0*(\d{1,2})[^\w\n\r]*)?(?:Day|D)\s*0*(\d{1,3})\b', re.IGNORECASE)
 NO_S_REGEX = re.compile(r'\b(?:Season\s*)?0*(\d{1,2})[\s._-]+E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
 EP_ONLY_RANGE = re.compile(r'\b(?:EP|Episode)0*(\d{1,3})\s*-\s*0*(\d{1,3})\b', re.IGNORECASE)
@@ -521,10 +524,6 @@ async def set_domain_handler(bot, message):
 
 
 async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
-    """
-    Exact HDHub4u mirror:
-    Scrapes Genres, exact IMDb Rating (even if 'x/10'), and exact IMDb URL from the HDHub4u post.
-    """
     genres = "N/A"
     rating = "N/A"
     imdb_url = ""
@@ -597,7 +596,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
         content = movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
         search_area = content if content else movie_soup
 
-        # 1. Scrape official IMDb Link from HDHub4u page
         for a_tag in search_area.find_all("a", href=True):
             href = a_tag["href"].strip()
             if "imdb.com/title/tt" in href:
@@ -606,7 +604,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                     imdb_url = f"https://www.imdb.com/title/{clean_match.group(1)}/"
                     break
 
-        # 2. Scrape exact Genres & exact IMDb Rating (even x/10)
         for elem in search_area.find_all(["p", "div", "span", "strong", "b", "h4"]):
             text = elem.get_text(" ", strip=True)
 
@@ -630,7 +627,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                         genres = ", ".join(cleaned)
 
             if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating)\b', text, re.IGNORECASE):
-                # Captures exact numbers (e.g. 7.5) OR "x/10", "X/10", "N/A"
                 r_match = re.search(
                     r'\b(?:IMDb|IMDB|iMDB|Rating|Ratings)\s*(?:Rating|Ratings)?\s*[:\-•]?\s*([0-9]+(?:\.[0-9]+)?|[xX]|N/?A)\s*(?:/\s*10)?',
                     text,
@@ -670,11 +666,12 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
 
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
+    # Bonus Episode Check (S02.Bonus.Ep.03 -> S2: Bonus 3)
+    if m := BONUS_REGEX.search(filename):
+        return int(m.group(1)), f"Bonus {int(m.group(2))}"
+
     if m := RANGE_REGEX.search(filename):
         return int(m.group(1)), f"{int(m.group(2))}-{int(m.group(3))}"
-
-    if m := EP_ONLY_RANGE.search(filename):
-        return 1, f"{int(m.group(1))}-{int(m.group(2))}"
 
     if m := SINGLE_REGEX.search(filename):
         return int(m.group(1)), str(int(m.group(2)))
@@ -683,7 +680,9 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
         return int(m.group(1)), str(int(m.group(2)))
 
     if m := X_REGEX.search(filename):
-        return int(m.group(1)), str(int(m.group(2)))
+        ep_val = int(m.group(2))
+        if ep_val not in (264, 265):
+            return int(m.group(1)), str(ep_val)
 
     if m := DAY_REGEX.search(filename):
         season = int(m.group(1)) if m.group(1) else 1
@@ -692,8 +691,13 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
     if m := NO_S_REGEX.search(filename):
         return int(m.group(1)), str(int(m.group(2)))
 
+    if m := EP_ONLY_RANGE.search(filename):
+        return 1, f"{int(m.group(1))}-{int(m.group(2))}"
+
     if m := EP_ONLY_SINGLE.search(filename):
-        return 1, str(int(m.group(1)))
+        ep_val = int(m.group(1))
+        if ep_val not in (264, 265):
+            return 1, str(ep_val)
 
     return None, None
 
@@ -768,7 +772,8 @@ def extract_media_info(filename: str, caption: str):
         tag = "#SERIES"
 
         m = (
-            RANGE_REGEX.search(filename)
+            BONUS_REGEX.search(filename)
+            or RANGE_REGEX.search(filename)
             or SINGLE_REGEX.search(filename)
             or NAMED_REGEX.search(filename)
             or X_REGEX.search(filename)
@@ -857,6 +862,8 @@ def extract_media_info(filename: str, caption: str):
             name = name[:year_match.start()].strip()
 
         patterns = [
+            r"\bS\d{1,2}[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:isode)?)?0*\d{1,3}\b",
+            r"\b(?:Bonus|Special)[\s._-]*Ep(?:isode)?\.?\s*\d{1,3}\b",
             r"\bS\d{1,2}E\d{1,3}\b",
             r"\bS\d{1,2}\b",
             r"\bE\d{1,3}\b",
@@ -866,6 +873,8 @@ def extract_media_info(filename: str, caption: str):
             r"\bEpisode\s*\d{1,3}\b",
             r"\bPart\s*\d{1,2}\b",
             r"\bDay\s*\d{1,3}\b",
+            r"\bBonus\b",
+            r"\bSpecial\b",
             r"\b[vV]\d+\b",
             r"\b(?:version|ver)\.?\s*\d+\b"
         ]
@@ -1049,13 +1058,11 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
-        # Priority #1: HDHub4u Details fetch
         hdhub_genres, hdhub_rating, hdhub_imdb_url = await get_hdhub4u_data(base_name)
 
         tt_match = re.search(r'tt\d+', hdhub_imdb_url) if hdhub_imdb_url else None
         hdhub_imdb_id = tt_match.group(0) if tt_match else None
 
-        # Priority #2: Official IMDb Safe Fetch
         imdb_details = await fetch_imdb_safely(
             base_name,
             is_series=is_series,
@@ -1069,7 +1076,6 @@ async def _process_with_lock(
             official_search_title = imdb_details.get("title", base_name)
             imdb_id = hdhub_imdb_id or imdb_details.get("imdb_id")
 
-        # Priority #3: TMDb Safe Fetch
         tmdb_query = imdb_id if (imdb_id and imdb_id.startswith("tt")) else official_search_title
         tmdb_details = await fetch_tmdb_safely(tmdb_query, base_name, is_series)
 
@@ -1100,7 +1106,6 @@ async def _process_with_lock(
                 or imdb_details.get("backdrop_url", "")
             )
 
-        # Rating: Agar HDHub4u par x/10 ya koi score hai, direct wahi uthao
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
@@ -1113,7 +1118,6 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # IMDb Link: HDHub4u se direct official IMDb link pehli preference
         if hdhub_imdb_url:
             imdb_url = hdhub_imdb_url
         elif imdb_details.get("url"):
@@ -1309,7 +1313,6 @@ async def _process_with_lock(
         if (not current_db_runtime or str(current_db_runtime).strip().upper() in ("N/A", "NONE", "0", "")) and final_file_runtime != "N/A":
             update_fields["$set"] = {"runtime": final_file_runtime}
 
-        # HDHub4u par rating baad me update ho jaye toh use bhi update karein
         current_db_rating = movie_doc.get("rating")
         if not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10"):
             _, hdhub_rating, _ = await get_hdhub4u_data(base_name)
@@ -1568,16 +1571,25 @@ def generate_movie_message(movie_doc, base_name):
             key=lambda x: int(x[0])
         ):
             all_ep_numbers = set()
+            special_eps = []
+
             for ep in episodes:
                 ep_str = str(ep).strip()
-                if "-" in ep_str:
+                if ep_str.lower().startswith("bonus") or ep_str.lower().startswith("special"):
+                    if ep_str not in special_eps:
+                        special_eps.append(ep_str)
+                elif "-" in ep_str:
                     try:
                         p1, p2 = ep_str.split("-")
                         all_ep_numbers.update(range(int(p1), int(p2) + 1))
                     except ValueError:
-                        pass
+                        if ep_str not in special_eps:
+                            special_eps.append(ep_str)
                 elif ep_str.isdigit():
                     all_ep_numbers.add(int(ep_str))
+                else:
+                    if ep_str not in special_eps:
+                        special_eps.append(ep_str)
 
             sorted_eps = sorted(all_ep_numbers)
             collapsed = []
@@ -1591,8 +1603,14 @@ def generate_movie_message(movie_doc, base_name):
                         start = end = num
                 collapsed.append(str(start) if start == end else f"{start}-{end}")
 
+            final_ep_parts = []
             if collapsed:
-                episode_lines.append(f"S{int(season)}: {', '.join(collapsed)}")
+                final_ep_parts.extend(collapsed)
+            if special_eps:
+                final_ep_parts.extend(sorted(special_eps))
+
+            if final_ep_parts:
+                episode_lines.append(f"S{int(season)}: {', '.join(final_ep_parts)}")
 
         epi_str = "\n".join(episode_lines)
         if epi_str:
@@ -1606,7 +1624,6 @@ def generate_movie_message(movie_doc, base_name):
     raw_rating = str(movie_doc.get("rating", "x/10")).strip()
     imdb_url = movie_doc.get("imdb_url", "")
 
-    # HDHub4u mirror: x/10 ya koi specific rating format
     if raw_rating.lower() in ("x/10", "x", "n/a", "-", "none", "", "0", "0.0", "null"):
         rating_display = "<small>x/10</small>"
     else:
