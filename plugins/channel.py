@@ -101,37 +101,6 @@ OTT_PLATFORMS = {
     "tubi": "Tubi"
 }
 
-STANDARD_GENRES = {
-    "Action", "Adventure", "Animation", "Anime", "Biography", "Comedy", 
-    "Crime", "Documentary", "Drama", "Family", "Fantasy", "Film-Noir", 
-    "Game Show", "History", "Horror", "Music", "Musical", "Mystery", 
-    "News", "Politics", "Reality TV", "Romance", "Sci-Fi", "Sport", "Talk Show", 
-    "Thriller", "War", "Western"
-}
-
-GENRE_MAPPING = {
-    "Action & Adventure": "Action, Adventure",
-    "Action and Adventure": "Action, Adventure",
-    "War & Politics": "War, Politics",
-    "War and Politics": "War, Politics",
-    "Sci-Fi & Fantasy": "Sci-Fi, Fantasy",
-    "Sci-Fi and Fantasy": "Sci-Fi, Fantasy",
-    "Reality": "Reality TV",
-    "Reality-TV": "Reality TV",
-    "Reality Show": "Reality TV",
-    "Reality-Tv": "Reality TV",
-    "Reality Tv": "Reality TV",
-    "Talk": "Talk Show",
-    "Talk-Show": "Talk Show",
-    "Game": "Game Show",
-    "Game-Show": "Game Show",
-    "Science Fiction": "Sci-Fi",
-    "Romantic": "Romance",
-    "Suspense": "Thriller",
-    "Historical": "History",
-    "Kids": "Family"
-}
-
 STANDARD_FORMATS = {
     "hdtc": "HDTC", "hd-tc": "HDTC", "hq-hdtc": "HQ-HDTC",
     "hdcam": "HDCam", "hd-cam": "HDCam", "hq-hdcam": "HQ-HDCam",
@@ -169,10 +138,11 @@ VERSION_STANDALONE = re.compile(r"\b(?:[vV]\d+|ver\.?\s*\d+|version\s*\d+)\b", r
 YEAR_PATTERN = re.compile(r"(?<![A-Za-z0-9])(?:19|20)\d{2}(?![A-Za-z0-9])")
 
 # Season & Episode Patterns (Bonus & Special Safe)
+BONUS_RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})\b', re.IGNORECASE)
 BONUS_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
-RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special|Part)?[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})', re.IGNORECASE)
-SINGLE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special|Part)?[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
-NAMED_REGEX = re.compile(r'Season\s*0*(\d{1,2})[\s\-,:]*(?:Bonus|Special|Part)?[\s\-,:]*Ep(?:isode)?\s*0*(\d{1,3})\b', re.IGNORECASE)
+RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})', re.IGNORECASE)
+SINGLE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
+NAMED_REGEX = re.compile(r'Season\s*0*(\d{1,2})[\s\-,:]*(?:Part)?[\s\-,:]*Ep(?:isode)?\s*0*(\d{1,3})\b', re.IGNORECASE)
 X_REGEX = re.compile(r'\b0*([1-9]\d?)\s*[xX]\s*0*(\d{1,2})\b', re.IGNORECASE)
 DAY_REGEX = re.compile(r'\b(?:S(?:eason)?\s*0*(\d{1,2})[^\w\n\r]*)?(?:Day|D)\s*0*(\d{1,3})\b', re.IGNORECASE)
 NO_S_REGEX = re.compile(r'\b(?:Season\s*)?0*(\d{1,2})[\s._-]+E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
@@ -690,7 +660,11 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
 
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
-    # Bonus Episode Check (S02.Bonus.Ep.03 -> S2: Bonus 3)
+    # Bonus Episode Check (Range: S02.Bonus.Ep.01-03 -> S2: Bonus 1-3)
+    if m := BONUS_RANGE_REGEX.search(filename):
+        return int(m.group(1)), f"Bonus {int(m.group(2))}-{int(m.group(3))}"
+
+    # Bonus Episode Single: S02.Bonus.Ep.03 -> S2: Bonus 3
     if m := BONUS_REGEX.search(filename):
         return int(m.group(1)), f"Bonus {int(m.group(2))}"
 
@@ -797,7 +771,8 @@ def extract_media_info(filename: str, caption: str):
         tag = "#SERIES"
 
         m = (
-            BONUS_REGEX.search(filename)
+            BONUS_RANGE_REGEX.search(filename)
+            or BONUS_REGEX.search(filename)
             or RANGE_REGEX.search(filename)
             or SINGLE_REGEX.search(filename)
             or NAMED_REGEX.search(filename)
@@ -1191,75 +1166,44 @@ async def _process_with_lock(
             else imdb_details.get("certificates", "N/A")
         )
 
-        genre_names = []
+        # 1. HDHub4u EXACT Genres Logic (Mirror site text directly)
+        genre_list = []
         if hdhub_genres and hdhub_genres != "N/A":
             raw_parts = re.split(r'[,|/•]', hdhub_genres)
-            genre_names = [
-                g.strip()
-                for g in raw_parts
-                if g.strip() and g.strip() != "N/A" and not any(bad in g.lower() for bad in ["dropdown", "menu", "select"])
-            ]
+            for p in raw_parts:
+                clean_p = p.strip()
+                if not clean_p or clean_p == "N/A" or any(bad in clean_p.lower() for bad in ["dropdown", "menu", "select", "category"]):
+                    continue
 
-        if not genre_names:
+                if "&" in clean_p:
+                    for sub_p in clean_p.split("&"):
+                        sub_clean = sub_p.strip().title()
+                        if sub_clean and sub_clean not in genre_list:
+                            genre_list.append(sub_clean)
+                else:
+                    formatted_p = clean_p.title()
+                    if formatted_p not in genre_list:
+                        genre_list.append(formatted_p)
+
+        # 2. Fallback: ONLY when HDHub4u genres are N/A / not available
+        if not genre_list:
             raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
-
+            fallback_genres = []
             if isinstance(raw_genres, str) and raw_genres != "N/A":
-                genre_names = [
-                    g.strip()
-                    for g in raw_genres.split(",")
-                    if g.strip() and g.strip() != "N/A"
-                ]
-
+                fallback_genres = [g.strip() for g in raw_genres.split(",") if g.strip() and g.strip() != "N/A"]
             elif isinstance(raw_genres, (list, tuple)):
                 for g in raw_genres:
                     if isinstance(g, dict):
                         name = g.get("name") or g.get("genre")
                         if name:
-                            genre_names.append(str(name).strip())
+                            fallback_genres.append(str(name).strip())
                     elif isinstance(g, str):
-                        genre_names.append(g.strip())
-                    else:
-                        name = str(g).strip()
-                        if name:
-                            genre_names.append(name)
+                        fallback_genres.append(g.strip())
 
-        # Multi-genre parsing with support for '&' (Action & Adventure -> Action, Adventure)
-        genre_list = []
-        for g in genre_names:
-            clean_g = re.sub(r'["\'<>{}[\]\\]', '', g).strip()
-            if not clean_g or any(bad in clean_g.lower() for bad in ["dropdown", "menu", "select"]):
-                continue
-
-            matched = None
-            for std in STANDARD_GENRES:
-                if clean_g.lower() == std.lower():
-                    matched = std
-                    break
-            if not matched:
-                for map_k, map_v in GENRE_MAPPING.items():
-                    if clean_g.lower() == map_k.lower():
-                        matched = map_v
-                        break
-
-            if matched:
-                for sub_g in matched.split(","):
-                    sub_clean = sub_g.strip()
-                    if sub_clean and sub_clean not in genre_list:
-                        genre_list.append(sub_clean)
-            else:
-                if re.match(r'^[A-Za-z\s\-&]+$', clean_g) and 3 <= len(clean_g) <= 30:
-                    formatted_g = clean_g.title()
-                    if formatted_g not in genre_list:
-                        genre_list.append(formatted_g)
-
-        if not genre_list:
-            raw_backup = tmdb_details.get("genres") or imdb_details.get("genres", "")
-            if isinstance(raw_backup, str) and raw_backup != "N/A":
-                for item in raw_backup.split(","):
-                    t_name = item.strip()
-                    for std in STANDARD_GENRES:
-                        if t_name.lower() == std.lower() and std not in genre_list:
-                            genre_list.append(std)
+            for g in fallback_genres:
+                clean_g = g.strip().title()
+                if clean_g and clean_g not in genre_list:
+                    genre_list.append(clean_g)
 
         genres = ", ".join(genre_list) if genre_list else "N/A"
 
@@ -1604,47 +1548,59 @@ def generate_movie_message(movie_doc, base_name):
             episodes_by_season.items(),
             key=lambda x: int(x[0])
         ):
-            all_ep_numbers = set()
-            special_eps = []
+            regular_eps = set()
+            bonus_eps = set()
 
             for ep in episodes:
                 ep_str = str(ep).strip()
-                if ep_str.lower().startswith("bonus") or ep_str.lower().startswith("special"):
-                    if ep_str not in special_eps:
-                        special_eps.append(ep_str)
+                if not ep_str or ep_str.lower() in ("bonus", "special", "episodes", "episode"):
+                    continue
+
+                if ep_str.lower().startswith("bonus"):
+                    val = re.sub(r'(?i)bonus\s*', '', ep_str).strip()
+                    if "-" in val:
+                        try:
+                            p1, p2 = val.split("-")
+                            bonus_eps.update(range(int(p1), int(p2) + 1))
+                        except ValueError:
+                            pass
+                    elif val.isdigit():
+                        bonus_eps.add(int(val))
                 elif "-" in ep_str:
                     try:
                         p1, p2 = ep_str.split("-")
-                        all_ep_numbers.update(range(int(p1), int(p2) + 1))
+                        regular_eps.update(range(int(p1), int(p2) + 1))
                     except ValueError:
-                        if ep_str not in special_eps:
-                            special_eps.append(ep_str)
+                        pass
                 elif ep_str.isdigit():
-                    all_ep_numbers.add(int(ep_str))
-                else:
-                    if ep_str not in special_eps:
-                        special_eps.append(ep_str)
+                    regular_eps.add(int(ep_str))
 
-            sorted_eps = sorted(all_ep_numbers)
-            collapsed = []
-            if sorted_eps:
-                start = end = sorted_eps[0]
-                for num in sorted_eps[1:]:
+            def collapse_range(num_set):
+                sorted_nums = sorted(num_set)
+                if not sorted_nums:
+                    return []
+                collapsed = []
+                start = end = sorted_nums[0]
+                for num in sorted_nums[1:]:
                     if num == end + 1:
                         end = num
                     else:
                         collapsed.append(str(start) if start == end else f"{start}-{end}")
                         start = end = num
                 collapsed.append(str(start) if start == end else f"{start}-{end}")
+                return collapsed
 
-            final_ep_parts = []
-            if collapsed:
-                final_ep_parts.extend(collapsed)
-            if special_eps:
-                final_ep_parts.extend(sorted(special_eps))
+            line_parts = []
+            reg_list = collapse_range(regular_eps)
+            if reg_list:
+                line_parts.append(", ".join(reg_list))
 
-            if final_ep_parts:
-                episode_lines.append(f"S{int(season)}: {', '.join(final_ep_parts)}")
+            bon_list = collapse_range(bonus_eps)
+            if bon_list:
+                line_parts.append(f"Bonus {', '.join(bon_list)}")
+
+            if line_parts:
+                episode_lines.append(f"S{int(season)}: {', '.join(line_parts)}")
 
         epi_str = "\n".join(episode_lines)
         if epi_str:
