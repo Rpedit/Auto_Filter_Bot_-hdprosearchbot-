@@ -3,208 +3,512 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ALL Movies Studio | {{file_name}}</title>
-    <link rel="stylesheet" href="https://unpkg.com/sheryjs/dist/Shery.css" />
-    <link rel="stylesheet" href="https://biisal.github.io/Resources/StreamCSS.css">
-    <link rel="stylesheet" href="https://biisal.github.io/Resources/playerCss.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HD PRO SEARCH BOT | {{file_name}}</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
-        integrity="sha512-z3gLpd7yknf1YoNbCzqRKc4qyor8gaKU1qmn+CShxbuBusANI9QpRohGBreCFkKxLhei6S9CQXFEbbKuqLg0DA=="
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,500;0,700;0,800;1,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+
+    <!-- Google Cast Official Engine -->
+    <script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+    
+    <!-- HLS.js Multi-Codec Engine -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <style>
+        :root {
+            --brand-red: #E50914;
+            --brand-red-bright: #FF1E27;
+            --brand-orange: #FF5722;
+            --brand-gold: #FFB800;
+        }
+
+        body {
+            background: radial-gradient(circle at 10% 10%, #2b0507 0%, #120305 45%, #080204 90%);
+            color: #f8fafc;
+            font-family: 'Josefin Sans', sans-serif;
+            overflow-x: hidden;
+            min-height: 100vh;
+            touch-action: manipulation;
+        }
+
+        /* Glassmorphism Styling + GPU Acceleration */
+        .glass-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-top: 1px solid rgba(255, 255, 255, 0.22);
+            border-left: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 20px;
+            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.65), inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+            transform: translateZ(0);
+        }
+
+        .glass-card-glow {
+            will-change: transform;
+            transform: translateZ(0);
+            box-shadow: 0 0 35px rgba(229, 9, 20, 0.18), 0 12px 40px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Action Buttons Styling */
+        .player-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 14px 18px;
+            border-radius: 14px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            position: relative;
+            overflow: hidden;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            cursor: pointer;
+            border: none;
+            outline: none;
+        }
+
+        .player-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+            transition: 0.5s;
+        }
+
+        .player-btn:hover::before {
+            left: 100%;
+        }
+
+        .player-btn:hover {
+            transform: translateY(-3px) scale(1.01);
+            filter: brightness(1.15);
+        }
+
+        .player-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* Red-Orange-Gold Gradient Theme Buttons */
+        .btn-copy { 
+            background: linear-gradient(135deg, rgba(229, 9, 20, 0.9), rgba(180, 0, 10, 0.95)); 
+            color: #ffffff; 
+            border: 1px solid rgba(255, 30, 39, 0.4);
+            box-shadow: 0 6px 20px rgba(229, 9, 20, 0.35); 
+        }
+
+        .btn-vlc { 
+            background: linear-gradient(135deg, rgba(255, 87, 34, 0.9), rgba(216, 50, 0, 0.95)); 
+            color: #ffffff; 
+            border: 1px solid rgba(255, 110, 64, 0.4);
+            box-shadow: 0 6px 20px rgba(255, 87, 34, 0.35); 
+        }
+
+        .btn-mx { 
+            background: linear-gradient(135deg, rgba(255, 184, 0, 0.9), rgba(212, 147, 0, 0.95)); 
+            color: #0d0608; 
+            border: 1px solid rgba(255, 200, 50, 0.5);
+            box-shadow: 0 6px 20px rgba(255, 184, 0, 0.35); 
+        }
+
+        .btn-download { 
+            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%); 
+            color: #ffffff; 
+            box-shadow: 0 8px 30px rgba(239, 35, 35, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+
+        /* Gradient Text Classes */
+        .brand-gradient-text {
+            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-family: 'Josefin Sans', sans-serif;
+            font-weight: 800;
+        }
+
+        .brand-text-inline {
+            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            display: inline-block;
+            white-space: nowrap;
+        }
+
+        .no-wrap-title {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            flex-wrap: nowrap;
+        }
+
+        /* Toast Popup */
+        #toast {
+            position: fixed;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            will-change: transform, opacity;
+        }
+
+        #toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #080204; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 87, 34, 0.3); border-radius: 10px; }
+    </style>
 </head>
-<!-- this code is written by @biisal tg:biisal-files  -->
-<!-- stealing credit doesn't make you developer..so try to give full credit to the developer 😊 u will not loose anything for giving proper credit.   -->
 
 <body>
-    <nav>
-        <div class="nleft">
-            <a href="https://t.me/dreamcinezone">
-                <!-- if u are trying to change the header name please remove the title text from bottom line  -->
-                <h3 id="heading" style="z-index: 100;" class="magnet">dreamcinezone </h3>
-            </a>
-        </div>
-        <div class="nryt">
-            <a class="home-btn magnet" href="#main" onclick="toggleWidthnav(this)">Home</a>
 
-            <a href="#sec1" class="about-btn magnet" onclick="toggleWidthnav(this)">About</a>
-        </div>
+    <!-- Safe Template Data Injection (Prevents Double-Quote Crashes) -->
+    <div id="rawFileUrl" style="display: none;">{{file_url}}</div>
+    <div id="rawFileName" style="display: none;">{{file_name}}</div>
+
+    <!-- Centered Header / Navbar -->
+    <nav class="sticky top-0 z-50 glass-card mx-3 my-3 px-4 py-3 max-w-7xl md:mx-auto flex justify-center items-center">
+        <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="no-wrap-title">
+            <h3 class="text-xl sm:text-2xl font-extrabold brand-gradient-text tracking-wide text-center uppercase flex items-center justify-center gap-1.5">
+                <span>HD PRO SEARCH BOT</span>
+                <span style="-webkit-text-fill-color: initial;" class="inline-block leading-none">🔍</span>
+            </h3>
+        </a>
     </nav>
-    <center>
-        <div class="about-nav">
-            <a href="#sec1" class="wlcm magnet" onclick="toggleWidth(this)">Welcome</a>
-            <a href="#sec2" class="abt-chnl magnet" onclick="toggleWidth(this)">Channels</a>
-            <a href="#sec3" class="magnet bot-btn" onclick="toggleWidth(this) , bot_btn_clicked()">Bots</a>
-            <a href="#sec4" class="magnet contact-btn" onclick="toggleWidth(this)">Let's Talk</a>
-        </div>
-    </center>
-    <!-- this code is written by @biisal tg:biisal-files  -->
-    <!-- stealing credit doesn't make you developer..so try to give full credit to the developer 😊 u will not loose anything for giving proper credit.   -->
 
-    <div class="outer">
+    <div class="outer max-w-5xl mx-auto px-3 sm:px-4 mt-4">
         <div class="inner">
             <div class="main" id="main">
-                <video id="player" class="player" src="{{file_url}}" type="video/mp4" playsinline controls
-                    width="100%"></video>
-                <div class="player"></div>
-                <div class="file-name">
-                    <h4>File name : </h4>
-                    <br>
-                    <p id="myDiv">{{file_name}}</p>
-                </div>
-                <div class="downloadBtn">
-                    <button class="magnet" onclick="vlc_player()"><img src="https://i.postimg.cc/15TQ4y7B/vlc.png"
-                            alt="">watch in VLC PLAYER</button>
-                    <button class="magnet" onclick="mx_player()"><img src="https://i.postimg.cc/sx4Msv4T/mx.png"
-                            alt="">watch in MX PLAYER</button>
-                    <button class="magnet" onclick="playit_player()"><img src="https://i.postimg.cc/RVGWYJFF/playit.png"
-                            alt="">watch in PLAYit
-                        PLAYER</button>
-                    <button class="magnet" onclick="km_player()"><img src="https://i.postimg.cc/wT9tFQ9Z/km.png"
-                            alt="">watch in KM PLAYER</button>
-                    <button class="magnet" onclick="s_player()"><img src="https://i.postimg.cc/XYJr6NGg/s.png"
-                            alt="">watch in S PLAYER</button>
-                    <button class="magnet" onclick="hd_player()"><img src="https://i.postimg.cc/rFT43LNh/hd.png"
-                            alt="">watch in HD
-                        PLAYER(4K)</button>
-                    <button class="magnet" onclick="bisalDownload()"><img style="height: 35px;"
-                            src="https://i.postimg.cc/Zncc9YLq/Pngtree-download-icon-3581467.png" alt="">download video
-                    </button>
-                </div>
 
-            </div>
-            <div class="abt">
-                <div class="about">
-                    <div class="about-dets">
-                        <div class="abt-sec" id="sec1" style="padding: 160px 30px;">
-                            <h1 style="text-align: center;">WELCOME TO OUR <Span>STREAMING</Span> PAGE</h1>
-                            <p style="text-align: center; line-height: 2;word-spacing: 2px;  letter-spacing: 0.8px;">
-                                We're
-                                thrilled to have <span>you</span> here.
-                                Get ready for an
-                                amazing <span>experience</span>
-                                filled with <span>entertainment</span>, <span>fun</span>, and <span>surprises</span>.
-                                Grab
-                                your snacks, sit back, and <span>enjoy</span> the show!
+                <!-- Video Player Container (CORS restriction removed for direct streaming) -->
+                <div id="playerContainer" class="w-full rounded-2xl overflow-hidden shadow-2xl bg-black/80 backdrop-blur-2xl border border-white/10 relative glass-card-glow">
+                    <video id="player" class="w-full aspect-video object-contain" playsinline controls preload="metadata">
+                        Your browser does not support playing this video directly.
+                    </video>
+
+                    <!-- Exact Matching Resume Overlay -->
+                    <div id="resumeModal" class="hidden absolute inset-0 bg-black/90 flex items-center justify-center p-3 z-30 transition-all duration-300">
+                        <div class="bg-black/90 text-slate-100 rounded-xl py-5 px-4 sm:px-6 max-w-sm sm:max-w-md w-11/12 text-center shadow-2xl border border-[#FF5722]/40 backdrop-blur-xl">
+                            <p class="text-xs sm:text-sm font-normal text-slate-300 mb-4 leading-snug">
+                                You were watching this video at <span id="resumeTimeText" class="font-bold text-[#FFB800]">00:00:00</span>. Do you want to resume?
                             </p>
-                        </div>
-                        <div class="abt-sec" id="sec2">
-                            <h1>OUR ALL <span>CHANNELS</span> LIST</h1>
-                            <div class="links chnl-link">
-                                <a class="magnet" href="https://t.me/dreamcinezone"><button>Update Channel </button></a>
-                                <a class="magnet" href="https://t.me/dreamcinezone"><button> Movie Request Group </button></a>
-                                <a class="magnet" href="#https://youtube.com/@dreamcinezone0"><button>YouTube Channel </button></a>
-                            </div>
-                        </div>
-                        <div class="abt-sec" id="sec3">
-                            <h1>OUR ALL <span>BOTS</span> LIST</h1>
-                            <div class="links bot-link">
-                                <a class="magnet" href="https://t.me/"><button>Chat Gpt Bot
-                                        </button></a>
-                                <a class="magnet" href="https://t.me/"><button>reaction Bot 
-                                        </button></a>
-                            </div>
-                        </div>
-                        <div class="abt-sec" id="sec4">
-                            <!-- this code is written by @biisal tg:biisal-files  -->
-                            <!-- stealing credit doesn't make you developer..so try to give full credit to the developer 😊 u will not loose anything for giving proper credit.   -->
-
-                            <p style="text-align: center;">We Can Tal'k For Your Support And You Can Report Through
-                                Telegram</p>
-                            <div class="links contact">
-                                <a href="https://t.me/Contact_dreamcinezone_bot"><button>Contact</button></a>
+                            <div class="flex flex-row gap-2.5 justify-center items-center">
+                                <button onclick="confirmResume()" class="bg-[#FF1E27] hover:bg-[#E50914] text-white font-bold py-2 px-4 rounded-lg text-xs sm:text-sm transition active:scale-95 shadow-lg shadow-red-900/40">
+                                    Resume
+                                </button>
+                                <button onclick="confirmRestart()" class="bg-zinc-800 hover:bg-zinc-700 text-slate-200 font-bold py-2 px-4 rounded-lg text-xs sm:text-sm transition active:scale-95 border border-white/10">
+                                    Start Over
+                                </button>
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- File Info Card -->
+                <div class="file-name my-6 p-4 glass-card text-center md:text-left">
+                    <p id="myDiv" class="break-all text-slate-100 text-sm md:text-base font-bold tracking-wide"></p>
+                </div>
+
+                <!-- Translucent Compact Buttons Grid -->
+                <div class="downloadBtn grid grid-cols-1 sm:grid-cols-3 gap-3.5 my-6">
+                    <button class="player-btn btn-copy" onclick="copyStreamLink()">
+                        <i class="fa-solid fa-copy text-lg"></i> Copy Link
+                    </button>
+
+                    <button class="player-btn btn-vlc" onclick="vlc_player()">
+                        <img src="https://i.postimg.cc/15TQ4y7B/vlc.png" class="w-5 h-5 object-contain" alt="VLC"> VLC Player
+                    </button>
+
+                    <button class="player-btn btn-mx" onclick="mx_player()">
+                        <img src="https://i.postimg.cc/sx4Msv4T/mx.png" class="w-5 h-5 object-contain" alt="MX"> MX Player
+                    </button>
+
+                    <button class="player-btn btn-download sm:col-span-3 py-4 text-base font-extrabold" onclick="bisalDownload()">
+                        <img src="https://i.postimg.cc/Zncc9YLq/Pngtree-download-icon-3581467.png" class="w-6 h-6 object-contain filter brightness-200" alt="Download"> Download Video
+                    </button>
+                </div>
+            </div>
+
+            <!-- Info Section -->
+            <div class="abt space-y-8 my-10">
+                <div class="about glass-card p-6 md:p-10 text-center">
+                    <h1 class="text-2xl md:text-3xl font-black mb-3 uppercase tracking-wide leading-normal">
+                        WELCOME TO <span class="brand-text-inline">HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span></span>
+                    </h1>
+                    <p class="max-w-xl mx-auto text-slate-300 text-xs md:text-sm leading-relaxed">
+                        Enjoy high-speed playback, multi-codec streaming options, and seamless external video player integration.
+                    </p>
                 </div>
             </div>
         </div>
-        <footer>
-            <div class="mid">
-                <h1 class="mid-text">VISIT <a href="#sec3" onclick="bot_btn_clicked()"><span>OUR BOTS LIST</span></a>
-                    FOR
-                    MORE
-                    INFO</h1>
-            </div>
 
-            <div class="last-text">
-                <p style="font-weight: 500;">
-                    Welcome To Our Online Streaming Platform! Our Website Allows Users To Generate Streamable Links For
-                    Various Files Using Telegram Bots. Please Note That We Are Not Responsible For The Content Shared Or
-                    Streamed Through Our Service. Users Are Encouraged To Respect Copyright Laws And Adhere To Our
-                    Community
-                    Guidelines. Enjoy Easy, Hassle-Free File Streaming.
-                </p>
-            </div>
-            <center>
-
-                <div class="movie-cont">
-                    <a href="https://t.me/dreamcinezone">
-                        <div class="movieSug">
-                            <div class="movieDets">
-
-                            </div>
-                            <div class="movieimg">
-                                <img src="">
-                            </div>
-                        </div>
+        <!-- Footer -->
+        <footer class="mt-10 border-t border-white/10 pt-6 pb-8 text-center">
+            <div class="copyright text-xs text-slate-400 space-y-3">
+                <h5 class="flex items-center justify-center gap-1 flex-wrap font-semibold">
+                    <span>Copyright © <span id="currentYear"></span></span> 
+                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="brand-text-inline">
+                        HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span>
+                    </a>. 
+                    <span>All Rights Reserved.</span>
+                </h5>
+                
+                <div class="icons flex justify-center py-1">
+                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="text-[#FF5722] hover:text-[#FFB800] transition inline-flex items-center justify-center p-2 rounded-full bg-white/5 border border-white/10">
+                        <i class="fa-brands fa-telegram text-lg"></i>
                     </a>
-                    <div class="low-width-movie-dets">
-                        <div class="movieStsBar">
-                            <div class="movieDets-mini">
-
-                            </div>
-                        </div>
-                    </div>
-                    <button class="ranMovBtn" onclick="getDets()">Get More Movies Suggestion</button>
                 </div>
 
-            </center>
-            <!-- this code is written by @biisal tg:biisal-files  -->
-            <!-- stealing credit doesn't make you developer..so try to give full credit to the developer 😊 u will not loose anything for giving proper credit.   -->
-
-
-            <center>
-                <div class="copyright">
-                    <h5 class="text-center">Copyright © 2024 <a href="https://t.me/dreamcinezone"><span
-                                style="font-weight: 700;">dreamcinezone </span></a>. All
-                        Rights Reserved.</h5>
-                    <div class="icons">
-                        <a href="https://t.me/dreamcinezone"><i class="fa-brands fa-telegram fa-lg"></i></a>
-                        
-                    </div>
-                    <h4 style="font-weight: 700;">This Page Is Made By <a
-                            href="https://t.me/dreamcinezone"><span>dreamcinezone </span></a></h4>
-                </div>
-            </center>
+                <h4 class="font-bold">This Page Is Made By <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="font-extrabold text-[#FF1E27]">RPEDITZ</a></h4>
+            </div>
         </footer>
-</body>
+    </div>
 
+    <!-- Toast Notification Overlay -->
+    <div id="toast" class="glass-card px-5 py-3 text-xs font-bold text-slate-100 border border-[#FF5722]/50 shadow-2xl flex items-center gap-2">
+        <i class="fa-solid fa-circle-check text-[#FFB800] text-base"></i>
+        <span id="toastMsg">Action completed!</span>
+    </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.155.0/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/automat/controlkit.js@master/bin/controlKit.min.js"></script>
-<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/sheryjs/dist/Shery.js"></script>
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        const uncopyableElement = document.querySelector(".uncopyable");
+    <!-- Scripts -->
+    <script>
+        // Safely extract from hidden elements
+        const fileUrl = (document.getElementById("rawFileUrl")?.innerText || "").trim();
+        const fileName = (document.getElementById("rawFileName")?.innerText || "").trim();
+        
+        let storageKey = "watch_progress_default";
+        try {
+            storageKey = "watch_progress_" + btoa(unescape(encodeURIComponent(fileUrl))).replace(/=/g, '');
+        } catch (e) {
+            storageKey = "watch_progress_" + fileUrl.length;
+        }
 
-        uncopyableElement.addEventListener("selectstart", function (event) {
-            event.preventDefault();
+        let savedTime = 0;
+
+        window.addEventListener("DOMContentLoaded", function() {
+            document.getElementById("currentYear").innerText = new Date().getFullYear();
+            document.getElementById("myDiv").innerText = cleanMovieName(fileName);
+            initFastStream();
+            initAutoResumeModal();
         });
-    });
-</script>
-<script src="js/wow.min.js"></script>
-<script>
-    new WOW().init();
-</script>
-<script src="https://cdn.plyr.io/3.6.9/plyr.js"></script>
-<script src="https://biisal.github.io/Resources/StreamJs.js"></script>
-<script src="script.js"></script>
 
+        // Initialize Google Cast SDK
+        window['__onGCastApiAvailable'] = function(isAvailable) {
+            if (isAvailable && window.cast) {
+                try {
+                    cast.framework.CastContext.getInstance().setOptions({
+                        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+                    });
+                } catch(e) {}
+            }
+        };
+
+        // Extract Clean Movie Title
+        function cleanMovieName(rawName) {
+            if (!rawName) return "Movie Stream";
+            
+            let clean = rawName.replace(/\.(mkv|mp4|webm|avi|flv|mov)$/i, "");
+            const pattern = /[\.\_\s\(-](480p|720p|1080p|2160p|4k|2k|360p|hd|sd|bluray|web-dl|web|webrip|hdr|hdrip|hevc|x264|x265|h264|h265|10bit|ds4k|dvdrip|cam|camrip|nf|amzn|esub|sub|hindi|english|telugu|tamil|kannada|malayalam|bengali|marathi|gujarati|punjabi|dubbed|dual|multi|aac|ac3|dts|2\.0|5\.1|7\.1).*$/i;
+            
+            clean = clean.split(pattern)[0];
+            clean = clean.replace(/[\._]/g, " ").trim();
+            
+            return clean || rawName;
+        }
+
+        // Fast Streaming Engine
+        function initFastStream() {
+            const player = document.getElementById("player");
+            if (!fileUrl) return;
+
+            if (Hls.isSupported() && (fileUrl.includes('.m3u8') || fileUrl.includes('hls'))) {
+                const hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    maxBufferLength: 15,
+                    maxMaxBufferLength: 30,
+                    maxBufferSize: 30 * 1024 * 1024,
+                    startFragPrefetch: true,
+                    appendErrorMaxRetry: 3
+                });
+                
+                hls.loadSource(fileUrl);
+                hls.attachMedia(player);
+
+                hls.on(Hls.Events.ERROR, function (event, data) {
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                hls.destroy();
+                                player.src = fileUrl;
+                                break;
+                        }
+                    }
+                });
+            } else {
+                player.src = fileUrl;
+            }
+        }
+
+        function formatTime(seconds) {
+            const sec = Math.floor(seconds);
+            const hrs = Math.floor(sec / 3600);
+            const mins = Math.floor((sec % 3600) / 60);
+            const secs = sec % 60;
+            const pad = (n) => n.toString().padStart(2, '0');
+            return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
+        }
+
+        // Auto-Resume Modal Logic
+        function initAutoResumeModal() {
+            const player = document.getElementById("player");
+            const modal = document.getElementById("resumeModal");
+            const timeText = document.getElementById("resumeTimeText");
+
+            player.addEventListener("loadedmetadata", function() {
+                const storedVal = localStorage.getItem(storageKey);
+                if (storedVal && parseFloat(storedVal) > 5) {
+                    savedTime = parseFloat(storedVal);
+                    timeText.innerText = formatTime(savedTime);
+                    modal.classList.remove("hidden");
+                }
+            });
+
+            let lastSaveTime = 0;
+            player.addEventListener("timeupdate", function() {
+                const now = Date.now();
+                if (player.currentTime > 0 && (now - lastSaveTime > 2000)) {
+                    localStorage.setItem(storageKey, player.currentTime);
+                    lastSaveTime = now;
+                }
+            });
+
+            player.addEventListener("ended", function() {
+                localStorage.removeItem(storageKey);
+            });
+        }
+
+        function confirmResume() {
+            const player = document.getElementById("player");
+            document.getElementById("resumeModal").classList.add("hidden");
+            player.currentTime = savedTime;
+            player.play().catch(() => {});
+        }
+
+        function confirmRestart() {
+            const player = document.getElementById("player");
+            document.getElementById("resumeModal").classList.add("hidden");
+            localStorage.removeItem(storageKey);
+            player.currentTime = 0;
+            player.play().catch(() => {});
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            const toastMsg = document.getElementById("toastMsg");
+            toastMsg.innerText = message;
+            toast.classList.add("show");
+            setTimeout(() => {
+                toast.classList.remove("show");
+            }, 3000);
+        }
+
+        function copyStreamLink() {
+            if (!fileUrl) {
+                showToast("URL not available!");
+                return;
+            }
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(fileUrl).then(() => {
+                    showToast("Stream Link Copied!");
+                }).catch(() => {
+                    fallbackCopyText(fileUrl);
+                });
+            } else {
+                fallbackCopyText(fileUrl);
+            }
+        }
+
+        function fallbackCopyText(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-999999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast("Stream Link Copied!");
+            } catch (err) {
+                showToast("Failed to Copy Link!");
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // VLC Player Intent
+        function vlc_player() {
+            if (!fileUrl) return;
+            const cleanUrl = fileUrl.replace(/^https?:\/\//i, '');
+            const scheme = fileUrl.startsWith('https') ? 'https' : 'http';
+            window.location.href = `intent://${cleanUrl}#Intent;action=android.intent.action.VIEW;scheme=${scheme};type=video/*;package=org.videolan.vlc;S.title=${encodeURIComponent(fileName)};end`;
+        }
+
+        // MX Player Intent
+        function mx_player() {
+            if (!fileUrl) return;
+            const cleanUrl = fileUrl.replace(/^https?:\/\//i, '');
+            const scheme = fileUrl.startsWith('https') ? 'https' : 'http';
+            window.location.href = `intent://${cleanUrl}#Intent;action=android.intent.action.VIEW;scheme=${scheme};type=video/*;package=com.mxtech.videoplayer.ad;S.title=${encodeURIComponent(fileName)};end`;
+        }
+
+        // Universal Download Trigger
+        function bisalDownload() {
+            if (!fileUrl) return;
+            showToast("Starting Download...");
+            const a = document.createElement('a');
+            a.href = fileUrl;
+            a.setAttribute('download', fileName || 'video.mp4');
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            // Backup direct window navigation if cross-origin blocks silent anchor
+            setTimeout(() => {
+                window.location.assign(fileUrl);
+            }, 300);
+        }
+    </script>
+</body>
 </html>
