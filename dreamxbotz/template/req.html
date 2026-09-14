@@ -2,1706 +2,513 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DreamXbotz | {{file_name}}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HD PRO SEARCH BOT | {{file_name}}</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
-        rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,500;0,700;0,800;1,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+
+    <!-- Google Cast Official Engine -->
+    <script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+    
+    <!-- HLS.js Multi-Codec Engine -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
         :root {
-            --bg-primary: rgb(2, 6, 23);
-            --bg-secondary: rgb(30, 41, 59);
-            --bg-glass: rgba(15, 23, 42, 0.6);
-            --bg-glass-dark: rgba(2, 6, 23, 0.95);
-
-            --accent-rose: rgb(244, 63, 94);
-            --accent-rose-light: rgb(248, 113, 113);
-            --accent-blue: rgb(37, 99, 235);
-            --accent-amber: rgb(251, 191, 36);
-
-            --text-primary: rgb(248, 250, 252);
-            --text-secondary: rgb(203, 213, 225);
-            --text-muted: rgb(148, 163, 184);
-
-            --border-subtle: rgba(255, 255, 255, 0.05);
-            --border-normal: rgba(255, 255, 255, 0.1);
-        }
-
-
-        .plyr__control .lucide {
-            fill: none !important;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+            --brand-red: #E50914;
+            --brand-red-bright: #FF1E27;
+            --brand-orange: #FF5722;
+            --brand-gold: #FFB800;
         }
 
         body {
-            font-family: "Inter", sans-serif;
-            background: linear-gradient(to bottom, var(--bg-primary), #0a0e1a);
-            color: var(--text-primary);
+            background: radial-gradient(circle at 10% 10%, #2b0507 0%, #120305 45%, #080204 90%);
+            color: #f8fafc;
+            font-family: 'Josefin Sans', sans-serif;
+            overflow-x: hidden;
             min-height: 100vh;
-            line-height: 1.6;
+            touch-action: manipulation;
         }
 
-
-        .header {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
-            background: var(--bg-glass-dark);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border-subtle);
+        /* Glassmorphism Styling + GPU Acceleration */
+        .glass-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-top: 1px solid rgba(255, 255, 255, 0.22);
+            border-left: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 20px;
+            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.65), inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+            transform: translateZ(0);
         }
 
-        .header-content {
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 1rem 1.5rem;
+        .glass-card-glow {
+            will-change: transform;
+            transform: translateZ(0);
+            box-shadow: 0 0 35px rgba(229, 9, 20, 0.18), 0 12px 40px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Action Buttons Styling */
+        .player-btn {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-        }
-
-        .logo {
-            font-family: "JetBrains Mono", monospace;
-            font-size: 1.5rem;
-            font-weight: 800;
-            background: linear-gradient(135deg,
-                    var(--accent-rose),
-                    var(--accent-amber));
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-decoration: none;
-            display: inline-block;
-        }
-
-        .nav {
-            display: flex;
-            gap: 2rem;
-        }
-
-        .nav a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.875rem;
-            font-weight: 500;
-            transition: color 0.2s;
-        }
-
-        .nav a:hover {
-            color: var(--accent-rose);
-        }
-
-        .mobile-menu {
-            display: none;
-            background: none;
-            border: none;
-            color: var(--text-primary);
-            cursor: pointer;
-        }
-
-
-        .slogan {
-            text-align: center;
-            padding: 6.5rem 1.5rem 0.5rem;
-            font-size: 1rem;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-        }
-
-        .slogan-text {
-            color: var(--text-secondary);
-        }
-
-        .slogan-highlight {
-            background: linear-gradient(135deg,
-                    var(--accent-rose),
-                    var(--accent-amber));
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 2rem 1.5rem 3rem;
-        }
-
-
-        .player-wrapper {
-            margin-bottom: 1.5rem;
-            border-radius: 16px;
-            overflow: hidden;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-subtle);
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
-        }
-
-        .video-container {
-            position: relative;
+            justify-content: center;
+            gap: 10px;
             width: 100%;
-            padding-bottom: 56.25%;
-
-            background: #000;
-            overflow: hidden;
-        }
-
-        .video-container video {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-
-
-        .video-container .plyr {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-
-
-        .info-card {
-            background: var(--bg-glass);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border-subtle);
-            border-radius: 12px;
-            padding: 1.75rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .file-title {
-            font-size: 1.5rem;
+            padding: 14px 18px;
+            border-radius: 14px;
             font-weight: 700;
-            color: var(--text-primary);
-            margin-bottom: 1rem;
-            line-height: 1.4;
-            word-break: break-word;
-        }
-
-        .file-meta {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-            margin-bottom: 1.5rem;
-        }
-
-        .meta-tag {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.375rem 0.875rem;
-            background: rgba(244, 63, 94, 0.1);
-            border: 1px solid rgba(244, 63, 94, 0.2);
-            border-radius: 6px;
-            color: var(--accent-rose);
-            font-size: 0.8125rem;
-            font-weight: 600;
-        }
-
-
-        .actions {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 0.75rem;
-        }
-
-        .btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.625rem;
-            padding: 0.875rem 1.25rem;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-normal);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-            font-weight: 600;
-            text-decoration: none;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn:hover {
-            background: rgba(244, 63, 94, 0.1);
-            border-color: var(--accent-rose);
-            transform: translateY(-1px);
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg,
-                    var(--accent-rose),
-                    rgb(225, 29, 72));
-            border-color: transparent;
-        }
-
-        .btn-primary:hover {
-            box-shadow: 0 8px 20px rgba(244, 63, 94, 0.3);
-        }
-
-        .btn svg {
-            width: 18px;
-            height: 18px;
-        }
-
-        .btn img {
-            width: 18px;
-            height: 18px;
-        }
-
-
-        .dropdown {
+            letter-spacing: 0.8px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
             position: relative;
-        }
-
-        .dropdown-menu {
-            position: absolute;
-            bottom: calc(100% + 0.5rem);
-            right: 0;
-            min-width: 200px;
-            max-width: 280px;
-            max-height: 60vh;
-            overflow-y: auto;
-            background: var(--bg-glass-dark);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border-normal);
-            border-radius: 8px;
-            padding: 0.5rem;
-            opacity: 0;
-            visibility: hidden;
-            transform: translateY(10px);
-            transition: all 0.2s;
-            z-index: 100;
-        }
-
-        .dropdown-menu.active {
-            opacity: 1;
-            visibility: visible;
-            transform: translateY(0);
-        }
-
-        .dropdown-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 0.5rem;
-        }
-
-        .player-link {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 0.625rem;
-            background: rgba(30, 41, 59, 0.4);
-            border: 1px solid var(--border-subtle);
-            border-radius: 6px;
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.8125rem;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-
-        .player-link img {
-            width: 16px;
-            height: 16px;
-            flex-shrink: 0;
-        }
-
-        .player-link:hover {
-            background: rgba(244, 63, 94, 0.1);
-            border-color: var(--accent-rose);
-            color: var(--accent-rose);
-        }
-
-
-        .cards-section {
-            margin: 3rem 0;
-        }
-
-        .section-header {
-            text-align: center;
-            margin-bottom: 2.5rem;
-        }
-
-        .section-title {
-            font-size: 2rem;
-            font-weight: 800;
-            margin-bottom: 0.5rem;
-            background: linear-gradient(135deg,
-                    var(--accent-rose),
-                    var(--accent-amber));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .section-subtitle {
-            color: var(--text-muted);
-        }
-
-        .cards-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .card {
-            background: var(--bg-glass);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border-subtle);
-            border-radius: 12px;
-            padding: 2rem;
-            transition: all 0.3s;
-        }
-
-        .card:hover {
-            border-color: var(--accent-rose);
-            transform: translateY(-4px);
-            box-shadow: 0 12px 40px rgba(244, 63, 94, 0.2);
-        }
-
-        .card-icon {
-            width: 48px;
-            height: 48px;
-            background: rgba(244, 63, 94, 0.1);
-            border: 1px solid rgba(244, 63, 94, 0.2);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 1.25rem;
-        }
-
-        .card-icon svg {
-            color: var(--accent-rose);
-        }
-
-        .card h3 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            margin-bottom: 0.75rem;
-        }
-
-        .card p {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-            line-height: 1.6;
-            margin-bottom: 1.5rem;
-        }
-
-        .card-links {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .card-link {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.625rem 0.875rem;
-            background: rgba(30, 41, 59, 0.4);
-            border: 1px solid var(--border-subtle);
-            border-radius: 6px;
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.8125rem;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-
-        .card-link:hover {
-            background: rgba(244, 63, 94, 0.1);
-            border-color: var(--accent-rose);
-            color: var(--accent-rose);
-        }
-
-
-        .footer {
-            text-align: center;
-            padding: 2.5rem 1.5rem;
-            border-top: 1px solid var(--border-subtle);
-            color: var(--text-muted);
-            font-size: 0.875rem;
-        }
-
-        .footer a {
-            color: var(--accent-rose);
-            text-decoration: none;
-            font-weight: 600;
-        }
-
-
-        .plyr {
-            --plyr-color-main: rgb(244, 63, 94);
-            border-radius: 0 0 16px 16px;
-        }
-
-        .plyr__control {
-            color: white;
-        }
-
-        .plyr__control:hover {
-            background: rgba(244, 63, 94, 0.2);
-        }
-
-        .plyr__control--overlaid {
-            background: rgba(244, 63, 94, 0.9);
-        }
-
-        .plyr__menu {
-            background: var(--bg-glass-dark) !important;
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border-normal);
-            border-radius: 8px;
-        }
-
-        .plyr__menu__container .plyr__control {
-            color: var(--text-primary);
-        }
-
-        .plyr__menu__container .plyr__control:hover {
-            background: rgba(244, 63, 94, 0.1);
-        }
-
-        .plyr__menu__container .plyr__control[role="menuitemradio"][aria-checked="true"]::before {
-            background: var(--accent-rose);
-        }
-
-
-        .aspect-dropdown {
-            position: absolute;
-            bottom: calc(100% + 10px);
-            right: 0;
-            min-width: 180px;
-            background: var(--bg-glass-dark);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border-normal);
-            border-radius: 8px;
-            padding: 0.5rem;
-            opacity: 0;
-            visibility: hidden;
-            transform: translateY(10px);
-            transition: all 0.2s;
-            z-index: 1000;
-        }
-
-        .aspect-dropdown.active {
-            opacity: 1;
-            visibility: visible;
-            transform: translateY(0);
-        }
-
-        .aspect-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.5rem 0.75rem;
-            border-radius: 6px;
-            color: var(--text-secondary);
+            overflow: hidden;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
             cursor: pointer;
-            font-size: 0.8125rem;
-            transition: all 0.2s;
-        }
-
-        .aspect-item:hover {
-            background: rgba(244, 63, 94, 0.1);
-            color: var(--accent-rose);
-        }
-
-        .aspect-item.active {
-            background: rgba(244, 63, 94, 0.2);
-            color: var(--accent-rose);
-        }
-
-
-
-        @media (max-width: 768px) {
-            .nav {
-                display: none;
-                position: absolute;
-                top: 100%;
-                left: 0;
-                right: 0;
-                background: var(--bg-glass-dark);
-                flex-direction: column;
-                padding: 1rem;
-                gap: 1rem;
-                border-bottom: 1px solid var(--border-subtle);
-                backdrop-filter: blur(20px);
-                z-index: 999;
-                animation: slideDown 0.3s ease-out;
-            }
-
-            .nav.active {
-                display: flex;
-            }
-
-            @keyframes slideDown {
-                from {
-                    opacity: 0;
-                    transform: translateY(-10px);
-                }
-
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
-            }
-
-            .mobile-menu {
-                display: block;
-            }
-
-
-            .slogan {
-                padding: 5rem 1rem 0.5rem;
-                font-size: 0.9rem;
-            }
-
-            .container {
-                padding: 1rem 1rem 2rem;
-            }
-
-
-            .player-wrapper {
-                margin-bottom: 2rem;
-            }
-
-
-            .info-card {
-                padding: 1.5rem;
-                margin-bottom: 2rem;
-            }
-
-
-            .file-title {
-                font-size: 1.2rem;
-                margin-bottom: 0.75rem;
-            }
-
-
-            .cards-section {
-                margin-top: 5rem !important;
-            }
-
-
-            .file-meta {
-                margin-bottom: 1.5rem;
-            }
-
-
-            .cards-section {
-                margin-top: 0rem;
-            }
-
-
-            .actions {
-                grid-template-columns: 1fr;
-                gap: 0.75rem;
-            }
-
-
-            .actions .dropdown {
-                width: 100%;
-                display: flex;
-            }
-
-            .actions .dropdown .btn {
-                width: 100%;
-                justify-content: center;
-            }
-
-
-            .actions .dropdown-menu {
-                width: 100%;
-                min-width: 250px;
-                left: 50%;
-                transform: translateX(-50%) translateY(10px);
-                z-index: 1001;
-            }
-
-            .actions .dropdown-menu.active {
-                transform: translateX(-50%) translateY(0);
-            }
-
-            .btn {
-                padding: 0.5rem 0.75rem;
-                font-size: 0.85rem;
-            }
-
-
-            .audio-warning {
-                font-size: 0.6rem;
-                padding: 8px 12px;
-                margin: 1rem 0;
-            }
-
-            .cards-grid {
-                grid-template-columns: 1fr;
-            }
-
-
-            .plyr__controls {
-                padding-left: 5px;
-                padding-right: 5px;
-            }
-
-            .plyr__control {
-                padding: 5px;
-
-            }
-
-
-            .plyr__control[data-plyr="pip"],
-            .plyr__control[data-plyr="airplay"] {
-                display: none;
-            }
-
-
-            .plyr__progress__container {
-                flex: 1;
-
-                min-width: 100px;
-
-            }
-
-            .plyr__progress input[type="range"] {
-                height: 12px !important;
-
-                touch-action: manipulation;
-            }
-
-
-            .plyr__volume {
-                display: none !important;
-
-            }
-
-
-            @media (max-width: 380px) {
-                .plyr__time {
-                    display: none;
-                }
-            }
-
-
-            .aspect-dropdown {
-                min-width: 120px;
-
-                bottom: calc(100% + 5px);
-
-                max-height: 50vh;
-
-                overflow-y: auto;
-
-            }
-
-            .aspect-item {
-                padding: 0.3rem 0.5rem;
-                font-size: 0.65rem;
-
-            }
-
-            .aspect-item svg {
-                width: 12px;
-                height: 12px;
-            }
-
-
-            .volume-popup {
-                height: 100px;
-
-                width: 28px;
-                bottom: calc(100% + 5px);
-            }
-
-            .volume-percent {
-                font-size: 0.65rem;
-            }
-
-            .volume-slider-container {
-                height: 80px;
-            }
-
-            .volume-slider {
-                width: 80px !important;
-
-                margin-top: 38px !important;
-
-            }
-        }
-
-
-        button[data-plyr="volume-custom"] {
-            display: flex !important;
-            align-items: center;
-            justify-content: center;
-            height: auto;
-            position: relative;
-        }
-
-        .audio-warning {
-            position: static;
-            background: transparent;
-            color: rgb(251, 191, 36);
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
-            gap: 6px;
-            margin: 1.5rem 0;
-            text-align: center;
-        }
-
-        .audio-warning svg {
-            margin-top: 3px;
-        }
-
-        .audio-warning button {
-            background: none;
             border: none;
-            color: white;
-            cursor: pointer;
-            padding: 4px;
-            display: flex;
-            align-items: center;
-        }
-
-        button[data-plyr="volume-custom"] svg {
-            width: var(--plyr-control-icon-size, 18px);
-            height: var(--plyr-control-icon-size, 18px);
-            pointer-events: none;
-        }
-
-        .volume-popup {
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 32px;
-            height: 120px;
-            background: var(--bg-glass-dark);
-            backdrop-filter: blur(20px);
-            border: 1px solid var(--border-normal);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 10px 0;
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.2s;
-            margin-bottom: 10px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            z-index: 1000;
-        }
-
-        .volume-popup.active {
-            opacity: 1;
-            visibility: visible;
-            transform: translateX(-50%) translateY(0);
-        }
-
-        .volume-slider-container {
-            width: 100%;
-            height: 100px;
-            display: flex;
-            justify-content: center;
-            position: relative;
-        }
-
-        .volume-slider {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 100px !important;
-
-            flex-shrink: 0;
-            height: 4px !important;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 2px;
             outline: none;
-            transform: rotate(-90deg);
-            transform-origin: center;
-            cursor: pointer;
-            margin-top: 48px !important;
-            padding: 0 !important;
-
         }
 
-        .volume-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 12px;
-            height: 12px;
-            background: var(--accent-rose);
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 0 10px rgba(244, 63, 94, 0.5);
-        }
-
-        .volume-percent {
+        .player-btn::before {
+            content: '';
             position: absolute;
-            top: -25px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 11px;
-            font-weight: 600;
-            color: white;
-            background: var(--accent-rose);
-            padding: 2px 5px;
-            border-radius: 4px;
-            pointer-events: none;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+            transition: 0.5s;
+        }
+
+        .player-btn:hover::before {
+            left: 100%;
+        }
+
+        .player-btn:hover {
+            transform: translateY(-3px) scale(1.01);
+            filter: brightness(1.15);
+        }
+
+        .player-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* Red-Orange-Gold Gradient Theme Buttons */
+        .btn-copy { 
+            background: linear-gradient(135deg, rgba(229, 9, 20, 0.9), rgba(180, 0, 10, 0.95)); 
+            color: #ffffff; 
+            border: 1px solid rgba(255, 30, 39, 0.4);
+            box-shadow: 0 6px 20px rgba(229, 9, 20, 0.35); 
+        }
+
+        .btn-vlc { 
+            background: linear-gradient(135deg, rgba(255, 87, 34, 0.9), rgba(216, 50, 0, 0.95)); 
+            color: #ffffff; 
+            border: 1px solid rgba(255, 110, 64, 0.4);
+            box-shadow: 0 6px 20px rgba(255, 87, 34, 0.35); 
+        }
+
+        .btn-mx { 
+            background: linear-gradient(135deg, rgba(255, 184, 0, 0.9), rgba(212, 147, 0, 0.95)); 
+            color: #0d0608; 
+            border: 1px solid rgba(255, 200, 50, 0.5);
+            box-shadow: 0 6px 20px rgba(255, 184, 0, 0.35); 
+        }
+
+        .btn-download { 
+            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%); 
+            color: #ffffff; 
+            box-shadow: 0 8px 30px rgba(239, 35, 35, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+
+        /* Gradient Text Classes */
+        .brand-gradient-text {
+            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-family: 'Josefin Sans', sans-serif;
+            font-weight: 800;
+        }
+
+        .brand-text-inline {
+            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            display: inline-block;
             white-space: nowrap;
         }
 
-
-        .plyr__volume {
-            display: none !important;
+        .no-wrap-title {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            flex-wrap: nowrap;
         }
 
-        .fade-in {
-            animation: fadeIn 0.5s ease-out;
+        /* Toast Popup */
+        #toast {
+            position: fixed;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            will-change: transform, opacity;
         }
 
-
-        ::-webkit-scrollbar {
-            width: 8px;
+        #toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
         }
 
-        ::-webkit-scrollbar-track {
-            background: var(--bg-primary);
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--bg-secondary);
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--accent-rose);
-        }
-
-        html {
-            scroll-behavior: smooth;
-            scroll-padding-top: 70px;
-        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #080204; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 87, 34, 0.3); border-radius: 10px; }
     </style>
 </head>
 
 <body>
 
-    <header class="header">
-        <div class="header-content">
-            <a href="https://t.me/dreamxbotz" class="logo"> DreamXbotz </a>
+    <!-- Safe Template Data Injection (Prevents Double-Quote Crashes) -->
+    <div id="rawFileUrl" style="display: none;">{{file_url}}</div>
+    <div id="rawFileName" style="display: none;">{{file_name}}</div>
 
-            <nav class="nav">
-                <a href="#video-section">Stream</a>
-                <a href="#explore">Explore</a>
-                <a href="https://t.me/dreamxbotz">Contact</a>
-            </nav>
+    <!-- Centered Header / Navbar -->
+    <nav class="sticky top-0 z-50 glass-card mx-3 my-3 px-4 py-3 max-w-7xl md:mx-auto flex justify-center items-center">
+        <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="no-wrap-title">
+            <h3 class="text-xl sm:text-2xl font-extrabold brand-gradient-text tracking-wide text-center uppercase flex items-center justify-center gap-1.5">
+                <span>HD PRO SEARCH BOT</span>
+                <span style="-webkit-text-fill-color: initial;" class="inline-block leading-none">🔍</span>
+            </h3>
+        </a>
+    </nav>
 
-            <button class="mobile-menu">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="3" y1="12" x2="21" y2="12"></line>
-                    <line x1="3" y1="6" x2="21" y2="6"></line>
-                    <line x1="3" y1="18" x2="21" y2="18"></line>
-                </svg>
-            </button>
-        </div>
-    </header>
+    <div class="outer max-w-5xl mx-auto px-3 sm:px-4 mt-4">
+        <div class="inner">
+            <div class="main" id="main">
 
-
-    <div class="slogan">
-        <span class="slogan-text">Stream Effortlessly,</span> <span class="slogan-highlight">Anytime, Anywhere</span>
-    </div>
-
-
-    <div class="container">
-
-        <section id="video-section" class="fade-in">
-            <div class="player-wrapper">
-                <div class="video-container">
-                    <video id="player" class="mkv-player" playsinline controls
-                        data-poster="https://i.ibb.co/MxYbt8M1/x.jpg">
-                        <source src="{{file_url}}" />
+                <!-- Video Player Container (CORS restriction removed for direct streaming) -->
+                <div id="playerContainer" class="w-full rounded-2xl overflow-hidden shadow-2xl bg-black/80 backdrop-blur-2xl border border-white/10 relative glass-card-glow">
+                    <video id="player" class="w-full aspect-video object-contain" playsinline controls preload="metadata">
+                        Your browser does not support playing this video directly.
                     </video>
-                </div>
-            </div>
 
-
-            <div class="info-card">
-                <h1 class="file-title">{{file_name}}</h1>
-
-                <div class="file-meta">
-                    <span class="meta-tag">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 16 14"></polyline>
-                        </svg>
-                        Now Streaming
-                    </span>
-                </div>
-
-                <div class="actions">
-                    <button class="btn btn-primary" onclick="blazeDownload()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="7 10 12 15 17 10"></polyline>
-                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                        </svg>
-                        Download
-                    </button>
-
-                    <button class="btn" onclick="vlc_player()">
-                        <img src="https://i.postimg.cc/15TQ4y7B/vlc.png" alt="VLC" />
-                        VLC Player
-                    </button>
-
-                    <button class="btn" onclick="mx_player()">
-                        <img src="https://i.postimg.cc/sx4Msv4T/mx.png" alt="MX" />
-                        MX Player
-                    </button>
-
-                    <div class="dropdown">
-                        <button class="btn" onclick="toggleDropdown()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="1"></circle>
-                                <circle cx="19" cy="12" r="1"></circle>
-                                <circle cx="5" cy="12" r="1"></circle>
-                            </svg>
-                            More Players
-                        </button>
-
-                        <div class="dropdown-menu" id="players-dropdown">
-                            <div class="dropdown-grid">
-                                <a href="#" class="player-link" onclick="playit_player()">
-                                    <img src="https://i.postimg.cc/RVGWYJFF/playit.png" alt="PLAYit" />
-                                    <span>PLAYit</span>
-                                </a>
-                                <a href="#" class="player-link" onclick="km_player()">
-                                    <img src="https://i.postimg.cc/wT9tFQ9Z/km.png" alt="KM" />
-                                    <span>KMPlayer</span>
-                                </a>
-                                <a href="#" class="player-link" onclick="s_player()">
-                                    <img src="https://i.postimg.cc/XYJr6NGg/s.png" alt="S" />
-                                    <span>S Player</span>
-                                </a>
-                                <a href="#" class="player-link" onclick="hd_player()">
-                                    <img src="https://i.postimg.cc/rFT43LNh/hd.png" alt="HD" />
-                                    <span>HD Player</span>
-                                </a>
-                                <a href="#" class="player-link" onclick="mx_playerpro()">
-                                    <img src="https://i.postimg.cc/sx4Msv4T/mx.png" alt="MX Pro" />
-                                    <span>MX Pro</span>
-                                </a>
+                    <!-- Exact Matching Resume Overlay -->
+                    <div id="resumeModal" class="hidden absolute inset-0 bg-black/90 flex items-center justify-center p-3 z-30 transition-all duration-300">
+                        <div class="bg-black/90 text-slate-100 rounded-xl py-5 px-4 sm:px-6 max-w-sm sm:max-w-md w-11/12 text-center shadow-2xl border border-[#FF5722]/40 backdrop-blur-xl">
+                            <p class="text-xs sm:text-sm font-normal text-slate-300 mb-4 leading-snug">
+                                You were watching this video at <span id="resumeTimeText" class="font-bold text-[#FFB800]">00:00:00</span>. Do you want to resume?
+                            </p>
+                            <div class="flex flex-row gap-2.5 justify-center items-center">
+                                <button onclick="confirmResume()" class="bg-[#FF1E27] hover:bg-[#E50914] text-white font-bold py-2 px-4 rounded-lg text-xs sm:text-sm transition active:scale-95 shadow-lg shadow-red-900/40">
+                                    Resume
+                                </button>
+                                <button onclick="confirmRestart()" class="bg-zinc-800 hover:bg-zinc-700 text-slate-200 font-bold py-2 px-4 rounded-lg text-xs sm:text-sm transition active:scale-95 border border-white/10">
+                                    Start Over
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </section>
 
-
-        <section id="explore" class="cards-section">
-            <div class="section-header">
-                <h2 class="section-title">Explore Our Universe</h2>
-                <p class="section-subtitle">
-                    Discover our channels and intelligent bots
-                </p>
-            </div>
-
-            <div class="cards-grid">
-                <div class="card">
-                    <div class="card-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="9" cy="7" r="4"></circle>
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                        </svg>
-                    </div>
-                    <h3>Our Channels</h3>
-                    <p>
-                        Get exclusive content and real-time notifications from our premium
-                        channels
-                    </p>
-                    <div class="card-links">
-                        <a href="https://t.me/dreamxbotz" class="card-link">
-                            <span>DreamXbotz</span>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                <polyline points="12 5 19 12 12 19"></polyline>
-                            </svg>
-                        </a>
-                        <a href="https://t.me/Blaze_Updatez" class="card-link">
-                            <span>Blaze Updates</span>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                <polyline points="12 5 19 12 12 19"></polyline>
-                            </svg>
-                        </a>
-                        <a href="https://t.me/anime_cartoon_stickers" class="card-link">
-                            <span>Anime Stickers</span>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                <polyline points="12 5 19 12 12 19"></polyline>
-                            </svg>
-                        </a>
-                    </div>
+                <!-- File Info Card -->
+                <div class="file-name my-6 p-4 glass-card text-center md:text-left">
+                    <p id="myDiv" class="break-all text-slate-100 text-sm md:text-base font-bold tracking-wide"></p>
                 </div>
 
-                <div class="card">
-                    <div class="card-icon">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                        </svg>
-                    </div>
-                    <h3>Our Bots</h3>
-                    <p>
-                        Intelligent bots for enhanced streaming and automated assistance
-                    </p>
-                    <div class="card-links">
-                        <a href="https://t.me/dreamxbotz" class="card-link">
-                            <span>DreamXbotz</span>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                <polyline points="12 5 19 12 12 19"></polyline>
-                            </svg>
-                        </a>
-                        <a href="https://t.me/Blaze_Moviesposter_downloaderbot" class="card-link">
-                            <span>PosterFlix Bot</span>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                <polyline points="12 5 19 12 12 19"></polyline>
-                            </svg>
-                        </a>
-                        <a href="https://t.me/video_thumbcover_changerbot" class="card-link">
-                            <span>Thumb Changer</span>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                <polyline points="12 5 19 12 12 19"></polyline>
-                            </svg>
-                        </a>
-                        <a href="https://t.me/Blaze_forward_bot" class="card-link">
-                            <span>Forward Bot Pro</span>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                <polyline points="12 5 19 12 12 19"></polyline>
-                            </svg>
-                        </a>
-                    </div>
+                <!-- Translucent Compact Buttons Grid -->
+                <div class="downloadBtn grid grid-cols-1 sm:grid-cols-3 gap-3.5 my-6">
+                    <button class="player-btn btn-copy" onclick="copyStreamLink()">
+                        <i class="fa-solid fa-copy text-lg"></i> Copy Link
+                    </button>
+
+                    <button class="player-btn btn-vlc" onclick="vlc_player()">
+                        <img src="https://i.postimg.cc/15TQ4y7B/vlc.png" class="w-5 h-5 object-contain" alt="VLC"> VLC Player
+                    </button>
+
+                    <button class="player-btn btn-mx" onclick="mx_player()">
+                        <img src="https://i.postimg.cc/sx4Msv4T/mx.png" class="w-5 h-5 object-contain" alt="MX"> MX Player
+                    </button>
+
+                    <button class="player-btn btn-download sm:col-span-3 py-4 text-base font-extrabold" onclick="bisalDownload()">
+                        <img src="https://i.postimg.cc/Zncc9YLq/Pngtree-download-icon-3581467.png" class="w-6 h-6 object-contain filter brightness-200" alt="Download"> Download Video
+                    </button>
                 </div>
             </div>
-        </section>
+
+            <!-- Info Section -->
+            <div class="abt space-y-8 my-10">
+                <div class="about glass-card p-6 md:p-10 text-center">
+                    <h1 class="text-2xl md:text-3xl font-black mb-3 uppercase tracking-wide leading-normal">
+                        WELCOME TO <span class="brand-text-inline">HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span></span>
+                    </h1>
+                    <p class="max-w-xl mx-auto text-slate-300 text-xs md:text-sm leading-relaxed">
+                        Enjoy high-speed playback, multi-codec streaming options, and seamless external video player integration.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-10 border-t border-white/10 pt-6 pb-8 text-center">
+            <div class="copyright text-xs text-slate-400 space-y-3">
+                <h5 class="flex items-center justify-center gap-1 flex-wrap font-semibold">
+                    <span>Copyright © <span id="currentYear"></span></span> 
+                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="brand-text-inline">
+                        HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span>
+                    </a>. 
+                    <span>All Rights Reserved.</span>
+                </h5>
+                
+                <div class="icons flex justify-center py-1">
+                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="text-[#FF5722] hover:text-[#FFB800] transition inline-flex items-center justify-center p-2 rounded-full bg-white/5 border border-white/10">
+                        <i class="fa-brands fa-telegram text-lg"></i>
+                    </a>
+                </div>
+
+                <h4 class="font-bold">This Page Is Made By <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="font-extrabold text-[#FF1E27]">RPEDITZ</a></h4>
+            </div>
+        </footer>
     </div>
 
+    <!-- Toast Notification Overlay -->
+    <div id="toast" class="glass-card px-5 py-3 text-xs font-bold text-slate-100 border border-[#FF5722]/50 shadow-2xl flex items-center gap-2">
+        <i class="fa-solid fa-circle-check text-[#FFB800] text-base"></i>
+        <span id="toastMsg">Action completed!</span>
+    </div>
 
-    <footer class="footer">
-        <p>
-            &copy; 2026 <a href="https://t.me/dreamxbotz">DreamXbotz</a>. All Rights
-            Reserved.
-        </p>
-    </footer>
-
-
-    <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/Bharathboy/utils@main/jsmkv-polyfill.js"></script>
-
+    <!-- Scripts -->
     <script>
-        function initPlayer() {
-            const video = document.querySelector("#player");
-            if (!video) {
-                console.error("Video element not found");
-                return;
-            }
-
-            const source = video.querySelector("source");
-            const url = source?.src || "";
-            const cleanUrl = url.split("?")[0];
-            const ext = cleanUrl.split(".").pop()?.toLowerCase() || "";
-
-            if (ext === "mkv" && document.querySelector('script[src*="jsmkv"]')) {
-                video.classList.add("mkv-player");
-                setTimeout(() => initPlyr(video), 100);
-            } else if (
-                ["flv", "ts"].includes(ext) &&
-                typeof mpegts !== "undefined"
-            ) {
-                initMpegts(video, url);
-            } else {
-                setTimeout(() => initPlyr(video), 100);
-            }
+        // Safely extract from hidden elements
+        const fileUrl = (document.getElementById("rawFileUrl")?.innerText || "").trim();
+        const fileName = (document.getElementById("rawFileName")?.innerText || "").trim();
+        
+        let storageKey = "watch_progress_default";
+        try {
+            storageKey = "watch_progress_" + btoa(unescape(encodeURIComponent(fileUrl))).replace(/=/g, '');
+        } catch (e) {
+            storageKey = "watch_progress_" + fileUrl.length;
         }
 
-        function initPlyr(video) {
-            if (window.plyrPlayer) return;
-            if (typeof Plyr === "undefined") {
-                console.error("Plyr not loaded");
-                return;
-            }
+        let savedTime = 0;
 
-            const player = new Plyr(video, {
-                controls: [
-                    "play-large",
-                    "play",
-                    "progress",
-                    "current-time",
-                    "mute",
-                    "volume",
-                    "pip",
-                    "airplay",
-                    "fullscreen",
-                ],
-            });
-
-            window.plyrPlayer = player;
-            setTimeout(() => {
-                addCustomControls();
-            }, 200);
-        }
-
-        function addCustomControls() {
-            const controls = document.querySelector(".plyr__controls");
-            if (!controls) {
-                console.error("Plyr controls not found");
-                return;
-            }
-            const fullscreen = controls.querySelector('[data-plyr="fullscreen"]');
-            if (!fullscreen) {
-                console.error("Fullscreen button not found");
-                return;
-            }
-            const speedBtn = document.createElement("button");
-            speedBtn.className = "plyr__controls__item plyr__control";
-            speedBtn.type = "button";
-            speedBtn.setAttribute("data-plyr", "speed-custom");
-            speedBtn.innerHTML = `
-                <i data-lucide="gauge" style="width: 18px; height: 18px;"></i>
-                <span class="plyr__tooltip">Speed</span>
-            `;
-            lucide.createIcons({ root: speedBtn });
-
-            const speedDropdown = document.createElement("div");
-            speedDropdown.className = "aspect-dropdown";
-            speedDropdown.innerHTML = `
-                <div class="aspect-item" data-speed="0.5">
-                    <span>0.5x</span>
-                </div>
-                <div class="aspect-item" data-speed="0.75">
-                    <span>0.75x</span>
-                </div>
-                <div class="aspect-item active" data-speed="1">
-                    <span>1x Normal</span>
-                    <i data-lucide="check" style="width: 14px; height: 14px;"></i>
-                </div>
-                <div class="aspect-item" data-speed="1.25">
-                    <span>1.25x</span>
-                </div>
-                <div class="aspect-item" data-speed="1.5">
-                    <span>1.5x</span>
-                </div>
-                <div class="aspect-item" data-speed="1.75">
-                    <span>1.75x</span>
-                </div>
-                <div class="aspect-item" data-speed="2">
-                    <span>2x</span>
-                </div>
-            `;
-
-            controls.insertBefore(speedBtn, fullscreen);
-            speedBtn.appendChild(speedDropdown);
-            lucide.createIcons({ root: speedDropdown });
-            speedBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                speedDropdown.classList.toggle("active");
-
-                const volumePopups = document.querySelectorAll(
-                    ".volume-popup.active"
-                );
-                volumePopups.forEach((p) => p.classList.remove("active"));
-
-                const aspectDropdowns = document.querySelectorAll(
-                    ".aspect-dropdown.active"
-                );
-                aspectDropdowns.forEach((dropdown) => {
-                    if (dropdown !== speedDropdown) {
-                        dropdown.classList.remove("active");
-                    }
-                });
-            });
-
-            speedDropdown.querySelectorAll(".aspect-item").forEach((item) => {
-                item.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    const speed = parseFloat(item.dataset.speed);
-                    const video = document.querySelector("#player");
-                    if (video) {
-                        video.playbackRate = speed;
-                    }
-
-                    speedDropdown.querySelectorAll(".aspect-item").forEach((i) => {
-                        i.classList.remove("active");
-                        const checkmark = i.querySelector("svg");
-                        if (checkmark) checkmark.remove();
-                    });
-
-                    item.classList.add("active");
-                    const checkmark = document.createElement("i");
-                    checkmark.setAttribute("data-lucide", "check");
-                    checkmark.style.width = "14px";
-                    checkmark.style.height = "14px";
-
-                    item.appendChild(checkmark);
-                    lucide.createIcons({ root: item });
-
-                    speedDropdown.classList.remove("active");
-                });
-            });
-            document.addEventListener("click", (e) => {
-                if (!speedBtn.contains(e.target)) {
-                    speedDropdown.classList.remove("active");
-                }
-            });
-
-            const aspectBtn = document.createElement("button");
-            aspectBtn.className = "plyr__controls__item plyr__control";
-            aspectBtn.type = "button";
-            aspectBtn.setAttribute("data-plyr", "aspect-ratio");
-            aspectBtn.innerHTML = `
-
-                <i data-lucide="rectangle-horizontal" style="width: 18px; height: 18px;"></i>
-                <span class="plyr__tooltip">Aspect Ratio</span>
-            `;
-            lucide.createIcons({ root: aspectBtn });
-
-            const dropdown = document.createElement("div");
-            dropdown.className = "aspect-dropdown";
-            dropdown.innerHTML = `
-                <div class="aspect-item" data-ratio="original" data-aspect="original">
-                    <span>Original</span>
-                </div>
-                <div class="aspect-item" data-ratio="1:1" data-aspect="1">
-                    <span>1:1 Square</span>
-                </div>
-                <div class="aspect-item" data-ratio="4:3" data-aspect="1.333">
-                    <span>4:3 Classic</span>
-                </div>
-                <div class="aspect-item active" data-ratio="16:9" data-aspect="1.778">
-                    <span>16:9 Wide</span>
-                    <i data-lucide="check" style="width: 14px; height: 14px;"></i>
-                </div>
-                <div class="aspect-item" data-ratio="1.85:1" data-aspect="1.85">
-                    <span>1.85:1 Cinema</span>
-                </div>
-
-                <div class="aspect-item" data-ratio="21:9" data-aspect="2.333">
-                    <span>21:9 Ultrawide</span>
-                </div>
-                <div class="aspect-item" data-ratio="cover" data-aspect="cover">
-                    <span>Fill Screen</span>
-                </div>
-            `;
-
-            controls.insertBefore(aspectBtn, fullscreen);
-            aspectBtn.appendChild(dropdown);
-            lucide.createIcons({ root: dropdown });
-
-            const volumeBtn = document.createElement("button");
-            volumeBtn.className = "plyr__controls__item plyr__control";
-            volumeBtn.type = "button";
-            volumeBtn.setAttribute("data-plyr", "volume-custom");
-            volumeBtn.innerHTML = `
-                <svg class="volume-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                   <path class="vol-high" d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                   <path class="vol-mute" d="M23 9l-6 6m0-6l6 6" style="display:none;"></path>
-                </svg>
-                <span class="plyr__tooltip">Volume</span>
-            `;
-
-            const volumePopup = document.createElement("div");
-            volumePopup.className = "volume-popup";
-            volumePopup.innerHTML = `
-                <div class="volume-percent">100%</div>
-                <div class="volume-slider-container">
-                    <input type="range" min="0" max="1" step="0.05" value="1" class="volume-slider">
-                </div>
-            `;
-
-            volumeBtn.appendChild(volumePopup);
-
-            controls.insertBefore(volumeBtn, speedBtn);
-
-            const video = document.querySelector("#player");
-            const volSlider = volumePopup.querySelector(".volume-slider");
-            const volIconHigh = volumeBtn.querySelector(".vol-high");
-            const volIconMute = volumeBtn.querySelector(".vol-mute");
-
-            const volPercent = volumePopup.querySelector(".volume-percent");
-
-            function updateVolumeUI(vol, muted) {
-                if (volSlider) volSlider.value = vol;
-                if (volPercent) volPercent.textContent = Math.round(vol * 100) + "%";
-
-                if (muted || vol === 0) {
-                    if (volIconHigh) volIconHigh.style.display = "none";
-                    if (volIconMute) volIconMute.style.display = "block";
-                } else {
-                    if (volIconHigh) volIconHigh.style.display = "block";
-                    if (volIconMute) volIconMute.style.display = "none";
-                }
-            }
-
-            if (video) {
-                updateVolumeUI(video.volume, video.muted);
-            }
-
-            volumeBtn.addEventListener("click", (e) => {
-                if (e.target === volSlider || e.target.closest(".volume-popup"))
-                    return;
-
-                e.stopPropagation();
-                volumePopup.classList.toggle("active");
-
-                const otherDropdowns = document.querySelectorAll(
-                    ".aspect-dropdown.active"
-                );
-                otherDropdowns.forEach((d) => d.classList.remove("active"));
-            });
-
-            document.addEventListener("click", (e) => {
-                if (!volumeBtn.contains(e.target)) {
-                    volumePopup.classList.remove("active");
-                }
-            });
-
-            if (volSlider) {
-                volSlider.addEventListener("input", (e) => {
-                    const val = parseFloat(e.target.value);
-                    if (video) {
-                        video.volume = val;
-                        video.muted = val === 0;
-                        updateVolumeUI(val, video.muted);
-                    }
-                });
-
-                volSlider.addEventListener("click", (e) => e.stopPropagation());
-            }
-
-            if (video) {
-                video.addEventListener("volumechange", () => {
-                    updateVolumeUI(video.volume, video.muted);
-                });
-            }
-            aspectBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                dropdown.classList.toggle("active");
-
-                const volumePopups = document.querySelectorAll(
-                    ".volume-popup.active"
-                );
-                volumePopups.forEach((p) => p.classList.remove("active"));
-
-                const otherDropdowns = document.querySelectorAll(
-                    ".aspect-dropdown.active"
-                );
-                otherDropdowns.forEach((d) => {
-                    if (d !== dropdown) d.classList.remove("active");
-                });
-            });
-
-            dropdown.querySelectorAll(".aspect-item").forEach((item) => {
-                item.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    const aspect = item.dataset.aspect;
-                    const video = document.querySelector("#player");
-                    const container = document.querySelector(".video-container");
-
-                    if (video && container) {
-                        video.style.width = "100%";
-                        video.style.height = "100%";
-                        video.style.top = "0";
-                        video.style.left = "0";
-                        video.style.transform = "none";
-
-                        if (aspect === "cover") {
-                            video.style.objectFit = "cover";
-                            video.style.objectPosition = "center";
-                        } else if (aspect === "original") {
-                            video.style.objectFit = "contain";
-                            video.style.objectPosition = "center";
-                        } else {
-                            const targetRatio = parseFloat(aspect);
-                            const containerRatio = 16 / 9;
-
-                            if (targetRatio < containerRatio) {
-                                const widthPercent = (targetRatio / containerRatio) * 100;
-                                video.style.width = `${widthPercent}%`;
-                                video.style.height = "100%";
-                                video.style.left = `${(100 - widthPercent) / 2}%`;
-                                video.style.objectFit = "fill";
-                            } else {
-                                const heightPercent = (containerRatio / targetRatio) * 100;
-                                video.style.width = "100%";
-                                video.style.height = `${heightPercent}%`;
-                                video.style.top = `${(100 - heightPercent) / 2}%`;
-                                video.style.objectFit = "fill";
-                            }
-                        }
-                    }
-
-                    dropdown.querySelectorAll(".aspect-item").forEach((i) => {
-                        i.classList.remove("active");
-                        const checkmark = i.querySelector("svg");
-                        if (checkmark) checkmark.remove();
-                    });
-
-                    item.classList.add("active");
-                    const checkmark = document.createElement("i");
-                    checkmark.setAttribute("data-lucide", "check");
-                    checkmark.style.width = "14px";
-                    checkmark.style.height = "14px";
-
-                    item.appendChild(checkmark);
-                    lucide.createIcons({ root: item });
-
-                    dropdown.classList.remove("active");
-                });
-            });
-
-            document.addEventListener("click", (e) => {
-                if (!aspectBtn.contains(e.target)) {
-                    dropdown.classList.remove("active");
-                }
-            });
-        }
-
-        function initMpegts(video, url) {
-            try {
-                const player = mpegts.createPlayer({
-                    type: "flv",
-                    url,
-                    isLive: false,
-                });
-                player.attachMediaElement(video);
-                player.load();
-                window.mpegtsPlayer = player;
-                initPlyr(video);
-            } catch (err) {
-                console.error("mpegts failed:", err);
-                initPlyr(video);
-            }
-        }
-        function toggleDropdown() {
-            const dropdown = document.getElementById("players-dropdown");
-            dropdown.classList.toggle("active");
-        }
-
-        function blazeDownload() {
-            const a = document.createElement("a");
-            a.href = "{{file_url}}";
-            a.download = "{{file_name}}";
-            a.click();
-        }
-
-        function buildIntentUrl(url, packageName, action = "android.intent.action.VIEW", type = "video/*") {
-            const parsed = new URL(url);
-            const intentPath = `${parsed.host}${parsed.pathname}${parsed.search}`;
-            const typePart = type ? `type=${type};` : "";
-            return `intent://${intentPath}#Intent;scheme=${parsed.protocol.replace(":", "")};action=${action};${typePart}package=${packageName};end`;
-        }
-
-        function vlc_player(event) {
-            const url = "{{file_url}}";
-            window.location.href = buildIntentUrl(url, "org.videolan.vlc");
-        }
-
-        function mx_player() {
-            window.location.href = buildIntentUrl("{{file_url}}", "com.mxtech.videoplayer.ad");
-        }
-
-        function mx_playerpro() {
-            window.location.href = buildIntentUrl("{{file_url}}", "com.mxtech.videoplayer.pro");
-        }
-
-        function playit_player() {
-            // PLAYit works best with its native deep-link
-            window.location.href =
-                `playit://playerv2/video?url=${encodeURIComponent("{{file_url}}")}`;
-        }
-
-        function km_player() {
-            window.location.href = buildIntentUrl("{{file_url}}", "com.kmplayer");
-        }
-
-        function s_player() {
-            window.location.href = buildIntentUrl(
-                "{{file_url}}",
-                "com.young.simple.player",
-                "com.young.simple.player.playback_online",
-                ""
-            );
-        }
-
-        function hd_player() {
-            // Correct HD Player package
-            window.location.href = buildIntentUrl("{{file_url}}", "uplayer.video.player");
-        }
-
-        document.addEventListener("click", (e) => {
-            if (!e.target.closest(".dropdown")) {
-                const playersDropdown = document.getElementById("players-dropdown");
-                if (playersDropdown) {
-                    playersDropdown.classList.remove("active");
-                }
-            }
+        window.addEventListener("DOMContentLoaded", function() {
+            document.getElementById("currentYear").innerText = new Date().getFullYear();
+            document.getElementById("myDiv").innerText = cleanMovieName(fileName);
+            initFastStream();
+            initAutoResumeModal();
         });
 
-        function checkAudioSupport() {
-            const video = document.createElement("video");
-            if (video.canPlayType('audio/mp4; codecs="ec-3"') === "") {
-                const videoSection = document.querySelector("#video-section");
-                if (videoSection && !document.querySelector(".audio-warning")) {
-                    const warning = document.createElement("div");
-                    warning.className = "audio-warning";
-                    warning.innerHTML = `
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
-                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                            <line x1="12" y1="9" x2="12" y2="13"></line>
-                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                        <span>Browser does not support EAC3 audio. If no sound, please use External Players.</span>
-                     `;
-                    videoSection.appendChild(warning);
-                }
-            }
-        }
-
-        function cleanFileName() {
-            const fileTitle = document.querySelector(".file-title");
-            if (fileTitle) {
-                let cleanedName = fileTitle.textContent;
-                cleanedName = cleanedName
-                    .replace(/\./g, " ")
-                    .replace(/\[/g, " ")
-                    .replace(/\]/g, " ")
-                    .replace(/\{/g, " ")
-                    .replace(/\}/g, " ")
-                    .replace(/_/g, " ")
-                    .replace(/\.mkv/gi, " ")
-                    .replace(/\.mp4/gi, " ")
-                    .replace(/mkv/gi, " ")
-                    .replace(/mp4/gi, " ")
-                    .replace(/\s+/g, " ")
-                    .trim();
-                fileTitle.textContent = cleanedName;
-            }
-        }
-
-        function scrollToVideoSection() {
-            if (window.innerWidth > 768) {
-                const videoSection = document.querySelector("#video-section");
-                if (videoSection) {
-                    setTimeout(() => {
-                        videoSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }, 100);
-                }
-            }
-        }
-
-        if (document.readyState === "loading") {
-            document.addEventListener("DOMContentLoaded", () => {
-                cleanFileName();
-                scrollToVideoSection();
-                initPlayer();
-                checkAudioSupport();
-
-                const mobileMenuBtn = document.querySelector(".mobile-menu");
-                const nav = document.querySelector(".nav");
-
-                if (mobileMenuBtn && nav) {
-                    mobileMenuBtn.addEventListener("click", (e) => {
-                        e.stopPropagation();
-                        nav.classList.toggle("active");
+        // Initialize Google Cast SDK
+        window['__onGCastApiAvailable'] = function(isAvailable) {
+            if (isAvailable && window.cast) {
+                try {
+                    cast.framework.CastContext.getInstance().setOptions({
+                        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
                     });
+                } catch(e) {}
+            }
+        };
 
-                    nav.querySelectorAll("a").forEach((link) => {
-                        link.addEventListener("click", () => {
-                            nav.classList.remove("active");
-                        });
-                    });
+        // Extract Clean Movie Title
+        function cleanMovieName(rawName) {
+            if (!rawName) return "Movie Stream";
+            
+            let clean = rawName.replace(/\.(mkv|mp4|webm|avi|flv|mov)$/i, "");
+            const pattern = /[\.\_\s\(-](480p|720p|1080p|2160p|4k|2k|360p|hd|sd|bluray|web-dl|web|webrip|hdr|hdrip|hevc|x264|x265|h264|h265|10bit|ds4k|dvdrip|cam|camrip|nf|amzn|esub|sub|hindi|english|telugu|tamil|kannada|malayalam|bengali|marathi|gujarati|punjabi|dubbed|dual|multi|aac|ac3|dts|2\.0|5\.1|7\.1).*$/i;
+            
+            clean = clean.split(pattern)[0];
+            clean = clean.replace(/[\._]/g, " ").trim();
+            
+            return clean || rawName;
+        }
 
-                    document.addEventListener("click", (e) => {
-                        if (
-                            !nav.contains(e.target) &&
-                            !mobileMenuBtn.contains(e.target)
-                        ) {
-                            nav.classList.remove("active");
+        // Fast Streaming Engine
+        function initFastStream() {
+            const player = document.getElementById("player");
+            if (!fileUrl) return;
+
+            if (Hls.isSupported() && (fileUrl.includes('.m3u8') || fileUrl.includes('hls'))) {
+                const hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    maxBufferLength: 15,
+                    maxMaxBufferLength: 30,
+                    maxBufferSize: 30 * 1024 * 1024,
+                    startFragPrefetch: true,
+                    appendErrorMaxRetry: 3
+                });
+                
+                hls.loadSource(fileUrl);
+                hls.attachMedia(player);
+
+                hls.on(Hls.Events.ERROR, function (event, data) {
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                hls.destroy();
+                                player.src = fileUrl;
+                                break;
                         }
-                    });
-                }
-            });
-        } else {
-            cleanFileName();
-            scrollToVideoSection();
-            initPlayer();
-            checkAudioSupport();
-            const mobileMenuBtn = document.querySelector(".mobile-menu");
-            const nav = document.querySelector(".nav");
-            if (mobileMenuBtn && nav) {
-                mobileMenuBtn.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    nav.classList.toggle("active");
-                });
-                nav.querySelectorAll("a").forEach((link) => {
-                    link.addEventListener("click", () =>
-                        nav.classList.remove("active")
-                    );
-                });
-                document.addEventListener("click", (e) => {
-                    if (!nav.contains(e.target) && !mobileMenuBtn.contains(e.target)) {
-                        nav.classList.remove("active");
                     }
                 });
+            } else {
+                player.src = fileUrl;
             }
+        }
+
+        function formatTime(seconds) {
+            const sec = Math.floor(seconds);
+            const hrs = Math.floor(sec / 3600);
+            const mins = Math.floor((sec % 3600) / 60);
+            const secs = sec % 60;
+            const pad = (n) => n.toString().padStart(2, '0');
+            return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
+        }
+
+        // Auto-Resume Modal Logic
+        function initAutoResumeModal() {
+            const player = document.getElementById("player");
+            const modal = document.getElementById("resumeModal");
+            const timeText = document.getElementById("resumeTimeText");
+
+            player.addEventListener("loadedmetadata", function() {
+                const storedVal = localStorage.getItem(storageKey);
+                if (storedVal && parseFloat(storedVal) > 5) {
+                    savedTime = parseFloat(storedVal);
+                    timeText.innerText = formatTime(savedTime);
+                    modal.classList.remove("hidden");
+                }
+            });
+
+            let lastSaveTime = 0;
+            player.addEventListener("timeupdate", function() {
+                const now = Date.now();
+                if (player.currentTime > 0 && (now - lastSaveTime > 2000)) {
+                    localStorage.setItem(storageKey, player.currentTime);
+                    lastSaveTime = now;
+                }
+            });
+
+            player.addEventListener("ended", function() {
+                localStorage.removeItem(storageKey);
+            });
+        }
+
+        function confirmResume() {
+            const player = document.getElementById("player");
+            document.getElementById("resumeModal").classList.add("hidden");
+            player.currentTime = savedTime;
+            player.play().catch(() => {});
+        }
+
+        function confirmRestart() {
+            const player = document.getElementById("player");
+            document.getElementById("resumeModal").classList.add("hidden");
+            localStorage.removeItem(storageKey);
+            player.currentTime = 0;
+            player.play().catch(() => {});
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            const toastMsg = document.getElementById("toastMsg");
+            toastMsg.innerText = message;
+            toast.classList.add("show");
+            setTimeout(() => {
+                toast.classList.remove("show");
+            }, 3000);
+        }
+
+        function copyStreamLink() {
+            if (!fileUrl) {
+                showToast("URL not available!");
+                return;
+            }
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(fileUrl).then(() => {
+                    showToast("Stream Link Copied!");
+                }).catch(() => {
+                    fallbackCopyText(fileUrl);
+                });
+            } else {
+                fallbackCopyText(fileUrl);
+            }
+        }
+
+        function fallbackCopyText(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-999999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast("Stream Link Copied!");
+            } catch (err) {
+                showToast("Failed to Copy Link!");
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // VLC Player Intent
+        function vlc_player() {
+            if (!fileUrl) return;
+            const cleanUrl = fileUrl.replace(/^https?:\/\//i, '');
+            const scheme = fileUrl.startsWith('https') ? 'https' : 'http';
+            window.location.href = `intent://${cleanUrl}#Intent;action=android.intent.action.VIEW;scheme=${scheme};type=video/*;package=org.videolan.vlc;S.title=${encodeURIComponent(fileName)};end`;
+        }
+
+        // MX Player Intent
+        function mx_player() {
+            if (!fileUrl) return;
+            const cleanUrl = fileUrl.replace(/^https?:\/\//i, '');
+            const scheme = fileUrl.startsWith('https') ? 'https' : 'http';
+            window.location.href = `intent://${cleanUrl}#Intent;action=android.intent.action.VIEW;scheme=${scheme};type=video/*;package=com.mxtech.videoplayer.ad;S.title=${encodeURIComponent(fileName)};end`;
+        }
+
+        // Universal Download Trigger
+        function bisalDownload() {
+            if (!fileUrl) return;
+            showToast("Starting Download...");
+            const a = document.createElement('a');
+            a.href = fileUrl;
+            a.setAttribute('download', fileName || 'video.mp4');
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            // Backup direct window navigation if cross-origin blocks silent anchor
+            setTimeout(() => {
+                window.location.assign(fileUrl);
+            }, 300);
         }
     </script>
 </body>
-
 </html>
