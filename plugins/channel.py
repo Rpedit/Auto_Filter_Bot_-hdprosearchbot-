@@ -478,9 +478,6 @@ async def get_hdhub_base_url() -> Optional[str]:
 
 
 async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> Optional[str]:
-    """
-    Fetches custom poster URL from user's Blogger JSON feed CDN first.
-    """
     try:
         blog_url = "https://tmdbimdbhdhub4u.blogspot.com"
         if hasattr(db, 'db'):
@@ -549,7 +546,8 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
         if not base_url:
             return "N/A", "N/A", ""
 
-        clean_query = re.sub(r"\b(19|20)\d{2}\b", "", base_name).strip()
+        clean_search_query = re.sub(r'\b(season|s)\s*\d+\b', '', base_name, flags=re.IGNORECASE)
+        clean_query = re.sub(r"\b(19|20)\d{2}\b", "", clean_search_query).strip()
         clean_query = re.sub(r"[._]+|[()\[\]{}:;'–!,.?_]", " ", clean_query).strip()
         search_url = f"{base_url.rstrip('/')}/?s={clean_query.replace(' ', '+')}"
 
@@ -927,6 +925,10 @@ def extract_media_info(filename: str, caption: str):
     base_name = _strip_season_episode_tokens(base_name)
     base_name = re.sub(r'(\b(?:19|20)\d{2}\b)(?:\s+\1)+', r'\1', base_name).strip()
 
+    # 👉 Yeh line har season ko alag post/poster ke liye alag base_name banati hai (Jaise: Bigg Boss Season 20)
+    if season is not None:
+        base_name = f"{base_name} Season {season}"
+
     if not base_name:
         base_name = (
             normalize(
@@ -1090,16 +1092,12 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
-        # Priority #0: Check User's Custom Blogger CDN First!
         blogger_poster_url = await get_blogger_poster_url(base_name, media_info.get("year"))
-
-        # Priority #1: HDHub4u Details fetch
         hdhub_genres, hdhub_rating, hdhub_imdb_url = await get_hdhub4u_data(base_name)
 
         tt_match = re.search(r'tt\d+', hdhub_imdb_url) if hdhub_imdb_url else None
         hdhub_imdb_id = tt_match.group(0) if tt_match else None
 
-        # Priority #2: Official IMDb Safe Fetch
         imdb_details = await fetch_imdb_safely(
             base_name,
             is_series=is_series,
@@ -1113,7 +1111,6 @@ async def _process_with_lock(
             official_search_title = imdb_details.get("title", base_name)
             imdb_id = hdhub_imdb_id or imdb_details.get("imdb_id")
 
-        # Priority #3: TMDb Safe Fetch
         tmdb_query = imdb_id if (imdb_id and imdb_id.startswith("tt")) else official_search_title
         tmdb_details = await fetch_tmdb_safely(tmdb_query, base_name, is_series)
 
@@ -1147,7 +1144,6 @@ async def _process_with_lock(
                 or imdb_details.get("backdrop_url", "")
             )
 
-        # Rating: Direct HDHub4u match priority
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
@@ -1160,7 +1156,6 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # IMDb Link Priority
         if hdhub_imdb_url:
             imdb_url = hdhub_imdb_url
         elif imdb_details.get("url"):
@@ -1204,7 +1199,6 @@ async def _process_with_lock(
             else imdb_details.get("certificates", "N/A")
         )
 
-        # 1. HDHub4u EXACT Genres Logic (Mirror site text directly)
         genre_list = []
         if hdhub_genres and hdhub_genres != "N/A":
             raw_parts = re.split(r'[,|/•]', hdhub_genres)
@@ -1223,7 +1217,6 @@ async def _process_with_lock(
                     if formatted_p not in genre_list:
                         genre_list.append(formatted_p)
 
-        # 2. Fallback: ONLY when HDHub4u genres are N/A / not available
         if not genre_list:
             raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
             fallback_genres = []
@@ -1245,7 +1238,6 @@ async def _process_with_lock(
 
         genres = ", ".join(genre_list) if genre_list else "N/A"
 
-        # Filename Year Priority Fix (Prevents API from overwriting 2026 with 2013)
         movie_year = (
             media_info.get("year")
             or imdb_details.get("year")
@@ -1329,7 +1321,6 @@ async def _process_with_lock(
         if (not current_db_runtime or str(current_db_runtime).strip().upper() in ("N/A", "NONE", "0", "")) and final_file_runtime != "N/A":
             update_fields["$set"] = {"runtime": final_file_runtime}
 
-        # HDHub4u rating dynamic update
         current_db_rating = movie_doc.get("rating")
         if not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10"):
             _, hdhub_rating, _ = await get_hdhub4u_data(base_name)
@@ -1529,7 +1520,7 @@ async def update_movie_message(bot, base_name):
             logger.error(f"Error updating movie message: {e}")
 
     except Exception as e:
-        logger.error(f"Failed to update movie message for {base_name}: {e}")
+            logger.error(f"Failed to update movie message for {base_name}: {e}")
 
 
 def generate_movie_message(movie_doc, base_name):
