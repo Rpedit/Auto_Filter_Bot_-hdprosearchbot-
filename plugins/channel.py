@@ -477,6 +477,48 @@ async def get_hdhub_base_url() -> Optional[str]:
     return None
 
 
+async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> Optional[str]:
+    """
+    Fetches custom poster URL from user's Blogger JSON feed CDN first.
+    """
+    try:
+        blog_url = "https://tmdbimdbhdhub4u.blogspot.com"
+        if hasattr(db, 'db'):
+            setting = await db.db.settings.find_one({"_id": "blogger_base_url"})
+            if setting and setting.get("url"):
+                blog_url = setting["url"].rstrip("/")
+
+        feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
+
+        timeout = aiohttp.ClientTimeout(total=8)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(feed_url) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+
+        entries = data.get("feed", {}).get("entry", [])
+        if not entries:
+            return None
+
+        clean_query = f"{base_name} {year}".strip() if year else base_name
+
+        for entry in entries:
+            post_title = entry.get("title", {}).get("$t", "")
+            if is_good_title_match(clean_query, post_title) or is_good_title_match(base_name, post_title):
+                content_html = entry.get("content", {}).get("$t", "")
+                soup = BeautifulSoup(content_html, "html.parser")
+                img_tag = soup.find("img")
+                if img_tag and img_tag.get("src"):
+                    img_url = img_tag["src"]
+                    img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
+                    img_url = re.sub(r'/w\d+-[h\d]+/', '/', img_url)
+                    return img_url
+    except Exception as e:
+        logger.error(f"Error fetching Blogger poster: {e}")
+    return None
+
+
 @Client.on_message(filters.command("setdomain"))
 async def set_domain_handler(bot, message):
     if len(message.command) < 2:
@@ -499,11 +541,6 @@ async def set_domain_handler(bot, message):
 
 
 async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
-    """
-    Exact HDHub4u mirror:
-    Scrapes Genres, exact IMDb Rating (even if 'x/10'), and exact IMDb URL from the HDHub4u post.
-    Handles apostrophes and variations naturally.
-    """
     genres = "N/A"
     rating = "N/A"
     imdb_url = ""
@@ -588,7 +625,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
         content = movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
         search_area = content if content else movie_soup
 
-        # 1. Scrape official IMDb Link from HDHub4u page
         for a_tag in search_area.find_all("a", href=True):
             href = a_tag["href"].strip()
             if "imdb.com/title/tt" in href:
@@ -597,7 +633,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                     imdb_url = f"https://www.imdb.com/title/{clean_match.group(1)}/"
                     break
 
-        # 2. Scrape exact Genres & exact IMDb Rating (even x/10)
         for elem in search_area.find_all(["p", "div", "span", "strong", "b", "h4"]):
             text = elem.get_text(" ", strip=True)
 
@@ -660,11 +695,9 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
 
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
-    # Bonus Episode Check (Range: S02.Bonus.Ep.01-03 -> S2: Bonus 1-3)
     if m := BONUS_RANGE_REGEX.search(filename):
         return int(m.group(1)), f"Bonus {int(m.group(2))}-{int(m.group(3))}"
 
-    # Bonus Episode Single: S02.Bonus.Ep.03 -> S2: Bonus 3
     if m := BONUS_REGEX.search(filename):
         return int(m.group(1)), f"Bonus {int(m.group(2))}"
 
@@ -679,7 +712,6 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
 
     if m := X_REGEX.search(filename):
         ep_val = int(m.group(2))
-        # Codec Protection (2.0.x264 will not match as episode)
         if ep_val not in (264, 265):
             return int(m.group(1)), str(ep_val)
 
@@ -1058,6 +1090,9 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
+        # Priority #0: Check User's Custom Blogger CDN First!
+        blogger_poster_url = await get_blogger_poster_url(base_name, media_info.get("year"))
+
         # Priority #1: HDHub4u Details fetch
         hdhub_genres, hdhub_rating, hdhub_imdb_url = await get_hdhub4u_data(base_name)
 
@@ -1088,7 +1123,10 @@ async def _process_with_lock(
         poster_url = ""
         is_backdrop = False
 
-        if (
+        if blogger_poster_url:
+            poster_url = blogger_poster_url
+            is_backdrop = True
+        elif (
             LANDSCAPE_POSTER
             and TMDB_POSTER
             and tmdb_details.get("backdrop_url")
@@ -1207,10 +1245,11 @@ async def _process_with_lock(
 
         genres = ", ".join(genre_list) if genre_list else "N/A"
 
+        # Filename Year Priority Fix (Prevents API from overwriting 2026 with 2013)
         movie_year = (
-            imdb_details.get("year")
+            media_info.get("year")
+            or imdb_details.get("year")
             or tmdb_details.get("year")
-            or media_info["year"]
         )
 
         if is_mismatched:
