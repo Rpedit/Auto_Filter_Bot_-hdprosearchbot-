@@ -925,7 +925,6 @@ def extract_media_info(filename: str, caption: str):
     base_name = _strip_season_episode_tokens(base_name)
     base_name = re.sub(r'(\b(?:19|20)\d{2}\b)(?:\s+\1)+', r'\1', base_name).strip()
 
-    # 👉 Yeh line har season ko alag post/poster ke liye alag base_name banati hai (Jaise: Bigg Boss Season 20)
     if season is not None:
         base_name = f"{base_name} Season {season}"
 
@@ -1368,6 +1367,15 @@ async def send_movie_update(bot, base_name):
                 primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
                 btn_style = enums.ButtonStyle.SUCCESS if primary_tag == "#SERIES" else enums.ButtonStyle.DANGER
 
+                # 👉 Button query format: Lanterns-S01 (automatically converted from base_name)
+                match = re.search(r'(.+?)\s+Season\s+(\d+)', base_name, re.IGNORECASE)
+                if match:
+                    series_name = match.group(1).strip()
+                    season_num = int(match.group(2))
+                    button_query = f"{series_name}-S{season_num:02d}"
+                else:
+                    button_query = base_name
+
                 buttons = InlineKeyboardMarkup(
                     [[
                         InlineKeyboardButton(
@@ -1375,7 +1383,7 @@ async def send_movie_update(bot, base_name):
                             url=(
                                 f"https://t.me/{temp.U_NAME}"
                                 f"?start=getfile-"
-                                f"{base_name.replace(' ', '-')}"
+                                f"{button_query.replace(' ', '-')}"
                             ),
                             style=btn_style
                         )
@@ -1462,6 +1470,15 @@ async def update_movie_message(bot, base_name):
         primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
         btn_style = enums.ButtonStyle.SUCCESS if primary_tag == "#SERIES" else enums.ButtonStyle.DANGER
 
+        # 👉 Button query format yahan bhi: Lanterns-S01
+        match = re.search(r'(.+?)\s+Season\s+(\d+)', base_name, re.IGNORECASE)
+        if match:
+            series_name = match.group(1).strip()
+            season_num = int(match.group(2))
+            button_query = f"{series_name}-S{season_num:02d}"
+        else:
+            button_query = base_name
+
         buttons = InlineKeyboardMarkup(
             [[
                 InlineKeyboardButton(
@@ -1469,7 +1486,7 @@ async def update_movie_message(bot, base_name):
                     url=(
                         f"https://t.me/{temp.U_NAME}"
                         f"?start=getfile-"
-                        f"{base_name.replace(' ', '-')}"
+                        f"{button_query.replace(' ', '-')}"
                     ),
                     style=btn_style
                 )
@@ -1660,12 +1677,17 @@ def generate_movie_message(movie_doc, base_name):
     certificates = movie_doc.get("certificates", "N/A")
 
     stored_title = movie_doc.get("title", base_name)
+    
+    # 👉 Top Title Clean: Upar se 'Season X' ya 'S01' ko completely hata diya hai taaki sirf clean name aaye
+    display_title = re.sub(r'\s+Season\s*\d+', '', stored_title, flags=re.IGNORECASE).strip()
+    display_title = re.sub(r'\s+S\d+', '', display_title, flags=re.IGNORECASE).strip()
+
     movie_year = movie_doc.get("year")
     
-    if movie_year and str(movie_year) not in str(stored_title) and primary_tag != "#SERIES":
-        filename_display = f"{stored_title} {movie_year}"
+    if movie_year and str(movie_year) not in str(display_title) and primary_tag != "#SERIES":
+        filename_display = f"{display_title} {movie_year}"
     else:
-        filename_display = stored_title
+        filename_display = display_title
 
     raw_text = script.MOVIE_UPDATE_NOTIFY_TXT.format(
         poster_url=movie_doc.get("poster_url", ""),
