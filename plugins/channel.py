@@ -406,20 +406,17 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
             queries.append(f"{base_name} {year}")
         queries.append(base_name)
 
-    best_fallback = {}
     for q in queries:
         try:
             res = await get_movie_details(q, **kwargs) if kwargs else await get_movie_details(q)
             if res and isinstance(res, dict):
-                title = res.get("title")
+                title = res.get("title") or res.get("name")
                 if title and is_good_title_match(base_name, title):
                     return res
-                if not best_fallback and res:
-                    best_fallback = res
         except Exception as e:
             logger.warning(f"Error fetching IMDb details for '{q}': {e}")
 
-    return best_fallback
+    return {}
 
 
 async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) -> dict:
@@ -448,7 +445,6 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
     else:
         queries.append(tmdb_query or base_name)
 
-    best_fallback = {}
     for q in queries:
         try:
             res = await get_movie_detailsx(q, **kwargs) if kwargs else await get_movie_detailsx(q)
@@ -456,12 +452,10 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
                 title = res.get("title") or res.get("name")
                 if title and is_good_title_match(base_name, title):
                     return res
-                if not best_fallback:
-                    best_fallback = res
         except Exception:
             pass
 
-    return best_fallback
+    return {}
 
 
 async def get_site_base_url(site_key: str) -> Optional[str]:
@@ -523,12 +517,12 @@ async def set_domain_handler(bot, message):
         rogmovies_url = await get_site_base_url("rogmovies_base_url") or "Not Set"
         return await message.reply_text(
             f"🌐 **Current Domains:**\n"
-            f"• <b>HDHub4u:</b> <code>{hdhub_url}</code>\n"
             f"• <b>Vegamovies:</b> <code>{vegamovies_url}</code>\n"
+            f"• <b>HDHub4u:</b> <code>{hdhub_url}</code>\n"
             f"• <b>Rogmovies:</b> <code>{rogmovies_url}</code>\n\n"
             f"💡 **Usage Examples:**\n"
-            f"<code>/setdomain hdhub https://new5.hdhub4u.cl</code>\n"
             f"<code>/setdomain vegamovies https://new2.vegamovies.futbol</code>\n"
+            f"<code>/setdomain hdhub https://new5.hdhub4u.cl</code>\n"
             f"<code>/setdomain rogmovies https://rogmovies.onl</code>"
         )
     
@@ -652,33 +646,31 @@ async def scrape_site_data(base_url: str, base_name: str) -> Tuple[str, str, str
 
 
 async def get_combined_site_data(base_name: str) -> Tuple[str, str, str]:
-    hdhub_url = await get_site_base_url("hdhub_base_url")
     vegamovies_url = await get_site_base_url("vegamovies_base_url")
+    hdhub_url = await get_site_base_url("hdhub_base_url")
     rogmovies_url = await get_site_base_url("rogmovies_base_url")
 
-    hdhub_data = await scrape_site_data(hdhub_url, base_name) if hdhub_url else ("N/A", "N/A", "")
     vegamovies_data = await scrape_site_data(vegamovies_url, base_name) if vegamovies_url else ("N/A", "N/A", "")
+    hdhub_data = await scrape_site_data(hdhub_url, base_name) if hdhub_url else ("N/A", "N/A", "")
     rogmovies_data = await scrape_site_data(rogmovies_url, base_name) if rogmovies_url else ("N/A", "N/A", "")
 
-    # Genres Priority: HDHub4u primary (since Vega/Rog usually don't have genres)
-    genres = "N/A"
-    if hdhub_data[0] and hdhub_data[0] != "N/A":
-        genres = hdhub_data[0]
-    elif vegamovies_data[0] and vegamovies_data[0] != "N/A":
-        genres = vegamovies_data[0]
+    # Vegamovies priority first for IMDb URL and Rating, HDHub4u for genres fallback
+    imdb_url = ""
+    for g, r, u in [vegamovies_data, hdhub_data, rogmovies_data]:
+        if u:
+            imdb_url = u
+            break
 
-    # Rating Priority: Vegamovies -> HDHub4u -> Rogmovies
     rating = "N/A"
     for g, r, u in [vegamovies_data, hdhub_data, rogmovies_data]:
         if r and r != "N/A" and r != "x/10":
             rating = r
             break
 
-    # IMDb URL Fallback Priority: HDHub4u -> Vegamovies -> Rogmovies
-    imdb_url = ""
+    genres = "N/A"
     for g, r, u in [hdhub_data, vegamovies_data, rogmovies_data]:
-        if u:
-            imdb_url = u
+        if g and g != "N/A":
+            genres = g
             break
 
     return genres, rating, imdb_url
@@ -1110,13 +1102,13 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # 👉 Strict Official IMDb/TMDB Priority
-        if imdb_details.get("url"):
+        # 👉 Website IMDb URL Priority First (Vegamovies -> HDHub4u -> Rogmovies), then Official API fallback
+        if site_imdb_url:
+            imdb_url = site_imdb_url
+        elif imdb_details.get("url"):
             imdb_url = imdb_details.get("url")
         elif tmdb_details.get("tmdb_url"):
             imdb_url = tmdb_details.get("tmdb_url")
-        elif site_imdb_url:
-            imdb_url = site_imdb_url
         else:
             imdb_url = ""
 
