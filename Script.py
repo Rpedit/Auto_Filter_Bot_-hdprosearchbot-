@@ -288,7 +288,7 @@ Mᴇꜱꜱᴀɢᴇ : <b>{}</b>"""
 ⏱️ ʀᴜɴᴛɪᴍᴇ\xa0 : <b>{runtime}</b>
 🎬 ǫᴜᴀʟɪᴛʏ\xa0 : <b>{quality}</b>
 🔉 ᴀᴜᴅɪᴏ\xa0\xa0\xa0\xa0 : <b>{language}</b>
-🌟 ɪᴍᴅʙ\xa0\xa0\xa0\xa0 : <b>{rating}</b>{episodes}</blockquote>
+🌟 ʀᴀᴛɪɴɢ\xa0\xa0\xa0\xa0 : <b>{rating}</b>{episodes}</blockquote>
 ─┉─•✦•─┉─
 
 🔍 <b>Sᴇᴀʀᴄʜ →</b> {search_link}"""
