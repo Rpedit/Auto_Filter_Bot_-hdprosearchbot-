@@ -631,7 +631,6 @@ async def scrape_site_data(base_url: str, base_name: str) -> Tuple[str, str, str
                 m = re.search(r'\b(?:Genre|Genres)\s*[:\-]\s*([^\n\r\.]+)', text, re.IGNORECASE)
                 if m:
                     candidate = m.group(1).strip()
-                    # Strict length filter: ensures long descriptions are ignored (< 60 chars)
                     if len(candidate) < 60 and not any(bad in candidate.lower() for bad in ["http", "www", "quality", "download", "web-dl"]):
                         parts = re.split(r'[,|/•]', candidate)
                         cleaned = [p.strip() for p in parts if p.strip() and 2 <= len(p.strip()) <= 30]
@@ -653,16 +652,35 @@ async def scrape_site_data(base_url: str, base_name: str) -> Tuple[str, str, str
 
 
 async def get_combined_site_data(base_name: str) -> Tuple[str, str, str]:
-    genres, rating, imdb_url = "N/A", "N/A", ""
-    for site_key in ["hdhub_base_url", "vegamovies_base_url", "rogmovies_base_url"]:
-        base_url = await get_site_base_url(site_key)
-        if base_url:
-            g, r, u = await scrape_site_data(base_url, base_name)
-            if g != "N/A": genres = g
-            if r != "N/A": rating = r
-            if u: imdb_url = u
-            if genres != "N/A" and rating != "N/A":
-                break
+    hdhub_url = await get_site_base_url("hdhub_base_url")
+    vegamovies_url = await get_site_base_url("vegamovies_base_url")
+    rogmovies_url = await get_site_base_url("rogmovies_base_url")
+
+    hdhub_data = await scrape_site_data(hdhub_url, base_name) if hdhub_url else ("N/A", "N/A", "")
+    vegamovies_data = await scrape_site_data(vegamovies_url, base_name) if vegamovies_url else ("N/A", "N/A", "")
+    rogmovies_data = await scrape_site_data(rogmovies_url, base_name) if rogmovies_url else ("N/A", "N/A", "")
+
+    # Genres Priority: HDHub4u -> Vegamovies -> Rogmovies
+    genres = "N/A"
+    for g, r, u in [hdhub_data, vegamovies_data, rogmovies_data]:
+        if g and g != "N/A":
+            genres = g
+            break
+
+    # Rating Priority: Vegamovies -> HDHub4u -> Rogmovies
+    rating = "N/A"
+    for g, r, u in [vegamovies_data, hdhub_data, rogmovies_data]:
+        if r and r != "N/A" and r != "x/10":
+            rating = r
+            break
+
+    # IMDb URL Fallback Priority: HDHub4u -> Vegamovies -> Rogmovies
+    imdb_url = ""
+    for g, r, u in [hdhub_data, vegamovies_data, rogmovies_data]:
+        if u:
+            imdb_url = u
+            break
+
     return genres, rating, imdb_url
 
 
