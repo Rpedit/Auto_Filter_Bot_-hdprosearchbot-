@@ -660,12 +660,12 @@ async def get_combined_site_data(base_name: str) -> Tuple[str, str, str]:
     vegamovies_data = await scrape_site_data(vegamovies_url, base_name) if vegamovies_url else ("N/A", "N/A", "")
     rogmovies_data = await scrape_site_data(rogmovies_url, base_name) if rogmovies_url else ("N/A", "N/A", "")
 
-    # Genres Priority: HDHub4u -> Vegamovies -> Rogmovies
+    # Genres Priority: HDHub4u primary (since Vega/Rog usually don't have genres)
     genres = "N/A"
-    for g, r, u in [hdhub_data, vegamovies_data, rogmovies_data]:
-        if g and g != "N/A":
-            genres = g
-            break
+    if hdhub_data[0] and hdhub_data[0] != "N/A":
+        genres = hdhub_data[0]
+    elif vegamovies_data[0] and vegamovies_data[0] != "N/A":
+        genres = vegamovies_data[0]
 
     # Rating Priority: Vegamovies -> HDHub4u -> Rogmovies
     rating = "N/A"
