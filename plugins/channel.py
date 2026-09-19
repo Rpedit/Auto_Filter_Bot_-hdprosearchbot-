@@ -613,6 +613,8 @@ async def scrape_site_data(base_url: str, base_name: str) -> Tuple[str, str, str
                 movie_html = await resp.text()
 
         movie_soup = BeautifulSoup(movie_html, "html.parser")
+        
+        # 1. IMDb URL Extraction
         for a_tag in movie_soup.find_all("a", href=True):
             href = a_tag["href"].strip()
             if "imdb.com/title/tt" in href:
@@ -621,16 +623,21 @@ async def scrape_site_data(base_url: str, base_name: str) -> Tuple[str, str, str
                     imdb_url = f"https://www.imdb.com/title/{clean_match.group(1)}/"
                     break
 
-        for elem in movie_soup.find_all(["p", "div", "span", "strong", "b", "h4"]):
+        # 2. Genres & Rating Extraction with strict length check
+        for elem in movie_soup.find_all(["p", "div", "span", "strong", "b", "h4", "li"]):
             text = elem.get_text(" ", strip=True)
+            
             if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b', text, re.IGNORECASE):
-                m = re.search(r'\b(?:Genre|Genres)\s*[:\-]\s*([^\n\r]+)', text, re.IGNORECASE)
+                m = re.search(r'\b(?:Genre|Genres)\s*[:\-]\s*([^\n\r\.]+)', text, re.IGNORECASE)
                 if m:
                     candidate = m.group(1).strip()
-                    parts = re.split(r'[,|/•]', candidate)
-                    cleaned = [p.strip() for p in parts if p.strip() and 2 <= len(p.strip()) <= 30]
-                    if cleaned:
-                        genres = ", ".join(cleaned)
+                    # Strict length filter: ensures long descriptions are ignored (< 60 chars)
+                    if len(candidate) < 60 and not any(bad in candidate.lower() for bad in ["http", "www", "quality", "download", "web-dl"]):
+                        parts = re.split(r'[,|/•]', candidate)
+                        cleaned = [p.strip() for p in parts if p.strip() and 2 <= len(p.strip()) <= 30]
+                        if cleaned:
+                            genres = ", ".join(cleaned)
+
             if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating)\b', text, re.IGNORECASE):
                 r_match = re.search(r'\b(?:IMDb|IMDB|Rating)\s*[:\-•]?\s*([0-9]+(?:\.[0-9]+)?)', text, re.IGNORECASE)
                 if r_match:
