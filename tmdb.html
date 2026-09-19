@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEENDAYAL DHAKAD</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --primary-color: #ff007a;
+            --bg-color: #0f0f13;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-color: #ffffff;
+            --secondary-text: #a0a0a0;
+            --glow: 0 0 10px rgba(255, 0, 122, 0.5);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background: radial-gradient(circle at top left, #2a1a3a, #0f0f13);
+        }
+
+        .container {
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(45deg, #ff007a, #7a00ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            text-shadow: 0 0 20px rgba(255, 0, 122, 0.3);
+        }
+
+        .search-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 40px 12px 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            box-sizing: border-box;
+            backdrop-filter: blur(10px);
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: var(--glow);
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 15px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 18px;
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+            margin-bottom: 15px;
+            color: #ff80bf;
+            text-shadow: 0 0 10px rgba(255, 128, 191, 0.3);
+        }
+
+        .language-options {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .glass-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-color);
+            padding: 12px;
+            border-radius: 12px;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glass-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-btn.active {
+            background: linear-gradient(90deg, rgba(255, 0, 122, 0.2), rgba(122, 0, 255, 0.2));
+            border-color: #ff007a;
+            box-shadow: 0 0 20px rgba(255, 0, 122, 0.4);
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+        }
+
+        .search-btn {
+            text-align: center;
+            font-weight: bold;
+            font-size: 16px;
+            width: 100%;
+            margin-top: -10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .movie-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+        }
+
+        .movie-meta {
+            font-size: 14px;
+            color: var(--secondary-text);
+            margin-bottom: 4px;
+        }
+
+        .tabs {
+            overflow-x: auto;
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 5px;
+            border-radius: 16px;
+            justify-content: center;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 8px 10px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: white;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn.active {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 15px rgba(255, 0, 122, 0.3);
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .grid.backdrops {
+             grid-template-columns: 1fr;
+        }
+
+        .grid-item {
+            position: relative;
+            border-radius: 16px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            transition: transform 0.3s, box-shadow 0.3s;
+            aspect-ratio: 2/3;
+        }
+
+        .grid.backdrops .grid-item {
+             aspect-ratio: 16/9;
+        }
+
+        .grid.logos .grid-item {
+             aspect-ratio: 16/9;
+             background: transparent;
+             border: none;
+        }
+
+        .grid.logos img {
+             object-fit: contain;
+        }
+
+        .grid-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 0, 122, 0.5);
+        }
+
+        .grid-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .download-btn {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+            color: white;
+            text-decoration: none;
+        }
+
+        .download-btn:hover {
+            background: var(--primary-color);
+            box-shadow: 0 0 15px var(--primary-color);
+            transform: scale(1.1);
+        }
+
+        .download-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke: white;
+        }
+
+        .home-btn {
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .home-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 0 15px rgba(255, 0, 122, 0.3);
+            border-color: var(--primary-color);
+            transform: scale(1.05);
+        }
+
+        .loader {
+            display: none;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-left-color: var(--primary-color);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        @keyframes spin { 0% { transform: translateY(-50%) rotate(0deg); } 100% { transform: translateY(-50%) rotate(360deg); } }
+
+
+        .cat-btn {
+            padding: 8px 12px;
+            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        .cat-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .cat-btn.active {
+            background: linear-gradient(90deg, rgba(255, 0, 122, 0.4), rgba(122, 0, 255, 0.4));
+            border-color: #ff007a;
+            box-shadow: 0 0 10px rgba(255, 0, 122, 0.3);
+        }
+
+        .browse-item {
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            aspect-ratio: 2/3;
+            cursor: pointer;
+            border: 1px solid var(--glass-border);
+            transition: transform 0.2s;
+        }
+
+        .browse-item:hover {
+            transform: scale(1.05);
+            border-color: var(--primary-color);
+        }
+
+        .browse-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .browse-item .rating {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(0,0,0,0.7);
+            color: gold;
+            font-size: 11px;
+            padding: 2px 5px;
+            border-radius: 5px;
+            font-weight: bold;
+            backdrop-filter: blur(5px);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <span style="font-size: 24px;">🎴</span> DEENDAYAL DHAKAD
+            </div>
+            <div class="home-btn" onclick="goHome()" title="Home">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            </div>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" class="search-input" placeholder="Search movie/series (e.g. Jawan)">
+            <div id="loader" class="loader"></div>
+        </div>
+
+        <div style="display: flex; gap: 10px; width: 100%;">
+            <button id="searchBtn" class="glass-btn search-btn" style="flex: 1;" onclick="performSearch(document.getElementById('searchInput').value)">
+                Search
+            </button>
+            <button id="searchResBtn" class="glass-btn search-btn" style="flex: 1;" onclick="performTmdbSearch(document.getElementById('searchInput').value)">
+                Search Results
+            </button>
+        </div>
+
+
+        <div class="glass-panel" id="categoriesPanel" style="margin-top: 20px;">
+            <div style="display: flex; justify-content: center; margin-bottom: 15px; gap: 10px;">
+                <button id="countryBtnAll" class="glass-btn active" onclick="setCountry('ALL')">All Countries</button>
+                <button id="countryBtnIn" class="glass-btn" onclick="setCountry('IN')">🇮🇳 India Only</button>
+            </div>
+            <div class="tabs" style="flex-wrap: wrap; justify-content: flex-start; gap: 8px;">
+                <button class="cat-btn active" onclick="browseCategory('trending', event)">🔥 Trending</button>
+                <button class="cat-btn" onclick="browseCategory('popular', event)">📈 Popular</button>
+                <button class="cat-btn" onclick="browseCategory('now_playing', event)">▶️ Now Playing</button>
+                <button class="cat-btn" onclick="browseCategory('in_theaters', event)">🎭 In Theaters</button>
+                <button class="cat-btn" onclick="browseCategory('upcoming', event)">📅 Upcoming</button>
+                <button class="cat-btn" onclick="browseCategory('top_rated', event)">⭐ Top Rated</button>
+                <button class="cat-btn" onclick="browseCategory('movies', event)">🎬 Movies</button>
+                <button class="cat-btn" onclick="browseCategory('tv', event)">📺 TV Series</button>
+                <button class="cat-btn" onclick="browseCategory('anime', event)">🌸 Anime</button>
+                <button class="cat-btn" onclick="browseCategory('web_series', event)">🌐 Web Series</button>
+            </div>
+            <div id="browseGrid" class="grid" style="margin-top: 15px; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                <!-- Browse results -->
+            </div>
+            <div id="loadMoreContainer" style="display: none; text-align: center; margin-top: 20px; padding-bottom: 5px;">
+                <button id="loadMoreBtn" class="glass-btn" onclick="loadMore()" style="width: 200px; font-weight: bold; padding: 12px; background: rgba(74, 144, 226, 0.2); color: #4a90e2; border: 1px solid rgba(74, 144, 226, 0.4);">⬇️ Load More ⬇️</button>
+            </div>
+        </div>
+
+        <div id="welcomeMsg" style="text-align: center; margin-top: 50px; opacity: 0.7;">
+            <p>Search for your favorite movies & series<br>to get high-quality posters & backdrops.</p>
+        </div>
+
+        <div id="contentArea" style="display:none;">
+            <div class="glass-panel" id="movieMeta">
+                <div class="section-title">ℹ️ Current Selection</div>
+                <div class="movie-title" id="mTitle"></div>
+                <div class="movie-meta" id="mRelease"></div>
+                <div class="movie-meta" id="mRating"></div>
+                <div class="movie-meta" id="mGenres"></div>
+                <div class="movie-meta" id="mDuration"></div>
+                <div class="movie-meta" id="mOtt"></div>
+                <div class="movie-meta" id="mUrl"></div>
+                <div class="movie-meta" id="mTmdb"></div>
+            </div>
+
+            <div class="glass-panel">
+                <div class="section-title" id="filterToggle" onclick="toggleFilters()" style="cursor: pointer;">🔻 Filter Options</div>
+                <div id="filterContent" style="display: block;">
+                    <div class="section-title" style="font-size: 14px; color: #ccc; margin-top:0;">🌐 Language</div>
+                    <div class="language-options" id="langOptions">
+                        <!-- Dynamic Options -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel" style="background: linear-gradient(180deg, rgba(40,20,60,0.4), rgba(20,20,40,0.4));">
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchTab('posters')">
+                        <span>📱</span> Posters
+                    </button>
+                    <button class="tab-btn" onclick="switchTab('backdrops')">
+                        <span>💻</span> Backdrops
+                    </button>
+                    <button class="tab-btn" onclick="switchTab('logos')">
+                        <span>🏷️</span> Logos
+                    </button>
+                </div>
+
+                <div class="grid" id="imageGrid">
+                    <!-- Images go here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentData = null;
+        let currentTab = 'posters';
+        let currentLang = 'all';
+        let currentPage = 1;
+        let currentCountry = 'ALL'; // or 'IN'
+        let hasMore = true;
+        let isLoadingMore = false;
+
+        let currentCategory = 'trending';
+
+        // Initial load
+        window.addEventListener('DOMContentLoaded', () => {
+            browseCategory('trending');
+        });
+
+        function setCountry(countryCode) {
+            currentCountry = countryCode;
+            document.getElementById('countryBtnAll').classList.remove('active');
+            document.getElementById('countryBtnIn').classList.remove('active');
+
+            if (countryCode === 'ALL') {
+                document.getElementById('countryBtnAll').classList.add('active');
+            } else {
+                document.getElementById('countryBtnIn').classList.add('active');
+            }
+
+            // Reload current category with new country
+            if (currentCategory) {
+                browseCategory(currentCategory, null, true);
+            }
+        }
+
+        async function browseCategory(category, event, reset = false) {
+            const grid = document.getElementById('browseGrid');
+
+            if (category !== currentCategory || reset) {
+                currentCategory = category;
+                currentPage = 1;
+                grid.innerHTML = '<div id="browseLoading" style="text-align:center; grid-column: 1/-1; padding: 20px;"><div class="loader" style="display:inline-block; position:relative; right:0; transform:none;"></div></div>';
+                const loadMoreBtn = document.getElementById('loadMoreContainer');
+                if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+
+                if(event && event.currentTarget) {
+                    document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+                    event.currentTarget.classList.add('active');
+                }
+            } else {
+                const loadBtn = document.getElementById('loadMoreBtn');
+                if (loadBtn) loadBtn.innerText = '⏳ Loading...';
+            }
+
+            try {
+                const countryParam = currentCountry === 'IN' ? '&country=IN' : '';
+                const response = await fetch(`/api/tmdb/browse?category=${category}&page=${currentPage}${countryParam}`);
+                const data = await response.json();
+
+                if (currentPage === 1) {
+                    grid.innerHTML = '';
+                }
+
+                if (data.error) {
+                    if (currentPage === 1) grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #ff4444;">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                if (data.results && data.results.length > 0) {
+                    data.results.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = 'browse-item';
+                        div.onclick = () => fetchDetails(item.id, item.media_type);
+
+                        const imgUrl = `/api/img?path=${item.poster_path}&size=w342`;
+
+                        div.innerHTML = `
+                            <img src="${imgUrl}" loading="lazy" alt="${item.title}">
+                            ${item.rating > 0 ? `<div class="rating">⭐ ${item.rating}</div>` : ''}
+                        `;
+                        grid.appendChild(div);
+                    });
+
+                    const loadMoreBtn = document.getElementById('loadMoreContainer');
+                    if (loadMoreBtn) {
+                        loadMoreBtn.style.display = 'block';
+                        document.getElementById('loadMoreBtn').innerText = '⬇️ Load More ⬇️';
+                    }
+                } else {
+                    const loadMoreBtn = document.getElementById('loadMoreContainer');
+                    if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+                    if (currentPage === 1) {
+                        grid.innerHTML = '<p style="text-align: center; width: 100%; grid-column: 1/-1; color: #aaa;">No results found.</p>';
+                    }
+                }
+            } catch (err) {
+                if (currentPage === 1) grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center;">Failed to load category</div>`;
+                const loadBtn = document.getElementById('loadMoreBtn');
+                if (loadBtn) loadBtn.innerText = '❌ Error';
+            }
+        }
+
+        function loadMore() {
+            if (currentCategory) {
+                currentPage++;
+                browseCategory(currentCategory, null, false);
+            }
+        }
+
+        async function fetchDetails(id, type) {
+            loader.style.display = 'block';
+            document.getElementById('categoriesPanel').style.display = 'none';
+            contentArea.style.display = 'none';
+            welcomeMsg.style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/tmdb/details?id=${id}&type=${type}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    alert(data.error);
+                    goHome();
+                } else {
+                    currentData = data;
+                    renderMovieInfo();
+                    generateLangOptions();
+
+                    // Reset filter toggle state properly to fix the bug
+                    const content = document.getElementById('filterContent');
+                    const toggleBtn = document.getElementById('filterToggle');
+                    // Always show filter by default when new item loaded
+                    content.style.display = 'block';
+                    toggleBtn.innerHTML = '🔻 Filter Options';
+
+                    switchTab('posters');
+                    contentArea.style.display = 'block';
+                }
+            } catch (err) {
+                alert("Error fetching details");
+                goHome();
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
+
+        const searchInput = document.getElementById('searchInput');
+        const loader = document.getElementById('loader');
+        const contentArea = document.getElementById('contentArea');
+        const welcomeMsg = document.getElementById('welcomeMsg');
+
+        searchInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                performSearch(this.value);
+            }
+        });
+
+        async function performTmdbSearch(query) {
+            if (!query) return;
+
+            loader.style.display = 'block';
+            contentArea.style.display = 'none';
+            welcomeMsg.style.display = 'none';
+            document.getElementById('categoriesPanel').style.display = 'block';
+            const grid = document.getElementById('browseGrid');
+            const loadMoreBtn = document.getElementById('loadMoreContainer');
+            if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+
+            // clear active state from category buttons
+            document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+            currentCategory = null;
+
+            grid.innerHTML = '<div id="browseLoading" style="text-align:center; grid-column: 1/-1; padding: 20px;"><div class="loader" style="display:inline-block; position:relative; right:0; transform:none;"></div></div>';
+
+            try {
+                const response = await fetch(`/api/tmdb/search?query=${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                grid.innerHTML = '';
+
+                if (data.error) {
+                    grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #ff4444;">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                const results = (data.results || []).filter(item => item.media_type === 'movie' || item.media_type === 'tv');
+
+                if (results.length > 0) {
+                    results.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = 'browse-item';
+                        div.onclick = () => fetchDetails(item.id, item.media_type);
+
+                        const imgUrl = item.poster_path ? `/api/img?path=${item.poster_path}&size=w342` : 'https://via.placeholder.com/342x513?text=No+Poster';
+
+                        div.innerHTML = `
+                            <img src="${imgUrl}" loading="lazy">
+                            <div class="browse-title">${item.title || item.name}</div>
+                            <div class="browse-rating">⭐ ${item.vote_average ? item.vote_average.toFixed(1) : 'N/A'}</div>
+                        `;
+                        grid.appendChild(div);
+                    });
+                } else {
+                    grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; opacity: 0.7;">No results found</div>';
+                }
+            } catch (error) {
+                console.error(error);
+                grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #ff4444;">Error fetching data</div>';
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
+        async function performSearch(query) {
+            if (!query) return;
+
+            loader.style.display = 'block';
+            contentArea.style.display = 'none';
+            welcomeMsg.style.display = 'none';
+            document.getElementById('categoriesPanel').style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/poster/search?query=${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    alert(data.error);
+                    welcomeMsg.style.display = 'block';
+                } else {
+                    currentData = data;
+                    renderMovieInfo();
+                    generateLangOptions();
+                    renderImages();
+                    contentArea.style.display = 'block';
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Error fetching data");
+                welcomeMsg.style.display = 'block';
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
+        function renderMovieInfo() {
+            document.getElementById('mTitle').innerText = `${currentData.title} (${currentData.year || 'N/A'})`;
+            document.getElementById('mRelease').innerText = currentData.release_date ? `Release: ${currentData.release_date}` : '';
+
+            const ratingText = currentData.rating ? `${currentData.rating} ⭐` : 'N/A ⭐';
+            const voteText = currentData.vote_count ? ` (${currentData.vote_count} votes)` : '';
+            document.getElementById('mRating').innerText = `Rating: ${ratingText}${voteText}`;
+
+            document.getElementById('mGenres').innerText = currentData.genres && currentData.genres.length > 0 ? `Genres: ${currentData.genres.join(', ')}` : '';
+            document.getElementById('mDuration').innerText = currentData.runtime ? `Duration: ${currentData.runtime}` : '';
+            document.getElementById('mOtt').innerText = currentData.ott && currentData.ott.length > 0 ? `OTT: ${currentData.ott.join(', ')}` : '';
+
+            const urlDiv = document.getElementById('mUrl');
+            if (currentData.url) {
+                urlDiv.innerHTML = `URL: <a href="${currentData.url}" target="_blank" style="color: #4a90e2; text-decoration: none;">TMDB Link</a>`;
+            } else {
+                urlDiv.innerHTML = '';
+            }
+
+            document.getElementById('mTmdb').innerText = `TMDB ID: ${currentData.tmdb_id || 'N/A'}`;
+        }
+
+        function generateLangOptions() {
+            const container = document.getElementById('langOptions');
+            container.innerHTML = '';
+
+            // Helper to create button
+            const createBtn = (text, code, count) => {
+                const btn = document.createElement('button');
+                btn.className = `glass-btn ${currentLang === code ? 'active' : ''}`;
+                btn.innerText = `${text} (${count})`;
+                btn.onclick = () => {
+                    document.querySelectorAll('.glass-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentLang = code;
+                    renderImages();
+                };
+                return btn;
+            };
+
+            // Count images based on current tab
+            const source = currentTab === 'posters' ? currentData.raw_posters : (currentTab === 'backdrops' ? currentData.raw_backdrops : currentData.raw_logos);
+            if (!source) return;
+
+            // All
+            let total = 0;
+            if (source['all']) total = source['all'].length;
+            container.appendChild(createBtn('All Languages', 'all', total));
+
+            // Iterate keys
+            for (const [key, val] of Object.entries(source)) {
+                if (key === 'all') continue;
+                let label = key;
+                if (key === 'en') label = 'English';
+                else if (key === 'xx' || key === 'null') label = 'No Language';
+                else if (key === 'hi') label = 'Hindi';
+                else if (key === 'te') label = 'Telugu';
+                else if (key === 'ta') label = 'Tamil';
+                else if (key === 'kn') label = 'Kannada';
+                else if (key === 'ml') label = 'Malayalam';
+                else label = key.toUpperCase();
+
+                if (val && val.length > 0) {
+                    container.appendChild(createBtn(label, key, val.length));
+                }
+            }
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            const btn = tab === 'posters' ? document.querySelector('.tab-btn:first-child') : (tab === 'backdrops' ? document.querySelector('.tab-btn:nth-child(2)') : document.querySelector('.tab-btn:nth-child(3)'));
+            btn.classList.add('active');
+
+            // Re-render lang options because counts change
+            generateLangOptions();
+            renderImages();
+        }
+
+        function renderImages() {
+            const grid = document.getElementById('imageGrid');
+            grid.innerHTML = '';
+
+            grid.classList.remove('backdrops', 'logos');
+            if (currentTab === 'backdrops') {
+                grid.classList.add('backdrops');
+            } else if (currentTab === 'logos') {
+                grid.classList.add('logos');
+            }
+
+            const source = currentTab === 'posters' ? currentData.raw_posters : (currentTab === 'backdrops' ? currentData.raw_backdrops : currentData.raw_logos);
+            const images = source[currentLang] || [];
+
+            images.forEach(url => {
+                const div = document.createElement('div');
+                div.className = 'grid-item';
+
+                const img = document.createElement('img');
+                img.src = url;
+                img.loading = "lazy";
+
+                const btn = document.createElement('a');
+                btn.className = 'download-btn';
+                btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
+                btn.href = url;
+                btn.target = "_blank"; // Open in new tab
+                btn.onclick = (e) => {
+                    e.preventDefault();
+                    Telegram.WebApp.openLink(url);
+                };
+
+                div.appendChild(img);
+                div.appendChild(btn);
+                grid.appendChild(div);
+            });
+        }
+
+
+        function goHome() {
+            searchInput.value = '';
+            contentArea.style.display = 'none';
+            welcomeMsg.style.display = 'block';
+            document.getElementById('categoriesPanel').style.display = 'block';
+            currentData = null;
+            loader.style.display = 'none';
+        }
+
+
+
+        function toggleFilters() {
+            const content = document.getElementById('filterContent');
+            const toggleBtn = document.getElementById('filterToggle');
+
+            if (content.style.display !== 'none') {
+                content.style.display = 'none';
+                toggleBtn.innerHTML = '▶️ Filter Options';
+            } else {
+                content.style.display = 'block';
+                toggleBtn.innerHTML = '🔻 Filter Options';
+            }
+        }
+
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+
+        // Check for theme params to match app colors
+        if (Telegram.WebApp.themeParams) {
+             // Optional: Adapt colors
+        }
+    </script>
+</body>
+</html>
