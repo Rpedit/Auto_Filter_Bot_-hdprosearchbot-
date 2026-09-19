@@ -244,7 +244,7 @@ def get_qualities(text: str) -> str:
     if version_str:
         attached = False
         for idx, s in enumerate(sources):
-            if any(k in s.upper() for k in ["HDTC", "CAM", "TS", "PREDVD", "WEBRIP", "WEB-DL", "RIP", "BLURAY"]):
+            if any(k in s.upper() for k in ["HDTC", "CAM", "TS", "PREDVD", "WEBRip", "WEB-DL", "RIP", "BLURAY"]):
                 sources[idx] = f"{s} {version_str}"
                 attached = True
                 break
@@ -313,7 +313,7 @@ def format_movie_qualities(quality_list: list) -> str:
     if version_str:
         attached = False
         for idx, s in enumerate(source_list):
-            if any(k in s.upper() for k in ["HDTC", "CAM", "TS", "PREDVD", "WEBRIP", "WEB-DL", "RIP", "BLURAY"]):
+            if any(k in s.upper() for k in ["HDTC", "CAM", "TS", "PREDVD", "WEBRip", "WEB-DL", "RIP", "BLURAY"]):
                 source_list[idx] = f"{s} {version_str}"
                 attached = True
                 break
@@ -623,7 +623,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
         content = movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
         search_area = content if content else movie_soup
 
-        # 1. Primary check in <a> tags
         for a_tag in search_area.find_all("a", href=True):
             href = a_tag["href"].strip()
             if "imdb.com/title/tt" in href:
@@ -631,12 +630,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                 if clean_match:
                     imdb_url = f"https://www.imdb.com/title/{clean_match.group(1)}/"
                     break
-
-        # 2. Fallback text regex scan across full page HTML if not found in <a> tags
-        if not imdb_url:
-            text_match = re.search(r'https?://(?:www\.)?imdb\.com/title/(tt\d+)/?', movie_html)
-            if text_match:
-                imdb_url = f"https://www.imdb.com/title/{text_match.group(1)}/"
 
         for elem in search_area.find_all(["p", "div", "span", "strong", "b", "h4"]):
             text = elem.get_text(" ", strip=True)
@@ -1099,16 +1092,22 @@ async def _process_with_lock(
 
     if not movie_doc or is_mismatched:
         blogger_poster_url = await get_blogger_poster_url(base_name, media_info.get("year"))
+        
+        # HDHub4u data fetch
         hdhub_genres, hdhub_rating, hdhub_imdb_url = await get_hdhub4u_data(base_name)
 
         tt_match = re.search(r'tt\d+', hdhub_imdb_url) if hdhub_imdb_url else None
         hdhub_imdb_id = tt_match.group(0) if tt_match else None
 
+        # Fetch official IMDb details safely (Primary or Fallback source)
         imdb_details = await fetch_imdb_safely(
             base_name,
             is_series=is_series,
             year=media_info.get("year")
         ) or {}
+
+        if not hdhub_imdb_id and imdb_details.get("imdb_id"):
+            hdhub_imdb_id = imdb_details.get("imdb_id")
 
         if not imdb_details or not is_good_title_match(base_name, imdb_details.get("title", "")):
             imdb_id = hdhub_imdb_id
@@ -1150,11 +1149,11 @@ async def _process_with_lock(
                 or imdb_details.get("backdrop_url", "")
             )
 
+        # Rating selection (Prioritize HDHub4u ONLY if a valid hdhub_imdb_url exists, otherwise use IMDb/TMDb)
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
-        # Fallback for rating: HDHub4u -> IMDb -> TMDB
-        if hdhub_rating and hdhub_rating != "N/A":
+        if hdhub_imdb_url and hdhub_rating and hdhub_rating != "N/A":
             rating = hdhub_rating
         elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
             rating = str(imdb_rate).strip()
@@ -1163,7 +1162,7 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # Fallback for IMDb URL: HDHub4u -> IMDb API -> TMDB API
+        # IMDb URL fallback logic
         if hdhub_imdb_url:
             imdb_url = hdhub_imdb_url
         elif imdb_details.get("url"):
@@ -1208,6 +1207,7 @@ async def _process_with_lock(
         )
 
         genre_list = []
+        # Genres me koi URL check nahi hai, original logic ke hisaab se HDHub4u genres use honge
         if hdhub_genres and hdhub_genres != "N/A":
             raw_parts = re.split(r'[,|/•]', hdhub_genres)
             for p in raw_parts:
@@ -1331,8 +1331,8 @@ async def _process_with_lock(
 
         current_db_rating = movie_doc.get("rating")
         if not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10"):
-            _, hdhub_rating, _ = await get_hdhub4u_data(base_name)
-            if hdhub_rating and hdhub_rating != "N/A" and hdhub_rating != "x/10":
+            _, hdhub_rating, hdhub_imdb_url = await get_hdhub4u_data(base_name)
+            if hdhub_imdb_url and hdhub_rating and hdhub_rating != "N/A" and hdhub_rating != "x/10":
                 update_fields.setdefault("$set", {})["rating"] = hdhub_rating
 
         await db.movie_updates.update_one(
