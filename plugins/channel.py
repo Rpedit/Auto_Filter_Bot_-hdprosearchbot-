@@ -313,7 +313,7 @@ def format_movie_qualities(quality_list: list) -> str:
     if version_str:
         attached = False
         for idx, s in enumerate(source_list):
-            if any(k in s.upper() for k in ["HDTC", "CAM", "TS", "PREDVD", "WEBRIP", "WEB-DL", "RIP", "BLURAY"]):
+            if any(k in s.upper() for k in ["HDTC", "CAM", "TS", "PREDVD", "WEBRip", "WEB-DL", "RIP", "BLURAY"]):
                 source_list[idx] = f"{s} {version_str}"
                 attached = True
                 break
@@ -631,20 +631,16 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                     imdb_url = f"https://www.imdb.com/title/{clean_match.group(1)}/"
                     break
 
-        for elem in search_area.find_all(["p", "div", "span", "strong", "b", "h4", "li"]):
-            text = elem.get_text(" ", strip=True)
-
-            if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b', text, re.IGNORECASE):
-                m = re.search(r'\b(?:Genre|Genres)\b\s*[:\-]?\s*([^\n\r]+)', text, re.IGNORECASE)
-                if m:
-                    candidate = m.group(1).strip()
-                    candidate = re.sub(r'^(?:Genre|Genres)\s*[:\-]?\s*', '', candidate, flags=re.IGNORECASE)
-                    candidate = re.split(
-                        r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline|Info|Source)\b',
-                        candidate, flags=re.IGNORECASE
-                    )[0]
-                    candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
-                    parts = re.split(r'[,|/•]', candidate)
+        # Line-by-line parsing using \n to prevent merging lines
+        full_text = search_area.get_text("\n", strip=True)
+        for line in full_text.splitlines():
+            line = line.strip()
+            if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b', line, re.IGNORECASE):
+                m = re.sub(r'^(?:Genre|Genres)\s*[:\-]?\s*', '', line, flags=re.IGNORECASE).strip()
+                if m and m.lower() not in ["genre", "genres"]:
+                    m = re.split(r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline|Info|Source)\b', m, flags=re.IGNORECASE)[0]
+                    m = re.sub(r'["\'<>{}[\]\\]', '', m)
+                    parts = re.split(r'[,|/•]+', m)
                     cleaned = [
                         p.strip() for p in parts 
                         if p.strip() and 2 <= len(p.strip()) <= 30 and not any(
@@ -654,44 +650,15 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                     if cleaned:
                         genres = ", ".join(cleaned)
 
-            if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating)\b', text, re.IGNORECASE):
-                r_match = re.search(
-                    r'\b(?:IMDb|IMDB|iMDB|Rating|Ratings)\s*(?:Rating|Ratings)?\s*[:\-•]?\s*([0-9]+(?:\.[0-9]+)?|[xX]|N/?A)\s*(?:/\s*10)?',
-                    text,
-                    re.IGNORECASE
-                )
+            if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating)\b', line, re.IGNORECASE):
+                r_match = re.search(r'(?:IMDb|IMDB|Rating)\s*[:\-•]?\s*([0-9]+(?:\.[0-9]+)?)', line, re.IGNORECASE)
                 if r_match:
-                    raw_val = r_match.group(1).strip()
-                    if raw_val.lower() in ("x", "n/a", "na"):
-                        rating = "x/10"
-                    else:
-                        try:
-                            val = float(raw_val)
-                            if 0.0 < val <= 10.0:
-                                rating = f"{val:.1f}"
-                        except ValueError:
-                            rating = "x/10"
-
-        if genres == "N/A" or rating == "N/A":
-            full_text = search_area.get_text("\n", strip=True)
-            for line in full_text.splitlines():
-                line = line.strip()
-                if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b', line, re.IGNORECASE):
-                    m = re.sub(r'^(?:Genre|Genres)\s*[:\-]?\s*', '', line, flags=re.IGNORECASE).strip()
-                    if m and m.lower() not in ["genre", "genres"]:
-                        parts = re.split(r'[,|/•]', m)
-                        cleaned = [p.strip() for p in parts if p.strip() and 2 <= len(p.strip()) <= 30]
-                        if cleaned:
-                            genres = ", ".join(cleaned)
-                if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating)\b', line, re.IGNORECASE):
-                    r_match = re.search(r'(?:IMDb|IMDB|Rating)\s*[:\-•]?\s*([0-9]+(?:\.[0-9]+)?)', line, re.IGNORECASE)
-                    if r_match:
-                        try:
-                            val = float(r_match.group(1))
-                            if 0.0 < val <= 10.0:
-                                rating = f"{val:.1f}"
-                        except ValueError:
-                            pass
+                    try:
+                        val = float(r_match.group(1))
+                        if 0.0 < val <= 10.0:
+                            rating = f"{val:.1f}"
+                    except ValueError:
+                        pass
 
     except Exception as e:
         logger.error(f"Error scraping HDHub4u data: {e}")
@@ -1153,7 +1120,7 @@ async def _process_with_lock(
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
-        # 👉 Strict HDHub4u Rating & URL assignment (No external API fallback for rating/URL if HDHub4u has them, else safe fallback)
+        # 👉 Strict HDHub4u Rating (agar HDHub4u par ho tabhi wahi aayegi, warna fallback se uthegi)
         if hdhub_rating and hdhub_rating != "N/A":
             rating = hdhub_rating
         elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
@@ -1163,9 +1130,10 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
+        # 👉 Strict HDHub4u IMDb URL (Sirf HDHub4u par ho tabhi URL aayega, doosri APIs ka URL nahi aayega)
         imdb_url = hdhub_imdb_url if hdhub_imdb_url else ""
 
-        # 👉 Strict HDHub4u Genres assignment (Prioritize HDHub4u genres strictly, fallback only if N/A)
+        # 👉 Strict HDHub4u Genres (Agar HDHub4u par genres mil jayein toh wahi aayenge, warna hi fallback use hoga)
         genre_list = []
         if hdhub_genres and hdhub_genres != "N/A":
             raw_parts = re.split(r'[,|/•]', hdhub_genres)
