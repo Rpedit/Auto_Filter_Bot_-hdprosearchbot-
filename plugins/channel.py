@@ -1155,7 +1155,7 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # ✅ FIXED: imdb_url ab sirf HDHub4u ke url par depend karega (agar wahan hai tabhi milega, warna blank)
+        # ✅ FIXED: imdb_url ab strictly HDHub4u ke url par depend karega (agar wahan hai tabhi script hoga, warna blank)
         imdb_url = hdhub_imdb_url if hdhub_imdb_url else ""
 
         imdb_r = imdb_details.get("runtime")
