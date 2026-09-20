@@ -1120,7 +1120,7 @@ async def _process_with_lock(
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
-        # 👉 Strict HDHub4u Rating (agar HDHub4u par ho tabhi wahi aayegi, warna fallback se uthegi)
+        # 👉 Strict HDHub4u Rating (agar HDHub4u par ho tabhi wahi aayegi, warna fallback)
         if hdhub_rating and hdhub_rating != "N/A":
             rating = hdhub_rating
         elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
@@ -1130,13 +1130,13 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # 👉 Strict HDHub4u IMDb URL (Sirf HDHub4u par ho tabhi URL aayega, doosri APIs ka URL nahi aayega)
+        # 👉 Strict HDHub4u IMDb URL (Sirf HDHub4u par ho tabhi URL aayega)
         imdb_url = hdhub_imdb_url if hdhub_imdb_url else ""
 
-        # 👉 Strict HDHub4u Genres (Agar HDHub4u par genres mil jayein toh wahi aayenge, warna hi fallback use hoga)
+        # 👉 Strictly HDHub4u Genres (No TMDB/IMDb genre fallback at all!)
         genre_list = []
         if hdhub_genres and hdhub_genres != "N/A":
-            raw_parts = re.split(r'[,|/•]', hdhub_genres)
+            raw_parts = re.split(r'[,|/•]+', hdhub_genres)
             for p in raw_parts:
                 clean_p = p.strip()
                 if not clean_p or clean_p == "N/A" or any(bad in clean_p.lower() for bad in ["dropdown", "menu", "select", "category"]):
@@ -1152,27 +1152,7 @@ async def _process_with_lock(
                     if formatted_p not in genre_list:
                         genre_list.append(formatted_p)
 
-        if genre_list:
-            genres = ", ".join(genre_list)
-        else:
-            raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
-            fallback_genres = []
-            if isinstance(raw_genres, str) and raw_genres != "N/A":
-                fallback_genres = [g.strip() for g in raw_genres.split(",") if g.strip() and g.strip() != "N/A"]
-            elif isinstance(raw_genres, (list, tuple)):
-                for g in raw_genres:
-                    if isinstance(g, dict):
-                        name = g.get("name") or g.get("genre")
-                        if name:
-                            fallback_genres.append(str(name).strip())
-                    elif isinstance(g, str):
-                        fallback_genres.append(g.strip())
-
-            for g in fallback_genres:
-                clean_g = g.strip().title()
-                if clean_g and clean_g not in genre_list:
-                    genre_list.append(clean_g)
-            genres = ", ".join(genre_list) if genre_list else "N/A"
+        genres = ", ".join(genre_list) if genre_list else "N/A"
 
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
