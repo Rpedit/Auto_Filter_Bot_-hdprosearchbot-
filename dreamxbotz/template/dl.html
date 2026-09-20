@@ -3,208 +3,1013 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ALL Movies Studio | {{file_name}}</title>
-    <link rel="stylesheet" href="https://unpkg.com/sheryjs/dist/Shery.css" />
-    <link rel="stylesheet" href="https://biisal.github.io/Resources/StreamCSS.css">
-    <link rel="stylesheet" href="https://biisal.github.io/Resources/playerCss.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HD PRO SEARCH BOT | {{file_name}}</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
-        integrity="sha512-z3gLpd7yknf1YoNbCzqRKc4qyor8gaKU1qmn+CShxbuBusANI9QpRohGBreCFkKxLhei6S9CQXFEbbKuqLg0DA=="
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,500;0,700;0,800;1,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+
+    <!-- Google Cast Official Engine -->
+    <script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+    
+    <!-- HLS.js Multi-Codec Engine -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <style>
+        :root {
+            --brand-red: #E50914;
+            --brand-red-bright: #FF1E27;
+            --brand-orange: #FF5722;
+            --brand-gold: #FFB800;
+        }
+
+        body {
+            background: radial-gradient(circle at 10% 10%, #2b0507 0%, #120305 45%, #080204 90%);
+            color: #f8fafc;
+            font-family: 'Josefin Sans', sans-serif;
+            overflow-x: hidden;
+            min-height: 100vh;
+            touch-action: manipulation;
+        }
+
+        /* Glassmorphism Styling + GPU Acceleration */
+        .glass-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-top: 1px solid rgba(255, 255, 255, 0.22);
+            border-left: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 20px;
+            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.65), inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+            transform: translateZ(0);
+        }
+
+        .glass-card-glow {
+            will-change: transform;
+            transform: translateZ(0);
+            box-shadow: 0 0 35px rgba(229, 9, 20, 0.18), 0 12px 40px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Action Buttons Styling */
+        .player-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 14px 18px;
+            border-radius: 14px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            position: relative;
+            overflow: hidden;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+        }
+
+        .player-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+            transition: 0.5s;
+        }
+
+        .player-btn:hover::before {
+            left: 100%;
+        }
+
+        .player-btn:hover {
+            transform: translateY(-3px) scale(1.01);
+            filter: brightness(1.15);
+        }
+
+        .btn-copy { 
+            background: linear-gradient(135deg, rgba(229, 9, 20, 0.9), rgba(180, 0, 10, 0.95)); 
+            color: #ffffff; 
+            border: 1px solid rgba(255, 30, 39, 0.4);
+            box-shadow: 0 6px 20px rgba(229, 9, 20, 0.35); 
+        }
+
+        .btn-vlc { 
+            background: linear-gradient(135deg, rgba(255, 87, 34, 0.9), rgba(216, 50, 0, 0.95)); 
+            color: #ffffff; 
+            border: 1px solid rgba(255, 110, 64, 0.4);
+            box-shadow: 0 6px 20px rgba(255, 87, 34, 0.35); 
+        }
+
+        .btn-mx { 
+            background: linear-gradient(135deg, rgba(255, 184, 0, 0.9), rgba(212, 147, 0, 0.95)); 
+            color: #0d0608; 
+            border: 1px solid rgba(255, 200, 50, 0.5);
+            box-shadow: 0 6px 20px rgba(255, 184, 0, 0.35); 
+        }
+
+        .btn-download { 
+            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%); 
+            color: #ffffff; 
+            box-shadow: 0 8px 30px rgba(239, 35, 35, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+
+        .brand-gradient-text {
+            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-family: 'Josefin Sans', sans-serif;
+            font-weight: 800;
+        }
+
+        .brand-text-inline {
+            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            display: inline-block;
+            white-space: nowrap;
+        }
+
+        .no-wrap-title {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            flex-wrap: nowrap;
+        }
+
+        /* Netflix Player Custom Overlay Styles */
+        .netflix-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to bottom, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.15) 50%, rgba(0, 0, 0, 0.85) 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 16px 20px;
+            transition: opacity 0.3s ease;
+            z-index: 20;
+            user-select: none;
+        }
+
+        @media (min-width: 640px) {
+            .netflix-overlay {
+                padding: 22px 28px;
+            }
+        }
+
+        .netflix-overlay.hide {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Top Bar - Center Reactions with 3 Columns */
+        .player-top-bar {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            width: 100%;
+        }
+
+        .reaction-group {
+            grid-column: 2;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .reaction-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: rgba(45, 45, 45, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(8px);
+            transition: transform 0.15s, background 0.2s;
+        }
+
+        @media (max-width: 640px) {
+            .reaction-btn {
+                width: 36px;
+                height: 36px;
+            }
+        }
+
+        .reaction-btn:active {
+            transform: scale(1.18);
+            background: rgba(229, 9, 20, 0.8);
+        }
+
+        .reaction-btn i {
+            font-size: 15px;
+        }
+
+        .top-right-tools {
+            grid-column: 3;
+            display: flex;
+            align-items: center;
+            justify-self: end;
+            gap: 16px;
+        }
+
+        .top-right-tools i {
+            color: #f1f5f9;
+            font-size: 18px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .top-right-tools i:hover {
+            opacity: 0.8;
+        }
+
+        /* Vertical Brightness Controller */
+        .brightness-box {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            z-index: 22;
+        }
+
+        @media (min-width: 640px) {
+            .brightness-box {
+                left: 28px;
+            }
+        }
+
+        .brightness-box i {
+            color: #d1d5db;
+            font-size: 17px;
+        }
+
+        .brightness-bar {
+            -webkit-appearance: none;
+            writing-mode: vertical-lr;
+            direction: rtl;
+            width: 4px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .brightness-bar::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 7px;
+            height: 16px;
+            background: #ffffff;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        /* Center Seek & Play Controls */
+        .center-player-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 48px;
+        }
+
+        @media (min-width: 640px) {
+            .center-player-controls {
+                gap: 70px;
+            }
+        }
+
+        .skip-btn {
+            position: relative;
+            background: none;
+            border: none;
+            color: #ffffff;
+            font-size: 32px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.15s;
+        }
+
+        .skip-btn:active {
+            transform: scale(1.15);
+        }
+
+        .skip-btn span {
+            position: absolute;
+            font-size: 10px;
+            font-weight: 800;
+            top: 52%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            letter-spacing: -0.5px;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        .main-play-btn {
+            background: none;
+            border: none;
+            color: #ffffff;
+            font-size: 46px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.15s;
+        }
+
+        @media (min-width: 640px) {
+            .main-play-btn {
+                font-size: 56px;
+            }
+        }
+
+        .main-play-btn:active {
+            transform: scale(1.15);
+        }
+
+        /* Bottom Timeline & Sub-controls */
+        .bottom-player-section {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .timeline-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            width: 100%;
+        }
+
+        .netflix-timeline {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+            accent-color: #E50914;
+            transition: height 0.15s;
+        }
+
+        .netflix-timeline:hover {
+            height: 5px;
+        }
+
+        .netflix-timeline::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #E50914;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(229, 9, 20, 0.8);
+        }
+
+        .video-time-remain {
+            color: #d1d5db;
+            font-size: 12.5px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            min-width: 60px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .bottom-player-options {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 26px;
+            padding-top: 4px;
+        }
+
+        @media (min-width: 640px) {
+            .bottom-player-options {
+                gap: 46px;
+            }
+        }
+
+        .player-opt-btn {
+            background: none;
+            border: none;
+            color: #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            opacity: 0.9;
+            transition: opacity 0.2s, transform 0.15s;
+        }
+
+        @media (min-width: 640px) {
+            .player-opt-btn {
+                font-size: 13.5px;
+            }
+        }
+
+        .player-opt-btn:hover {
+            opacity: 1;
+        }
+
+        .player-opt-btn:active {
+            transform: scale(0.96);
+        }
+
+        .player-opt-btn i {
+            font-size: 14px;
+        }
+
+        /* Screen Lock Badge */
+        .locked-screen-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #ffffff;
+            background: rgba(18, 18, 18, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 8px 16px;
+            border-radius: 24px;
+            font-size: 13px;
+            font-weight: 600;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            z-index: 30;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+        }
+
+        /* Toast Popup */
+        #toast {
+            position: fixed;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            will-change: transform, opacity;
+        }
+
+        #toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #080204; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 87, 34, 0.3); border-radius: 10px; }
+    </style>
 </head>
-<!-- this code is written by @biisal tg:biisal-files  -->
-<!-- stealing credit doesn't make you developer..so try to give full credit to the developer 😊 u will not loose anything for giving proper credit.   -->
 
 <body>
-    <nav>
-        <div class="nleft">
-            <a href="https://t.me/dreamcinezone">
-                <!-- if u are trying to change the header name please remove the title text from bottom line  -->
-                <h3 id="heading" style="z-index: 100;" class="magnet">dreamcinezone </h3>
-            </a>
-        </div>
-        <div class="nryt">
-            <a class="home-btn magnet" href="#main" onclick="toggleWidthnav(this)">Home</a>
 
-            <a href="#sec1" class="about-btn magnet" onclick="toggleWidthnav(this)">About</a>
-        </div>
+    <!-- Centered Header / Navbar -->
+    <nav class="sticky top-0 z-50 glass-card mx-3 my-3 px-4 py-3 max-w-7xl md:mx-auto flex justify-center items-center">
+        <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="no-wrap-title">
+            <h3 class="text-xl sm:text-2xl font-extrabold brand-gradient-text tracking-wide text-center uppercase flex items-center justify-center gap-1.5">
+                <span>HD PRO SEARCH BOT</span>
+                <span style="-webkit-text-fill-color: initial;" class="inline-block leading-none">🔍</span>
+            </h3>
+        </a>
     </nav>
-    <center>
-        <div class="about-nav">
-            <a href="#sec1" class="wlcm magnet" onclick="toggleWidth(this)">Welcome</a>
-            <a href="#sec2" class="abt-chnl magnet" onclick="toggleWidth(this)">Channels</a>
-            <a href="#sec3" class="magnet bot-btn" onclick="toggleWidth(this) , bot_btn_clicked()">Bots</a>
-            <a href="#sec4" class="magnet contact-btn" onclick="toggleWidth(this)">Let's Talk</a>
-        </div>
-    </center>
-    <!-- this code is written by @biisal tg:biisal-files  -->
-    <!-- stealing credit doesn't make you developer..so try to give full credit to the developer 😊 u will not loose anything for giving proper credit.   -->
 
-    <div class="outer">
+    <div class="outer max-w-5xl mx-auto px-3 sm:px-4 mt-4">
         <div class="inner">
             <div class="main" id="main">
-                <video id="player" class="player" src="{{file_url}}" type="video/mp4" playsinline controls
-                    width="100%"></video>
-                <div class="player"></div>
-                <div class="file-name">
-                    <h4>File name : </h4>
-                    <br>
-                    <p id="myDiv">{{file_name}}</p>
-                </div>
-                <div class="downloadBtn">
-                    <button class="magnet" onclick="vlc_player()"><img src="https://i.postimg.cc/15TQ4y7B/vlc.png"
-                            alt="">watch in VLC PLAYER</button>
-                    <button class="magnet" onclick="mx_player()"><img src="https://i.postimg.cc/sx4Msv4T/mx.png"
-                            alt="">watch in MX PLAYER</button>
-                    <button class="magnet" onclick="playit_player()"><img src="https://i.postimg.cc/RVGWYJFF/playit.png"
-                            alt="">watch in PLAYit
-                        PLAYER</button>
-                    <button class="magnet" onclick="km_player()"><img src="https://i.postimg.cc/wT9tFQ9Z/km.png"
-                            alt="">watch in KM PLAYER</button>
-                    <button class="magnet" onclick="s_player()"><img src="https://i.postimg.cc/XYJr6NGg/s.png"
-                            alt="">watch in S PLAYER</button>
-                    <button class="magnet" onclick="hd_player()"><img src="https://i.postimg.cc/rFT43LNh/hd.png"
-                            alt="">watch in HD
-                        PLAYER(4K)</button>
-                    <button class="magnet" onclick="bisalDownload()"><img style="height: 35px;"
-                            src="https://i.postimg.cc/Zncc9YLq/Pngtree-download-icon-3581467.png" alt="">download video
-                    </button>
-                </div>
 
-            </div>
-            <div class="abt">
-                <div class="about">
-                    <div class="about-dets">
-                        <div class="abt-sec" id="sec1" style="padding: 160px 30px;">
-                            <h1 style="text-align: center;">WELCOME TO OUR <Span>STREAMING</Span> PAGE</h1>
-                            <p style="text-align: center; line-height: 2;word-spacing: 2px;  letter-spacing: 0.8px;">
-                                We're
-                                thrilled to have <span>you</span> here.
-                                Get ready for an
-                                amazing <span>experience</span>
-                                filled with <span>entertainment</span>, <span>fun</span>, and <span>surprises</span>.
-                                Grab
-                                your snacks, sit back, and <span>enjoy</span> the show!
-                            </p>
-                        </div>
-                        <div class="abt-sec" id="sec2">
-                            <h1>OUR ALL <span>CHANNELS</span> LIST</h1>
-                            <div class="links chnl-link">
-                                <a class="magnet" href="https://t.me/dreamcinezone"><button>Update Channel </button></a>
-                                <a class="magnet" href="https://t.me/dreamcinezone"><button> Movie Request Group </button></a>
-                                <a class="magnet" href="#https://youtube.com/@dreamcinezone0"><button>YouTube Channel </button></a>
+                <!-- Video Player Container with Custom Netflix UI -->
+                <div id="playerContainer" class="w-full rounded-2xl overflow-hidden shadow-2xl bg-black relative glass-card-glow">
+                    <video id="player" class="w-full aspect-video object-contain" playsinline preload="metadata">
+                        Your browser does not support playing this video directly.
+                    </video>
+
+                    <!-- Lock Screen State Indicator -->
+                    <div class="locked-screen-badge" id="unlockBadge">
+                        <i class="fa-solid fa-lock text-[#E50914]"></i> Screen Locked
+                    </div>
+
+                    <!-- Netflix UI Overlay (No 'N' Logo) -->
+                    <div class="netflix-overlay" id="netflixOverlay">
+                        <!-- Top Bar: Spacer - Reactions - Tools -->
+                        <div class="player-top-bar">
+                            <div></div> <!-- Left Blank Spacer (No 'N' Logo) -->
+                            
+                            <!-- Middle Reactions -->
+                            <div class="reaction-group">
+                                <div class="reaction-btn" onclick="triggerReaction('Disliked')" title="Not for me">
+                                    <i class="fa-regular fa-thumbs-down"></i>
+                                </div>
+                                <div class="reaction-btn" onclick="triggerReaction('Liked')" title="I like this">
+                                    <i class="fa-regular fa-thumbs-up"></i>
+                                </div>
+                                <div class="reaction-btn" onclick="triggerReaction('Loved this!')" title="Love this!">
+                                    <span class="flex items-center text-xs tracking-tighter">
+                                        <i class="fa-solid fa-thumbs-up text-xs -mr-1"></i>
+                                        <i class="fa-solid fa-thumbs-up text-xs"></i>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Right Tools -->
+                            <div class="top-right-tools">
+                                <i class="fa-solid fa-chromecast" id="castBtn" title="Cast Video"></i>
+                                <i class="fa-solid fa-lock-open" id="lockScreenBtn" title="Lock Screen"></i>
+                                <i class="fa-solid fa-xmark" id="closeBtn" title="Exit / Close"></i>
                             </div>
                         </div>
-                        <div class="abt-sec" id="sec3">
-                            <h1>OUR ALL <span>BOTS</span> LIST</h1>
-                            <div class="links bot-link">
-                                <a class="magnet" href="https://t.me/"><button>Chat Gpt Bot
-                                        </button></a>
-                                <a class="magnet" href="https://t.me/"><button>reaction Bot 
-                                        </button></a>
-                            </div>
-                        </div>
-                        <div class="abt-sec" id="sec4">
-                            <!-- this code is written by @biisal tg:biisal-files  -->
-                            <!-- stealing credit doesn't make you developer..so try to give full credit to the developer 😊 u will not loose anything for giving proper credit.   -->
 
-                            <p style="text-align: center;">We Can Tal'k For Your Support And You Can Report Through
-                                Telegram</p>
-                            <div class="links contact">
-                                <a href="https://t.me/Contact_dreamcinezone_bot"><button>Contact</button></a>
+                        <!-- Left Brightness Slider -->
+                        <div class="brightness-box">
+                            <i class="fa-solid fa-sun"></i>
+                            <input type="range" class="brightness-bar" id="brightnessSlider" min="0.3" max="1.5" step="0.05" value="1" title="Brightness">
+                        </div>
+
+                        <!-- Center Playback Controls -->
+                        <div class="center-player-controls">
+                            <button class="skip-btn" id="rewind10Btn" title="Rewind 10 seconds">
+                                <i class="fa-solid fa-arrow-rotate-left"></i>
+                                <span>10</span>
+                            </button>
+                            <button class="main-play-btn" id="mainPlayBtn" title="Play / Pause">
+                                <i class="fa-solid fa-play"></i>
+                            </button>
+                            <button class="skip-btn" id="forward10Btn" title="Forward 10 seconds">
+                                <i class="fa-solid fa-arrow-rotate-right"></i>
+                                <span>10</span>
+                            </button>
+                        </div>
+
+                        <!-- Bottom Controls -->
+                        <div class="bottom-player-section">
+                            <div class="timeline-wrapper">
+                                <input type="range" class="netflix-timeline" id="netflixTimeline" min="0" value="0" step="0.1">
+                                <div class="video-time-remain" id="videoRemainingTime">00:00</div>
+                            </div>
+
+                            <div class="bottom-player-options">
+                                <button class="player-opt-btn" onclick="showToast('Clip feature ready')">
+                                    <i class="fa-solid fa-scissors"></i> Clip
+                                </button>
+                                <button class="player-opt-btn" id="speedToggleBtn">
+                                    <i class="fa-solid fa-gauge-high"></i> Speed (<span id="speedVal">1x</span>)
+                                </button>
+                                <button class="player-opt-btn" id="audioSubBtn">
+                                    <i class="fa-regular fa-message"></i> Audio & Subtitles
+                                </button>
                             </div>
                         </div>
                     </div>
+
+                    <!-- Exact Matching Resume Overlay -->
+                    <div id="resumeModal" class="hidden absolute inset-0 bg-black/90 flex items-center justify-center p-3 z-40 transition-all duration-300">
+                        <div class="bg-black/90 text-slate-100 rounded-xl py-5 px-4 sm:px-6 max-w-sm sm:max-w-md w-11/12 text-center shadow-2xl border border-[#FF5722]/40 backdrop-blur-xl">
+                            <p class="text-xs sm:text-sm font-normal text-slate-300 mb-4 leading-snug">
+                                You were watching this video at <span id="resumeTimeText" class="font-bold text-[#FFB800]">00:00:00</span>. Do you want to resume?
+                            </p>
+                            <div class="flex flex-row gap-2.5 justify-center items-center">
+                                <button onclick="confirmResume()" class="bg-[#FF1E27] hover:bg-[#E50914] text-white font-bold py-2 px-4 rounded-lg text-xs sm:text-sm transition active:scale-95 shadow-lg shadow-red-900/40">
+                                    Resume
+                                </button>
+                                <button onclick="confirmRestart()" class="bg-zinc-800 hover:bg-zinc-700 text-slate-200 font-bold py-2 px-4 rounded-lg text-xs sm:text-sm transition active:scale-95 border border-white/10">
+                                    Start Over
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File Info Card -->
+                <div class="file-name my-6 p-4 glass-card text-center md:text-left">
+                    <p id="myDiv" class="break-all text-slate-100 text-sm md:text-base font-bold tracking-wide"></p>
+                </div>
+
+                <!-- Translucent Compact Buttons Grid -->
+                <div class="downloadBtn grid grid-cols-1 sm:grid-cols-3 gap-3.5 my-6">
+                    <button class="player-btn btn-copy" onclick="copyStreamLink()">
+                        <i class="fa-solid fa-copy text-lg"></i> Copy Link
+                    </button>
+
+                    <button class="player-btn btn-vlc" onclick="vlc_player()">
+                        <img src="https://i.postimg.cc/15TQ4y7B/vlc.png" class="w-5 h-5 object-contain" alt="VLC"> VLC Player
+                    </button>
+
+                    <button class="player-btn btn-mx" onclick="mx_player()">
+                        <img src="https://i.postimg.cc/sx4Msv4T/mx.png" class="w-5 h-5 object-contain" alt="MX"> MX Player
+                    </button>
+
+                    <button class="player-btn btn-download sm:col-span-3 py-4 text-base font-extrabold" onclick="bisalDownload()">
+                        <img src="https://i.postimg.cc/Zncc9YLq/Pngtree-download-icon-3581467.png" class="w-6 h-6 object-contain filter brightness-200" alt="Download"> Download Video
+                    </button>
+                </div>
+            </div>
+
+            <!-- Info Section -->
+            <div class="abt space-y-8 my-10">
+                <div class="about glass-card p-6 md:p-10 text-center">
+                    <h1 class="text-2xl md:text-3xl font-black mb-3 uppercase tracking-wide leading-normal">
+                        WELCOME TO <span class="brand-text-inline">HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span></span>
+                    </h1>
+                    <p class="max-w-xl mx-auto text-slate-300 text-xs md:text-sm leading-relaxed">
+                        Enjoy high-speed playback, multi-codec streaming options, and seamless external video player integration.
+                    </p>
                 </div>
             </div>
         </div>
-        <footer>
-            <div class="mid">
-                <h1 class="mid-text">VISIT <a href="#sec3" onclick="bot_btn_clicked()"><span>OUR BOTS LIST</span></a>
-                    FOR
-                    MORE
-                    INFO</h1>
-            </div>
 
-            <div class="last-text">
-                <p style="font-weight: 500;">
-                    Welcome To Our Online Streaming Platform! Our Website Allows Users To Generate Streamable Links For
-                    Various Files Using Telegram Bots. Please Note That We Are Not Responsible For The Content Shared Or
-                    Streamed Through Our Service. Users Are Encouraged To Respect Copyright Laws And Adhere To Our
-                    Community
-                    Guidelines. Enjoy Easy, Hassle-Free File Streaming.
-                </p>
-            </div>
-            <center>
-
-                <div class="movie-cont">
-                    <a href="https://t.me/dreamcinezone">
-                        <div class="movieSug">
-                            <div class="movieDets">
-
-                            </div>
-                            <div class="movieimg">
-                                <img src="">
-                            </div>
-                        </div>
+        <!-- Footer -->
+        <footer class="mt-10 border-t border-white/10 pt-6 pb-8 text-center">
+            <div class="copyright text-xs text-slate-400 space-y-3">
+                <h5 class="flex items-center justify-center gap-1 flex-wrap font-semibold">
+                    <span>Copyright © 2025</span> 
+                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="brand-text-inline">
+                        HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span>
+                    </a>. 
+                    <span>All Rights Reserved.</span>
+                </h5>
+                
+                <div class="icons flex justify-center py-1">
+                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="text-[#FF5722] hover:text-[#FFB800] transition inline-flex items-center justify-center p-2 rounded-full bg-white/5 border border-white/10">
+                        <i class="fa-brands fa-telegram text-lg"></i>
                     </a>
-                    <div class="low-width-movie-dets">
-                        <div class="movieStsBar">
-                            <div class="movieDets-mini">
-
-                            </div>
-                        </div>
-                    </div>
-                    <button class="ranMovBtn" onclick="getDets()">Get More Movies Suggestion</button>
                 </div>
 
-            </center>
-            <!-- this code is written by @biisal tg:biisal-files  -->
-            <!-- stealing credit doesn't make you developer..so try to give full credit to the developer 😊 u will not loose anything for giving proper credit.   -->
-
-
-            <center>
-                <div class="copyright">
-                    <h5 class="text-center">Copyright © 2024 <a href="https://t.me/dreamcinezone"><span
-                                style="font-weight: 700;">dreamcinezone </span></a>. All
-                        Rights Reserved.</h5>
-                    <div class="icons">
-                        <a href="https://t.me/dreamcinezone"><i class="fa-brands fa-telegram fa-lg"></i></a>
-                        
-                    </div>
-                    <h4 style="font-weight: 700;">This Page Is Made By <a
-                            href="https://t.me/dreamcinezone"><span>dreamcinezone </span></a></h4>
-                </div>
-            </center>
+                <h4 class="font-bold">This Page Is Made By <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="font-extrabold text-[#FF1E27]">RPEDITZ</a></h4>
+            </div>
         </footer>
-</body>
+    </div>
 
+    <!-- Toast Notification Overlay -->
+    <div id="toast" class="glass-card px-5 py-3 text-xs font-bold text-slate-100 border border-[#FF5722]/50 shadow-2xl flex items-center gap-2">
+        <i class="fa-solid fa-circle-check text-[#FFB800] text-base"></i>
+        <span id="toastMsg">Action completed!</span>
+    </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.155.0/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/automat/controlkit.js@master/bin/controlKit.min.js"></script>
-<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/sheryjs/dist/Shery.js"></script>
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        const uncopyableElement = document.querySelector(".uncopyable");
+    <!-- Scripts -->
+    <script>
+        const fileUrl = "{{file_url}}";
+        const fileName = "{{file_name}}";
+        const storageKey = "watch_progress_" + btoa(fileUrl).replace(/=/g, '');
+        let savedTime = 0;
 
-        uncopyableElement.addEventListener("selectstart", function (event) {
-            event.preventDefault();
+        // Netflix Player DOM Elements
+        const player = document.getElementById("player");
+        const playerContainer = document.getElementById("playerContainer");
+        const netflixOverlay = document.getElementById("netflixOverlay");
+        const mainPlayBtn = document.getElementById("mainPlayBtn");
+        const mainPlayIcon = mainPlayBtn.querySelector("i");
+        const rewind10Btn = document.getElementById("rewind10Btn");
+        const forward10Btn = document.getElementById("forward10Btn");
+        const netflixTimeline = document.getElementById("netflixTimeline");
+        const videoRemainingTime = document.getElementById("videoRemainingTime");
+        const brightnessSlider = document.getElementById("brightnessSlider");
+        const speedToggleBtn = document.getElementById("speedToggleBtn");
+        const speedVal = document.getElementById("speedVal");
+        const lockScreenBtn = document.getElementById("lockScreenBtn");
+        const unlockBadge = document.getElementById("unlockBadge");
+        const castBtn = document.getElementById("castBtn");
+        const closeBtn = document.getElementById("closeBtn");
+        const audioSubBtn = document.getElementById("audioSubBtn");
+
+        let isScreenLocked = false;
+        let overlayTimer = null;
+
+        window.addEventListener("DOMContentLoaded", function() {
+            document.getElementById("myDiv").innerText = cleanMovieName(fileName);
+            initFastStream();
+            initAutoResumeModal();
+            initNetflixControls();
         });
-    });
-</script>
-<script src="js/wow.min.js"></script>
-<script>
-    new WOW().init();
-</script>
-<script src="https://cdn.plyr.io/3.6.9/plyr.js"></script>
-<script src="https://biisal.github.io/Resources/StreamJs.js"></script>
-<script src="script.js"></script>
 
+        // Initialize Google Cast SDK
+        window['__onGCastApiAvailable'] = function(isAvailable) {
+            if (isAvailable && window.cast) {
+                try {
+                    cast.framework.CastContext.getInstance().setOptions({
+                        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+                    });
+                } catch(e) {}
+            }
+        };
+
+        // Extract Clean Movie Title
+        function cleanMovieName(rawName) {
+            if (!rawName) return "Movie Stream";
+            
+            let clean = rawName.replace(/\.(mkv|mp4|webm|avi|flv|mov)$/i, "");
+            const pattern = /[\.\_\s\(-](480p|720p|1080p|2160p|4k|2k|360p|hd|sd|bluray|web-dl|web|webrip|hdr|hdrip|hevc|x264|x265|h264|h265|10bit|ds4k|dvdrip|cam|camrip|nf|amzn|esub|sub|hindi|english|telugu|tamil|kannada|malayalam|bengali|marathi|gujarati|punjabi|dubbed|dual|multi|aac|ac3|dts|2\.0|5\.1|7\.1).*$/i;
+            
+            clean = clean.split(pattern)[0];
+            clean = clean.replace(/[\._]/g, " ").trim();
+            
+            return clean || rawName;
+        }
+
+        // Fast Streaming Engine
+        function initFastStream() {
+            if (Hls.isSupported() && (fileUrl.includes('.m3u8') || fileUrl.includes('hls'))) {
+                const hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    maxBufferLength: 15,
+                    maxMaxBufferLength: 30,
+                    maxBufferSize: 30 * 1024 * 1024,
+                    startFragPrefetch: true,
+                    appendErrorMaxRetry: 3
+                });
+                
+                hls.loadSource(fileUrl);
+                hls.attachMedia(player);
+
+                hls.on(Hls.Events.ERROR, function (event, data) {
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                hls.destroy();
+                                player.src = fileUrl;
+                                break;
+                        }
+                    }
+                });
+            } else {
+                player.src = fileUrl;
+            }
+        }
+
+        function formatTime(seconds) {
+            const sec = Math.floor(seconds);
+            const hrs = Math.floor(sec / 3600);
+            const mins = Math.floor((sec % 3600) / 60);
+            const secs = sec % 60;
+            const pad = (n) => n.toString().padStart(2, '0');
+            if (hrs > 0) {
+                return `${hrs}:${pad(mins)}:${pad(secs)}`;
+            }
+            return `${pad(mins)}:${pad(secs)}`;
+        }
+
+        // Netflix Player Interactive Controls Engine
+        function initNetflixControls() {
+            // Play / Pause Click
+            mainPlayBtn.addEventListener('click', toggleVideoPlay);
+
+            // Sync Icons with actual Video Play/Pause events
+            player.addEventListener('play', () => {
+                mainPlayIcon.classList.replace('fa-play', 'fa-pause');
+                startOverlayTimer();
+            });
+
+            player.addEventListener('pause', () => {
+                mainPlayIcon.classList.replace('fa-pause', 'fa-play');
+                clearTimeout(overlayTimer);
+                netflixOverlay.classList.remove('hide');
+            });
+
+            // Skip 10 Seconds Forward & Back
+            rewind10Btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                player.currentTime = Math.max(0, player.currentTime - 10);
+                startOverlayTimer();
+            });
+
+            forward10Btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                player.currentTime = Math.min(player.duration || 0, player.currentTime + 10);
+                startOverlayTimer();
+            });
+
+            // Duration & Remaining Time Sync
+            player.addEventListener('loadedmetadata', () => {
+                netflixTimeline.max = player.duration;
+                updateRemainingTime();
+            });
+
+            player.addEventListener('timeupdate', () => {
+                netflixTimeline.value = player.currentTime;
+                updateRemainingTime();
+            });
+
+            // Timeline Scrubbing
+            netflixTimeline.addEventListener('input', (e) => {
+                player.currentTime = e.target.value;
+                updateRemainingTime();
+            });
+
+            // Real-time Brightness Slider
+            brightnessSlider.addEventListener('input', (e) => {
+                player.style.filter = `brightness(${e.target.value})`;
+                startOverlayTimer();
+            });
+
+            // Speed Control (1x, 1.25x, 1.5x, 2x, 0.5x, 0.75x)
+            const speeds = [1, 1.25, 1.5, 2, 0.5, 0.75];
+            let speedIndex = 0;
+            speedToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                speedIndex = (speedIndex + 1) % speeds.length;
+                const chosen = speeds[speedIndex];
+                player.playbackRate = chosen;
+                speedVal.innerText = `${chosen}x`;
+                showToast(`Playback Speed: ${chosen}x`);
+                startOverlayTimer();
+            });
+
+            // Screen Lock Logic
+            lockScreenBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                isScreenLocked = true;
+                netflixOverlay.classList.add('hide');
+                unlockBadge.style.display = 'flex';
+                showToast('Screen controls locked');
+            });
+
+            unlockBadge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                isScreenLocked = false;
+                unlockBadge.style.display = 'none';
+                netflixOverlay.classList.remove('hide');
+                showToast('Screen unlocked');
+                startOverlayTimer();
+            });
+
+            // Fullscreen / Close Button
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (document.fullscreenElement) {
+                    document.exitFullscreen().catch(() => {});
+                } else if (playerContainer.requestFullscreen) {
+                    playerContainer.requestFullscreen().catch(() => {});
+                }
+            });
+
+            // Audio & Subtitles Prompt
+            audioSubBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showToast('Default Audio & Embedded Subtitles active');
+            });
+
+            // Chromecast Trigger
+            castBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (window.cast && cast.framework) {
+                    cast.framework.CastContext.getInstance().requestSession().catch(() => {
+                        showToast('No Cast devices available');
+                    });
+                } else {
+                    showToast('Cast engine ready');
+                }
+            });
+
+            // Overlay Visibility Toggle on Video Tap
+            playerContainer.addEventListener('click', (e) => {
+                if (isScreenLocked) return;
+                if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.reaction-btn') || e.target.closest('.top-right-tools') || e.target.closest('#resumeModal')) {
+                    return;
+                }
+
+                if (netflixOverlay.classList.contains('hide')) {
+                    netflixOverlay.classList.remove('hide');
+                    startOverlayTimer();
+                } else {
+                    netflixOverlay.classList.add('hide');
+                }
+            });
+        }
+
+        function toggleVideoPlay() {
+            if (player.paused) {
+                player.play().catch(() => {});
+            } else {
+                player.pause();
+            }
+            startOverlayTimer();
+        }
+
+        function updateRemainingTime() {
+            const remaining = (player.duration || 0) - player.currentTime;
+            videoRemainingTime.innerText = formatTime(isNaN(remaining) || remaining < 0 ? 0 : remaining);
+        }
+
+        function startOverlayTimer() {
+            clearTimeout(overlayTimer);
+            if (!player.paused && !isScreenLocked) {
+                overlayTimer = setTimeout(() => {
+                    netflixOverlay.classList.add('hide');
+                }, 3500);
+            }
+        }
+
+        function triggerReaction(type) {
+            showToast(`Marked as: ${type}`);
+            startOverlayTimer();
+        }
+
+        // Optimized Progress Saving (Throttled LocalStorage)
+        function initAutoResumeModal() {
+            const modal = document.getElementById("resumeModal");
+            const timeText = document.getElementById("resumeTimeText");
+
+            player.addEventListener("loadedmetadata", function() {
+                const storedVal = localStorage.getItem(storageKey);
+                if (storedVal && parseFloat(storedVal) > 5) {
+                    savedTime = parseFloat(storedVal);
+                    timeText.innerText = formatTime(savedTime);
+                    modal.classList.remove("hidden");
+                }
+            });
+
+            let lastSaveTime = 0;
+            player.addEventListener("timeupdate", function() {
+                const now = Date.now();
+                if (player.currentTime > 0 && (now - lastSaveTime > 2000)) {
+                    localStorage.setItem(storageKey, player.currentTime);
+                    lastSaveTime = now;
+                }
+            });
+
+            player.addEventListener("ended", function() {
+                localStorage.removeItem(storageKey);
+            });
+        }
+
+        function confirmResume() {
+            document.getElementById("resumeModal").classList.add("hidden");
+            player.currentTime = savedTime;
+            player.play().catch(() => {});
+        }
+
+        function confirmRestart() {
+            document.getElementById("resumeModal").classList.add("hidden");
+            localStorage.removeItem(storageKey);
+            player.currentTime = 0;
+            player.play().catch(() => {});
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            const toastMsg = document.getElementById("toastMsg");
+            toastMsg.innerText = message;
+            toast.classList.add("show");
+            setTimeout(() => {
+                toast.classList.remove("show");
+            }, 3000);
+        }
+
+        function copyStreamLink() {
+            navigator.clipboard.writeText(fileUrl).then(() => {
+                showToast("Stream Link Copied to Clipboard!");
+            }).catch(() => {
+                showToast("Failed to Copy Link!");
+            });
+        }
+
+        function vlc_player() { window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=org.videolan.vlc;type=video/*;end;"; }
+        function mx_player() { window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end;"; }
+
+        function bisalDownload() {
+            const a = document.createElement('a');
+            a.href = fileUrl;
+            a.download = fileName || 'video.mp4';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast("Download Started!");
+        }
+    </script>
+</body>
 </html>
