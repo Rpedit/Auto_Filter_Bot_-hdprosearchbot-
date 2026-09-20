@@ -574,35 +574,46 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
         for widget in soup.select(".sidebar, #sidebar, .widget, .trending, .slider, .carousel, .featured"):
             widget.decompose()
 
-        clean_q = re.sub(r"['’]", "", clean_query).lower()
-        query_words = [re.sub(r'[^a-zA-Z0-9]', '', w).lower() for w in clean_q.split()]
-        query_words = [w for w in query_words if len(w) >= 3]
-
         candidate_links = soup.select(
             ".archive-posts h2 a, .recent-movies a, .blog-posts a, article a, .post-item a, .entry-title a"
         )
 
-        def match_word(qw, target):
-            if qw in target:
-                return True
-            if qw.endswith('s') and qw[:-1] in target:
-                return True
-            return False
-
         movie_page_url = None
         for a in candidate_links:
-            title_text = f"{a.get('title', '')} {a.get_text()}".lower()
+            title_text = f"{a.get('title', '')} {a.get_text()}".strip()
             href = a.get("href", "")
             if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
                 continue
 
-            clean_target = re.sub(r"['’]", "", title_text).lower()
-
-            if (clean_q in clean_target) or (
-                query_words and all(match_word(w, clean_target) for w in query_words)
-            ):
+            # ✅ Strict title match check using is_good_title_match
+            if is_good_title_match(clean_query, title_text) or is_good_title_match(base_name, title_text):
                 movie_page_url = href
                 break
+
+        # Fallback agar strict match na mile toh lenient matching check karein
+        if not movie_page_url:
+            clean_q = re.sub(r"['’]", "", clean_query).lower()
+            query_words = [re.sub(r'[^a-zA-Z0-9]', '', w).lower() for w in clean_q.split()]
+            query_words = [w for w in query_words if len(w) >= 3]
+
+            def match_word(qw, target):
+                if qw in target:
+                    return True
+                if qw.endswith('s') and qw[:-1] in target:
+                    return True
+                return False
+
+            for a in candidate_links:
+                title_text = f"{a.get('title', '')} {a.get_text()}".lower()
+                href = a.get("href", "")
+                if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
+                    continue
+                clean_target = re.sub(r"['’]", "", title_text).lower()
+                if (clean_q in clean_target) or (
+                    query_words and all(match_word(w, clean_target) for w in query_words)
+                ):
+                    movie_page_url = href
+                    break
 
         if not movie_page_url:
             return "N/A", "N/A", ""
@@ -1155,7 +1166,7 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # ✅ FIXED: imdb_url ab strictly HDHub4u ke url par depend karega (agar wahan hai tabhi script hoga, warna blank)
+        # ✅ imdb_url ab strictly HDHub4u ke url par depend karega
         imdb_url = hdhub_imdb_url if hdhub_imdb_url else ""
 
         imdb_r = imdb_details.get("runtime")
@@ -1363,7 +1374,6 @@ async def send_movie_update(bot, base_name):
                 primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
                 btn_style = enums.ButtonStyle.SUCCESS if primary_tag == "#SERIES" else enums.ButtonStyle.DANGER
 
-                # 👉 Button query format: Lanterns-S01 (automatically converted from base_name)
                 match = re.search(r'(.+?)\s+Season\s+(\d+)', base_name, re.IGNORECASE)
                 if match:
                     series_name = match.group(1).strip()
@@ -1466,7 +1476,6 @@ async def update_movie_message(bot, base_name):
         primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
         btn_style = enums.ButtonStyle.SUCCESS if primary_tag == "#SERIES" else enums.ButtonStyle.DANGER
 
-        # 👉 Button query format yahan bhi: Lanterns-S01
         match = re.search(r'(.+?)\s+Season\s+(\d+)', base_name, re.IGNORECASE)
         if match:
             series_name = match.group(1).strip()
@@ -1674,7 +1683,6 @@ def generate_movie_message(movie_doc, base_name):
 
     stored_title = movie_doc.get("title", base_name)
     
-    # 👉 Top Title Clean: Upar se 'Season X' ya 'S01' ko completely hata diya hai taaki sirf clean name aaye
     display_title = re.sub(r'\s+Season\s*\d+', '', stored_title, flags=re.IGNORECASE).strip()
     display_title = re.sub(r'\s+S\d+', '', display_title, flags=re.IGNORECASE).strip()
 
