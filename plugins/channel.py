@@ -1,4 +1,4 @@
-import re
+Import re
 import logging
 import asyncio
 import aiohttp
@@ -1155,12 +1155,8 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        if hdhub_imdb_url:
-            imdb_url = hdhub_imdb_url
-        elif imdb_details.get("url"):
-            imdb_url = imdb_details.get("url")
-        else:
-            imdb_url = tmdb_details.get("tmdb_url", "")
+        # 👉 Strict HDHub4u IMDb URL assignment (No external API fallback for URL)
+        imdb_url = hdhub_imdb_url if hdhub_imdb_url else ""
 
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
