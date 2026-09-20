@@ -585,12 +585,10 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
             if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
                 continue
 
-            # ✅ Strict title match check using is_good_title_match
             if is_good_title_match(clean_query, title_text) or is_good_title_match(base_name, title_text):
                 movie_page_url = href
                 break
 
-        # Fallback agar strict match na mile toh lenient matching check karein
         if not movie_page_url:
             clean_q = re.sub(r"['’]", "", clean_query).lower()
             query_words = [re.sub(r'[^a-zA-Z0-9]', '', w).lower() for w in clean_q.split()]
@@ -658,7 +656,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                     cleaned = [
                         p.strip() for p in parts 
                         if p.strip() and 2 <= len(p.strip()) <= 30 and not any(
-                            bad in p.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download"]
+                            bad in p.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download", "info", "trailer"]
                         )
                     ]
                     if cleaned:
@@ -687,7 +685,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
             ignored_cats = {
                 "uncategorized", "movies", "web series", "bollywood",
                 "hollywood", "dual audio", "hindi dubbed", "tv shows",
-                "720p", "480p", "1080p", "hevc", "south hindi", "series", "dropdown"
+                "720p", "480p", "1080p", "hevc", "south hindi", "series", "dropdown", "info", "trailer"
             }
             extracted_genres = [
                 c.text.strip()
@@ -1166,7 +1164,6 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # ✅ imdb_url ab strictly HDHub4u ke url par depend karega
         imdb_url = hdhub_imdb_url if hdhub_imdb_url else ""
 
         imdb_r = imdb_details.get("runtime")
@@ -1210,7 +1207,7 @@ async def _process_with_lock(
             raw_parts = re.split(r'[,|/•]', hdhub_genres)
             for p in raw_parts:
                 clean_p = p.strip()
-                if not clean_p or clean_p == "N/A" or any(bad in clean_p.lower() for bad in ["dropdown", "menu", "select", "category"]):
+                if not clean_p or clean_p == "N/A" or any(bad in clean_p.lower() for bad in ["dropdown", "menu", "select", "category", "info", "trailer"]):
                     continue
 
                 if "&" in clean_p:
