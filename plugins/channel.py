@@ -631,15 +631,16 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                     imdb_url = f"https://www.imdb.com/title/{clean_match.group(1)}/"
                     break
 
-        for elem in search_area.find_all(["p", "div", "span", "strong", "b", "h4"]):
+        for elem in search_area.find_all(["p", "div", "span", "strong", "b", "h4", "li"]):
             text = elem.get_text(" ", strip=True)
 
             if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b', text, re.IGNORECASE):
-                m = re.search(r'\b(?:Genre|Genres)\s*[:\-]\s*([^\n\r]+)', text, re.IGNORECASE)
+                m = re.search(r'\b(?:Genre|Genres)\b\s*[:\-]?\s*([^\n\r]+)', text, re.IGNORECASE)
                 if m:
                     candidate = m.group(1).strip()
+                    candidate = re.sub(r'^(?:Genre|Genres)\s*[:\-]?\s*', '', candidate, flags=re.IGNORECASE)
                     candidate = re.split(
-                        r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline)\b',
+                        r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline|Info)\b',
                         candidate, flags=re.IGNORECASE
                     )[0]
                     candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
@@ -647,7 +648,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                     cleaned = [
                         p.strip() for p in parts 
                         if p.strip() and 2 <= len(p.strip()) <= 30 and not any(
-                            bad in p.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download"]
+                            bad in p.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download", "genre", "genres"]
                         )
                     ]
                     if cleaned:
@@ -670,6 +671,28 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                                 rating = f"{val:.1f}"
                         except ValueError:
                             rating = "x/10"
+
+        # Robust Line-by-Line fallback scan for genres & rating if still N/A
+        if genres == "N/A" or rating == "N/A":
+            full_text = search_area.get_text("\n", strip=True)
+            for line in full_text.splitlines():
+                line = line.strip()
+                if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b', line, re.IGNORECASE):
+                    m = re.sub(r'^(?:Genre|Genres)\s*[:\-]?\s*', '', line, flags=re.IGNORECASE).strip()
+                    if m and m.lower() not in ["genre", "genres"]:
+                        parts = re.split(r'[,|/•]', m)
+                        cleaned = [p.strip() for p in parts if p.strip() and 2 <= len(p.strip()) <= 30]
+                        if cleaned:
+                            genres = ", ".join(cleaned)
+                if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating)\b', line, re.IGNORECASE):
+                    r_match = re.search(r'(?:IMDb|IMDB|Rating)\s*[:\-•]?\s*([0-9]+(?:\.[0-9]+)?)', line, re.IGNORECASE)
+                    if r_match:
+                        try:
+                            val = float(r_match.group(1))
+                            if 0.0 < val <= 10.0:
+                                rating = f"{val:.1f}"
+                        except ValueError:
+                            pass
 
         if genres == "N/A":
             cat_links = search_area.select(".cat-links a, a[rel='category tag'], .entry-category a, .genres a")
@@ -1674,7 +1697,6 @@ def generate_movie_message(movie_doc, base_name):
 
     stored_title = movie_doc.get("title", base_name)
     
-    # 👉 Top Title Clean: Upar se 'Season X' ya 'S01' ko completely hata diya hai taaki sirf clean name aaye
     display_title = re.sub(r'\s+Season\s*\d+', '', stored_title, flags=re.IGNORECASE).strip()
     display_title = re.sub(r'\s+S\d+', '', display_title, flags=re.IGNORECASE).strip()
 
