@@ -1120,7 +1120,7 @@ async def _process_with_lock(
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
-        # 👉 Strict HDHub4u Rating (agar HDHub4u par ho tabhi wahi aayegi, warna fallback)
+        # 👉 Rating: HDHub4u first, fallback to IMDb/TMDB if not found on website
         if hdhub_rating and hdhub_rating != "N/A":
             rating = hdhub_rating
         elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
@@ -1130,10 +1130,10 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # 👉 Strict HDHub4u IMDb URL (Sirf HDHub4u par ho tabhi URL aayega)
+        # 👉 IMDb URL: Strict HDHub4u only
         imdb_url = hdhub_imdb_url if hdhub_imdb_url else ""
 
-        # 👉 Strictly HDHub4u Genres (No TMDB/IMDb genre fallback at all!)
+        # 👉 Genres: HDHub4u first, safe fallback to IMDb/TMDB if website returns N/A
         genre_list = []
         if hdhub_genres and hdhub_genres != "N/A":
             raw_parts = re.split(r'[,|/•]+', hdhub_genres)
@@ -1151,6 +1151,25 @@ async def _process_with_lock(
                     formatted_p = clean_p.title()
                     if formatted_p not in genre_list:
                         genre_list.append(formatted_p)
+
+        if not genre_list:
+            raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
+            fallback_genres = []
+            if isinstance(raw_genres, str) and raw_genres != "N/A":
+                fallback_genres = [g.strip() for g in raw_genres.split(",") if g.strip() and g.strip() != "N/A"]
+            elif isinstance(raw_genres, (list, tuple)):
+                for g in raw_genres:
+                    if isinstance(g, dict):
+                        name = g.get("name") or g.get("genre")
+                        if name:
+                            fallback_genres.append(str(name).strip())
+                    elif isinstance(g, str):
+                        fallback_genres.append(g.strip())
+
+            for g in fallback_genres:
+                clean_g = g.strip().title()
+                if clean_g and clean_g not in genre_list:
+                    genre_list.append(clean_g)
 
         genres = ", ".join(genre_list) if genre_list else "N/A"
 
