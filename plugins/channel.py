@@ -313,7 +313,7 @@ def format_movie_qualities(quality_list: list) -> str:
     if version_str:
         attached = False
         for idx, s in enumerate(source_list):
-            if any(k in s.upper() for k in ["HDTC", "CAM", "TS", "PREDVD", "WEBRip", "WEB-DL", "RIP", "BLURAY"]):
+            if any(k in s.upper() for k in ["HDTC", "CAM", "TS", "PREDVD", "WEBRIP", "WEB-DL", "RIP", "BLURAY"]):
                 source_list[idx] = f"{s} {version_str}"
                 attached = True
                 break
@@ -631,34 +631,60 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                     imdb_url = f"https://www.imdb.com/title/{clean_match.group(1)}/"
                     break
 
-        # Line-by-line parsing using \n to prevent merging lines
-        full_text = search_area.get_text("\n", strip=True)
-        for line in full_text.splitlines():
-            line = line.strip()
-            if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b', line, re.IGNORECASE):
-                m = re.sub(r'^(?:Genre|Genres)\s*[:\-]?\s*', '', line, flags=re.IGNORECASE).strip()
-                if m and m.lower() not in ["genre", "genres"]:
-                    m = re.split(r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline|Info|Source)\b', m, flags=re.IGNORECASE)[0]
-                    m = re.sub(r'["\'<>{}[\]\\]', '', m)
-                    parts = re.split(r'[,|/•]+', m)
+        for elem in search_area.find_all(["p", "div", "span", "strong", "b", "h4"]):
+            text = elem.get_text(" ", strip=True)
+
+            if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b', text, re.IGNORECASE):
+                m = re.search(r'\b(?:Genre|Genres)\s*[:\-]\s*([^\n\r]+)', text, re.IGNORECASE)
+                if m:
+                    candidate = m.group(1).strip()
+                    candidate = re.split(
+                        r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline)\b',
+                        candidate, flags=re.IGNORECASE
+                    )[0]
+                    candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
+                    parts = re.split(r'[,|/•]', candidate)
                     cleaned = [
                         p.strip() for p in parts 
                         if p.strip() and 2 <= len(p.strip()) <= 30 and not any(
-                            bad in p.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download", "genre", "genres"]
+                            bad in p.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download"]
                         )
                     ]
                     if cleaned:
                         genres = ", ".join(cleaned)
 
-            if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating)\b', line, re.IGNORECASE):
-                r_match = re.search(r'(?:IMDb|IMDB|Rating)\s*[:\-•]?\s*([0-9]+(?:\.[0-9]+)?)', line, re.IGNORECASE)
+            if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating)\b', text, re.IGNORECASE):
+                r_match = re.search(
+                    r'\b(?:IMDb|IMDB|iMDB|Rating|Ratings)\s*(?:Rating|Ratings)?\s*[:\-•]?\s*([0-9]+(?:\.[0-9]+)?|[xX]|N/?A)\s*(?:/\s*10)?',
+                    text,
+                    re.IGNORECASE
+                )
                 if r_match:
-                    try:
-                        val = float(r_match.group(1))
-                        if 0.0 < val <= 10.0:
-                            rating = f"{val:.1f}"
-                    except ValueError:
-                        pass
+                    raw_val = r_match.group(1).strip()
+                    if raw_val.lower() in ("x", "n/a", "na"):
+                        rating = "x/10"
+                    else:
+                        try:
+                            val = float(raw_val)
+                            if 0.0 < val <= 10.0:
+                                rating = f"{val:.1f}"
+                        except ValueError:
+                            rating = "x/10"
+
+        if genres == "N/A":
+            cat_links = search_area.select(".cat-links a, a[rel='category tag'], .entry-category a, .genres a")
+            ignored_cats = {
+                "uncategorized", "movies", "web series", "bollywood",
+                "hollywood", "dual audio", "hindi dubbed", "tv shows",
+                "720p", "480p", "1080p", "hevc", "south hindi", "series", "dropdown"
+            }
+            extracted_genres = [
+                c.text.strip()
+                for c in cat_links
+                if c.text.strip() and c.text.strip().lower() not in ignored_cats and "<" not in c.text and ">" not in c.text
+            ]
+            if extracted_genres:
+                genres = ", ".join(extracted_genres)
 
     except Exception as e:
         logger.error(f"Error scraping HDHub4u data: {e}")
@@ -1120,7 +1146,6 @@ async def _process_with_lock(
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
-        # 👉 Rating: HDHub4u first, fallback to IMDb/TMDB if not found on website
         if hdhub_rating and hdhub_rating != "N/A":
             rating = hdhub_rating
         elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
@@ -1130,48 +1155,8 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # 👉 IMDb URL: Strict HDHub4u only
+        # ✅ FIXED: imdb_url ab sirf HDHub4u ke url par depend karega (agar wahan hai tabhi milega, warna blank)
         imdb_url = hdhub_imdb_url if hdhub_imdb_url else ""
-
-        # 👉 Genres: HDHub4u first, safe fallback to IMDb/TMDB if website returns N/A
-        genre_list = []
-        if hdhub_genres and hdhub_genres != "N/A":
-            raw_parts = re.split(r'[,|/•]+', hdhub_genres)
-            for p in raw_parts:
-                clean_p = p.strip()
-                if not clean_p or clean_p == "N/A" or any(bad in clean_p.lower() for bad in ["dropdown", "menu", "select", "category"]):
-                    continue
-
-                if "&" in clean_p:
-                    for sub_p in clean_p.split("&"):
-                        sub_clean = sub_p.strip().title()
-                        if sub_clean and sub_clean not in genre_list:
-                            genre_list.append(sub_clean)
-                else:
-                    formatted_p = clean_p.title()
-                    if formatted_p not in genre_list:
-                        genre_list.append(formatted_p)
-
-        if not genre_list:
-            raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
-            fallback_genres = []
-            if isinstance(raw_genres, str) and raw_genres != "N/A":
-                fallback_genres = [g.strip() for g in raw_genres.split(",") if g.strip() and g.strip() != "N/A"]
-            elif isinstance(raw_genres, (list, tuple)):
-                for g in raw_genres:
-                    if isinstance(g, dict):
-                        name = g.get("name") or g.get("genre")
-                        if name:
-                            fallback_genres.append(str(name).strip())
-                    elif isinstance(g, str):
-                        fallback_genres.append(g.strip())
-
-            for g in fallback_genres:
-                clean_g = g.strip().title()
-                if clean_g and clean_g not in genre_list:
-                    genre_list.append(clean_g)
-
-        genres = ", ".join(genre_list) if genre_list else "N/A"
 
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
@@ -1208,6 +1193,45 @@ async def _process_with_lock(
             and tmdb_details.get("certificates") != "N/A"
             else imdb_details.get("certificates", "N/A")
         )
+
+        genre_list = []
+        if hdhub_genres and hdhub_genres != "N/A":
+            raw_parts = re.split(r'[,|/•]', hdhub_genres)
+            for p in raw_parts:
+                clean_p = p.strip()
+                if not clean_p or clean_p == "N/A" or any(bad in clean_p.lower() for bad in ["dropdown", "menu", "select", "category"]):
+                    continue
+
+                if "&" in clean_p:
+                    for sub_p in clean_p.split("&"):
+                        sub_clean = sub_p.strip().title()
+                        if sub_clean and sub_clean not in genre_list:
+                            genre_list.append(sub_clean)
+                else:
+                    formatted_p = clean_p.title()
+                    if formatted_p not in genre_list:
+                        genre_list.append(formatted_p)
+
+        if not genre_list:
+            raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
+            fallback_genres = []
+            if isinstance(raw_genres, str) and raw_genres != "N/A":
+                fallback_genres = [g.strip() for g in raw_genres.split(",") if g.strip() and g.strip() != "N/A"]
+            elif isinstance(raw_genres, (list, tuple)):
+                for g in raw_genres:
+                    if isinstance(g, dict):
+                        name = g.get("name") or g.get("genre")
+                        if name:
+                            fallback_genres.append(str(name).strip())
+                    elif isinstance(g, str):
+                        fallback_genres.append(g.strip())
+
+            for g in fallback_genres:
+                clean_g = g.strip().title()
+                if clean_g and clean_g not in genre_list:
+                    genre_list.append(clean_g)
+
+        genres = ", ".join(genre_list) if genre_list else "N/A"
 
         movie_year = (
             media_info.get("year")
@@ -1339,6 +1363,7 @@ async def send_movie_update(bot, base_name):
                 primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
                 btn_style = enums.ButtonStyle.SUCCESS if primary_tag == "#SERIES" else enums.ButtonStyle.DANGER
 
+                # 👉 Button query format: Lanterns-S01 (automatically converted from base_name)
                 match = re.search(r'(.+?)\s+Season\s+(\d+)', base_name, re.IGNORECASE)
                 if match:
                     series_name = match.group(1).strip()
@@ -1441,6 +1466,7 @@ async def update_movie_message(bot, base_name):
         primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
         btn_style = enums.ButtonStyle.SUCCESS if primary_tag == "#SERIES" else enums.ButtonStyle.DANGER
 
+        # 👉 Button query format yahan bhi: Lanterns-S01
         match = re.search(r'(.+?)\s+Season\s+(\d+)', base_name, re.IGNORECASE)
         if match:
             series_name = match.group(1).strip()
@@ -1648,6 +1674,7 @@ def generate_movie_message(movie_doc, base_name):
 
     stored_title = movie_doc.get("title", base_name)
     
+    # 👉 Top Title Clean: Upar se 'Season X' ya 'S01' ko completely hata diya hai taaki sirf clean name aaye
     display_title = re.sub(r'\s+Season\s*\d+', '', stored_title, flags=re.IGNORECASE).strip()
     display_title = re.sub(r'\s+S\d+', '', display_title, flags=re.IGNORECASE).strip()
 
