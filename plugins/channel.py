@@ -144,7 +144,6 @@ AUDIO_CHANNELS_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Season & Episode Patterns
 BONUS_RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})\b', re.IGNORECASE)
 BONUS_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
 RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})', re.IGNORECASE)
@@ -630,23 +629,20 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
             or movie_soup
         )
 
-        # 1. URL Extraction: IMDb or TMDb Info Source
         for a_tag in search_area.find_all("a", href=True):
             href = a_tag["href"].strip()
-            # IMDb check
-            clean_imdb = re.search(r'https?://(?:www\.)?(?:m\.)?imdb\.com/title/(tt\d+)/?', href, re.IGNORECASE)
-            if not clean_imdb:
-                clean_imdb = re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE)
-            if clean_imdb:
-                info_url = f"https://www.imdb.com/title/{clean_imdb.group(1)}/"
+            m_imdb = re.search(r'https?://(?:www\.)?(?:m\.)?imdb\.com/title/(tt\d+)/?', href, re.IGNORECASE)
+            if not m_imdb:
+                m_imdb = re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE)
+            if m_imdb:
+                info_url = f"https://www.imdb.com/title/{m_imdb.group(1)}/"
                 break
 
-            # TMDb check (Info Source)
-            clean_tmdb = re.search(r'https?://(?:www\.)?themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE)
-            if not clean_tmdb:
-                clean_tmdb = re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE)
-            if clean_tmdb:
-                info_url = clean_tmdb.group(0)
+            m_tmdb = re.search(r'https?://(?:www\.)?themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE)
+            if not m_tmdb:
+                m_tmdb = re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE)
+            if m_tmdb:
+                info_url = m_tmdb.group(0)
                 if not info_url.startswith("http"):
                     info_url = f"https://{info_url}"
                 break
@@ -685,7 +681,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
             if not is_series and re.search(r'\b(?:Season|Episodes?|Complete Pack)\b\s*[:\-–]', line, re.IGNORECASE):
                 is_series = True
 
-            # Rating Parse: handles ". 7.2 /10" and "Rating: 6.0"
             if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating|Ratings)\b', line, re.IGNORECASE):
                 r_match = re.search(
                     r'(?:IMDb|IMDB|Rating|Ratings)\s*(?:Rating|Ratings)?\s*[:\-•.\s]*\s*([0-9]+(?:\.[0-9]+)?|[xX]|N/?A)',
@@ -704,7 +699,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
                         except ValueError:
                             rating = "x/10"
 
-            # Genres Parse: handles "Genre: Action | Crime" and "Genres: Drama"
             if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b', line, re.IGNORECASE):
                 g_match = re.search(r'\b(?:Genre|Genres)\s*[:\-–]\s*([^\n\r]+)', line, re.IGNORECASE)
                 if g_match:
@@ -779,7 +773,7 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
     return None, None
 
 
-def schedule_update(bot, base_name, delay=5):
+def schedule_update(bot, base_name, delay=8):
     if handle := pending_updates.get(base_name):
         if not handle.cancelled():
             handle.cancel()
@@ -1073,6 +1067,19 @@ async def process_and_send_update(
         base_name = media_info["base_name"]
         processed = media_info["processed"]
 
+        if not hasattr(db, "movie_updates"):
+            db.movie_updates = db.db.movie_updates
+
+        clean_title = get_clean_title(base_name)
+        existing_doc = await db.movie_updates.find_one({
+            "$or": [
+                {"_id": base_name},
+                {"clean_title": clean_title}
+            ]
+        })
+        if existing_doc:
+            base_name = existing_doc["_id"]
+
         lock = locks[base_name]
 
         async with lock:
@@ -1206,7 +1213,6 @@ async def _process_with_lock(
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
-        # Rating selection
         if hdhub_rating and hdhub_rating != "N/A" and hdhub_rating != "x/10":
             rating = hdhub_rating
         elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
@@ -1216,7 +1222,6 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # Rating URL Logic: HDHub4u First -> Fallback to API URL
         imdb_url = hdhub_info_url.strip() if hdhub_info_url else ""
         if not imdb_url:
             final_imdb_id = (
@@ -1267,7 +1272,6 @@ async def _process_with_lock(
             else imdb_details.get("certificates", "N/A")
         )
 
-        # 1st Priority: HDHub4u Genres
         genre_list = []
         if hdhub_genres and hdhub_genres != "N/A":
             raw_parts = re.split(r'[,|/•]', hdhub_genres)
@@ -1286,7 +1290,6 @@ async def _process_with_lock(
                     if formatted_p not in genre_list and len(formatted_p) >= 2:
                         genre_list.append(formatted_p)
 
-        # 2nd Priority: IMDb, 3rd Priority: TMDb
         if not genre_list:
             raw_genres = imdb_details.get("genres") or tmdb_details.get("genres", "N/A")
             fallback_genres = []
@@ -1481,25 +1484,41 @@ async def send_movie_update(bot, base_name):
                     else (853, 1280)
                 )
 
-                if movie_doc.get("poster_url") and not LINK_PREVIEW:
-                    resized_poster = await fetch_image(movie_doc["poster_url"], size)
-                    if resized_poster:
+                poster_url = movie_doc.get("poster_url")
+                is_photo = False
+                msg = None
+
+                if poster_url and not LINK_PREVIEW:
+                    try:
+                        resized_poster = await fetch_image(poster_url, size)
+                        photo_to_send = resized_poster or poster_url
                         msg = await bot.send_photo(
                             chat_id=MOVIE_UPDATE_CHANNEL,
-                            photo=resized_poster,
+                            photo=photo_to_send,
                             caption=text,
                             reply_markup=buttons,
                             parse_mode=enums.ParseMode.HTML
                         )
                         is_photo = True
-                    else:
-                        msg = await bot.send_message(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            text=text,
-                            reply_markup=buttons,
-                            parse_mode=enums.ParseMode.HTML
-                        )
-                        is_photo = False
+                    except Exception as err:
+                        logger.warning(f"send_photo failed ({err}), falling back to direct URL")
+                        try:
+                            msg = await bot.send_photo(
+                                chat_id=MOVIE_UPDATE_CHANNEL,
+                                photo=poster_url,
+                                caption=text,
+                                reply_markup=buttons,
+                                parse_mode=enums.ParseMode.HTML
+                            )
+                            is_photo = True
+                        except Exception:
+                            msg = await bot.send_message(
+                                chat_id=MOVIE_UPDATE_CHANNEL,
+                                text=text,
+                                reply_markup=buttons,
+                                parse_mode=enums.ParseMode.HTML
+                            )
+                            is_photo = False
                 else:
                     send_params = {
                         "chat_id": MOVIE_UPDATE_CHANNEL,
@@ -1507,8 +1526,8 @@ async def send_movie_update(bot, base_name):
                         "reply_markup": buttons,
                         "parse_mode": enums.ParseMode.HTML
                     }
-                    if movie_doc.get("poster_url") and LINK_PREVIEW:
-                        send_params["invert_media"] = ABOVE_PREVIEW
+                    if poster_url and LINK_PREVIEW:
+                        send_params["invert_media"] = True
 
                     msg = await bot.send_message(**send_params)
                     is_photo = False
@@ -1595,7 +1614,7 @@ async def update_movie_message(bot, base_name):
                     text=text,
                     reply_markup=buttons,
                     parse_mode=enums.ParseMode.HTML,
-                    invert_media=ABOVE_PREVIEW,
+                    invert_media=True,
                     disable_web_page_preview=not LINK_PREVIEW
                 )
 
@@ -1746,7 +1765,6 @@ def generate_movie_message(movie_doc, base_name):
         clean_rating = raw_rating.replace("/10", "").strip()
         rating_display = f"<small>{clean_rating}/10</small>"
 
-    # Clickable link jab URL ho, warna plain text
     if imdb_url:
         rating_text = f'<a href="{imdb_url}">{rating_display}</a>'
     else:
