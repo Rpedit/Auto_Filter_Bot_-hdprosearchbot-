@@ -40,7 +40,8 @@ _BASE_IGNORE_WORDS = {
     "apple", "atv", "atvp", "appletv", "hoichoi", "sunnxt", "viki", "cr", "crunchyroll", "hulu",
     "disney", "dnp", "lionsgate", "lionsgateplay", "peacock", "max", "alt",
     "altbalaji", "altt", "shemaroo", "shemaroome", "chaupal", "stage",
-    "planetmarathi", "manorama", "manoramamax", "tubi"
+    "planetmarathi", "manorama", "manoramamax", "tubi",
+    "5.1", "7.1", "2.0", "5.1ch", "7.1ch", "dd5.1", "ddp5.1", "dd", "ddp"
 }
 
 IGNORE_WORDS = _BASE_IGNORE_WORDS | set(BAD_WORDS if isinstance(BAD_WORDS, (list, tuple, set)) else [])
@@ -136,6 +137,10 @@ SOURCE_PATTERN = re.compile(
 )
 VERSION_STANDALONE = re.compile(r"\b(?:[vV]\d+|ver\.?\s*\d+|version\s*\d+)\b", re.IGNORECASE)
 YEAR_PATTERN = re.compile(r"(?<![A-Za-z0-9])(?:19|20)\d{2}(?![A-Za-z0-9])")
+AUDIO_CHANNELS_PATTERN = re.compile(
+    r'\b(?:DD|DDP|AC3|EAC3|AAC|TRUEHD|ATMOS|DOLBY)?[\s._-]*[257][\s._-][01](?:[\s._-]*CH)?\b',
+    re.IGNORECASE
+)
 
 # Season & Episode Patterns
 BONUS_RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})\b', re.IGNORECASE)
@@ -143,9 +148,9 @@ BONUS_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:
 RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})', re.IGNORECASE)
 SINGLE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
 NAMED_REGEX = re.compile(r'Season\s*0*(\d{1,2})[\s\-,:]*(?:Part)?[\s\-,:]*Ep(?:isode)?\s*0*(\d{1,3})\b', re.IGNORECASE)
-X_REGEX = re.compile(r'\b0*([1-9]\d?)\s*[xX]\s*0*(\d{1,2})\b', re.IGNORECASE)
-DAY_REGEX = re.compile(r'\b(?:S(?:eason)?\s*0*(\d{1,2})[^\w\n\r]*)?(?:Day|D)\s*0*(\d{1,3})\b', re.IGNORECASE)
-NO_S_REGEX = re.compile(r'\b(?:Season\s*)?0*(\d{1,2})[\s._-]+E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
+X_REGEX = re.compile(r'(?<!\d)\b0*([1-9]\d?)\s*[xX]\s*0*([1-9]\d?)\b(?!\d)', re.IGNORECASE)
+DAY_REGEX = re.compile(r'\b(?:S(?:eason)?\s*0*(\d{1,2})[\s._-]*)?(?:Day\s*0*(\d{1,3})|D0*([1-9]\d{0,2}))\b', re.IGNORECASE)
+NO_S_REGEX = re.compile(r'\b(?:Season|S)\s*0*(\d{1,2})[\s._-]+E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
 EP_ONLY_RANGE = re.compile(r'\b(?:EP|Episode)0*(\d{1,3})\s*-\s*0*(\d{1,3})\b', re.IGNORECASE)
 EP_ONLY_SINGLE = re.compile(r'\b(?:EP|Episode)\.?\s*0*(\d{1,3})\b', re.IGNORECASE)
 
@@ -181,7 +186,6 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     f_raw = YEAR_PATTERN.sub('', found_title).strip()
 
     def clean_words(s: str):
-        # Full movie / tags clean
         s = re.sub(r'\(?\b(?:full\s*movie|full\s*film|hd|rip|dubbed)\b\)?', '', s, flags=re.IGNORECASE)
         s = re.sub(r'^(the|a|an)\s+', '', s, flags=re.IGNORECASE)
         s = re.sub(r"['’]", "", s)
@@ -577,7 +581,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
         for widget in soup.select(".sidebar, #sidebar, .widget, .trending, .slider, .carousel, .featured"):
             widget.decompose()
 
-        # Broad candidate links selection
         candidate_links = soup.select(
             "h2 a, h3 a, .entry-title a, .archive-posts h2 a, .recent-movies a, .blog-posts a, article a, .post-item a"
         )
@@ -636,13 +639,18 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
         content = movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
         search_area = content if content else movie_soup
 
+        # Extract IMDb URL from link or text
         for a_tag in search_area.find_all("a", href=True):
             href = a_tag["href"].strip()
-            if "imdb.com/title/tt" in href:
-                clean_match = re.search(r'https?://(?:www\.)?imdb\.com/title/(tt\d+)/?', href)
-                if clean_match:
-                    imdb_url = f"https://www.imdb.com/title/{clean_match.group(1)}/"
-                    break
+            clean_match = re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE)
+            if clean_match:
+                imdb_url = f"https://www.imdb.com/title/{clean_match.group(1)}/"
+                break
+
+        if not imdb_url:
+            text_match = re.search(r'imdb\.com/title/(tt\d+)', search_area.get_text(), re.IGNORECASE)
+            if text_match:
+                imdb_url = f"https://www.imdb.com/title/{text_match.group(1)}/"
 
         for elem in search_area.find_all(["p", "div", "span", "strong", "b", "h4"]):
             text = elem.get_text(" ", strip=True)
@@ -667,7 +675,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                     if cleaned:
                         genres = ", ".join(cleaned)
 
-            # Fixed: Dot (.), colon, bullet handle karega like ". 7.2 /10"
             if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating)\b', text, re.IGNORECASE):
                 r_match = re.search(
                     r'\b(?:IMDb|IMDB|iMDB|Rating|Ratings)\s*(?:Rating|Ratings)?\s*[:\-•.\s]*\s*([0-9]+(?:\.[0-9]+)?|[xX]|N/?A)\s*(?:/\s*10)?',
@@ -708,6 +715,9 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
 
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
+    # Audio specs remove karein taaki false detection na ho
+    filename = AUDIO_CHANNELS_PATTERN.sub(" ", filename)
+
     if m := BONUS_RANGE_REGEX.search(filename):
         return int(m.group(1)), f"Bonus {int(m.group(2))}-{int(m.group(3))}"
 
@@ -724,13 +734,16 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
         return int(m.group(1)), str(int(m.group(2)))
 
     if m := X_REGEX.search(filename):
+        s_val = int(m.group(1))
         ep_val = int(m.group(2))
-        if ep_val not in (264, 265):
-            return int(m.group(1)), str(ep_val)
+        if ep_val not in (264, 265, 720, 1080, 480) and s_val not in (264, 265, 720, 1080):
+            return s_val, str(ep_val)
 
     if m := DAY_REGEX.search(filename):
         season = int(m.group(1)) if m.group(1) else 1
-        return season, str(int(m.group(2)))
+        ep_val = m.group(2) or m.group(3)
+        if ep_val:
+            return season, str(int(ep_val))
 
     if m := NO_S_REGEX.search(filename):
         return int(m.group(1)), str(int(m.group(2)))
@@ -769,7 +782,8 @@ def schedule_update(bot, base_name, delay=5):
 
 
 def extract_media_info(filename: str, caption: str):
-    filename = normalize(clean_mentions_links(filename).title())
+    filename_clean = clean_mentions_links(filename)
+    filename = normalize(filename_clean.title())
     caption_clean = clean_mentions_links(caption).lower() if caption else ""
     unified = f"{caption_clean} {filename.lower()}".strip()
 
@@ -815,22 +829,23 @@ def extract_media_info(filename: str, caption: str):
     if season is not None:
         tag = "#SERIES"
 
+        clean_fn = AUDIO_CHANNELS_PATTERN.sub(" ", filename)
         m = (
-            BONUS_RANGE_REGEX.search(filename)
-            or BONUS_REGEX.search(filename)
-            or RANGE_REGEX.search(filename)
-            or SINGLE_REGEX.search(filename)
-            or NAMED_REGEX.search(filename)
-            or X_REGEX.search(filename)
-            or DAY_REGEX.search(filename)
-            or NO_S_REGEX.search(filename)
-            or EP_ONLY_RANGE.search(filename)
-            or EP_ONLY_SINGLE.search(filename)
+            BONUS_RANGE_REGEX.search(clean_fn)
+            or BONUS_REGEX.search(clean_fn)
+            or RANGE_REGEX.search(clean_fn)
+            or SINGLE_REGEX.search(clean_fn)
+            or NAMED_REGEX.search(clean_fn)
+            or X_REGEX.search(clean_fn)
+            or DAY_REGEX.search(clean_fn)
+            or NO_S_REGEX.search(clean_fn)
+            or EP_ONLY_RANGE.search(clean_fn)
+            or EP_ONLY_SINGLE.search(clean_fn)
         )
 
         if m:
             match_str = m.group(0)
-            start_idx = filename.lower().find(match_str.lower())
+            start_idx = clean_fn.lower().find(match_str.lower())
             end_idx = start_idx + len(match_str)
 
             processed_raw = filename[:end_idx]
@@ -871,6 +886,8 @@ def extract_media_info(filename: str, caption: str):
                 if qual_idx != -1:
                     processed_raw = filename[:qual_idx]
                     base_raw = processed_raw
+
+    base_raw = AUDIO_CHANNELS_PATTERN.sub(" ", base_raw)
 
     base_name = normalize(
         remove_ignored_words(
@@ -921,7 +938,9 @@ def extract_media_info(filename: str, caption: str):
             r"\bBonus\b",
             r"\bSpecial\b",
             r"\b[vV]\d+\b",
-            r"\b(?:version|ver)\.?\s*\d+\b"
+            r"\b(?:version|ver)\.?\s*\d+\b",
+            r"\b(?:dd|ddp|ac3|eac3|aac)?\s*[257]\s*[._]\s*[01]\b",
+            r"\b(?:dd|ddp)\s*[257]\b"
         ]
 
         for p in patterns:
@@ -1161,7 +1180,7 @@ async def _process_with_lock(
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
-        if hdhub_rating and hdhub_rating != "N/A":
+        if hdhub_rating and hdhub_rating != "N/A" and hdhub_rating != "x/10":
             rating = hdhub_rating
         elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
             rating = str(imdb_rate).strip()
@@ -1170,8 +1189,16 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # HDHub4u base IMDb URL
-        imdb_url = hdhub_imdb_url if hdhub_imdb_url else ""
+        # HDHub4u URL na hone par IMDb/TMDb fallback URL banayein
+        imdb_url = hdhub_imdb_url or ""
+        if not imdb_url:
+            final_imdb_id = (
+                imdb_details.get("imdb_id")
+                or (tmdb_details.get("imdb_id") if isinstance(tmdb_details, dict) else None)
+                or imdb_id
+            )
+            if final_imdb_id and str(final_imdb_id).startswith("tt"):
+                imdb_url = f"https://www.imdb.com/title/{final_imdb_id}/"
 
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
@@ -1329,13 +1356,17 @@ async def _process_with_lock(
 
         current_db_runtime = movie_doc.get("runtime")
         if (not current_db_runtime or str(current_db_runtime).strip().upper() in ("N/A", "NONE", "0", "")) and final_file_runtime != "N/A":
-            update_fields["$set"] = {"runtime": final_file_runtime}
+            update_fields.setdefault("$set", {})["runtime"] = final_file_runtime
 
         current_db_rating = movie_doc.get("rating")
-        if not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10"):
-            _, hdhub_rating, _ = await get_hdhub4u_data(base_name)
+        current_db_imdb_url = movie_doc.get("imdb_url")
+
+        if not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10") or not current_db_imdb_url:
+            _, hdhub_rating, hdhub_imdb = await get_hdhub4u_data(base_name)
             if hdhub_rating and hdhub_rating != "N/A" and hdhub_rating != "x/10":
                 update_fields.setdefault("$set", {})["rating"] = hdhub_rating
+            if not current_db_imdb_url and hdhub_imdb:
+                update_fields.setdefault("$set", {})["imdb_url"] = hdhub_imdb
 
         await db.movie_updates.update_one(
             {"_id": base_name},
@@ -1546,7 +1577,7 @@ async def update_movie_message(bot, base_name):
             logger.error(f"Error updating movie message: {e}")
 
     except Exception as e:
-            logger.error(f"Failed to update movie message for {base_name}: {e}")
+        logger.error(f"Failed to update movie message for {base_name}: {e}")
 
 
 def generate_movie_message(movie_doc, base_name):
