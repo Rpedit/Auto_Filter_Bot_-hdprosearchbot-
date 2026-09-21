@@ -128,12 +128,14 @@ async def _fetch_season_poster(tv_id: int, season_number: int, api_key=None):
         pass
     return None
 
-async def _search_media_id(query: str, api_key=None):
+async def _search_media_id(query: str, api_key=None, is_series: bool = None):
     # Direct IMDb ID universal lookup
     if re.match(r'^tt\d+$', query.strip(), re.IGNORECASE):
         try:
             find_res = await _tmdb_get(f"find/{query.strip()}", params={'external_source': 'imdb_id'}, api_key=api_key)
-            for mtype in ('tv', 'movie'):
+            # Agar series bola hai toh pehle tv check karega, warna movie
+            order = ('tv', 'movie') if is_series else ('movie', 'tv')
+            for mtype in order:
                 res_list = find_res.get(f"{mtype}_results", [])
                 if res_list:
                     return mtype, res_list[0]['id']
@@ -152,10 +154,13 @@ async def _search_media_id(query: str, api_key=None):
         if not target_query:
             continue
         params = {'query': target_query, 'language': 'en-US', 'page': 1, 'include_adult': 'false'}
-        result = await _tmdb_get('search/multi', params=params, api_key=api_key)
-        multi_results = result.get('results', [])
-        if multi_results:
-            break
+        try:
+            result = await _tmdb_get('search/multi', params=params, api_key=api_key)
+            multi_results = result.get('results', [])
+            if multi_results:
+                break
+        except Exception:
+            continue
 
     if not multi_results:
         return None, None
@@ -168,10 +173,20 @@ async def _search_media_id(query: str, api_key=None):
     scored_results = []
     query_words = set(clean_title_for_match.lower().split())
 
+    target_type = 'tv' if is_series is True else ('movie' if is_series is False else None)
+
     for r in multi_results:
         mtype = r.get('media_type')
         if mtype not in ['movie', 'tv']:
             continue
+
+        # Agar caller ne specifically series ya movie maanga hai toh preference boost
+        type_bonus = 0.0
+        if target_type:
+            if mtype == target_type:
+                type_bonus = 0.35
+            else:
+                type_bonus = -0.35
 
         media_name = r.get('title') or r.get('name') or ''
         orig_name = r.get('original_title') or r.get('original_name') or ''
@@ -184,17 +199,18 @@ async def _search_media_id(query: str, api_key=None):
         media_words = set(media_name.lower().split()) | set(orig_name.lower().split())
         overlap = len(query_words.intersection(media_words))
         
-        lang_bonus = 0.2 if r.get('original_language') == 'hi' else 0.0
+        lang_bonus = 0.15 if r.get('original_language') == 'hi' else 0.0
+        final_ratio = ratio + type_bonus + lang_bonus
 
-        if ratio >= 0.4 or (query_words and overlap >= len(query_words) * 0.5):
-            scored_results.append((r, ratio + lang_bonus, overlap))
+        if ratio >= 0.35 or (query_words and overlap >= len(query_words) * 0.5):
+            scored_results.append((r, final_ratio, overlap))
 
     if not scored_results:
         valid_res = [r for r in multi_results if r.get('media_type') in ['movie', 'tv']]
         if valid_res:
             scored_results = [(valid_res[0], 1.0, 1)]
 
-    candidates_past, candidates_upcoming = [], []
+    candidates_past, candidates_upcoming, candidates_nodate = [], [], []
     today = datetime.utcnow().date()
 
     for item in scored_results:
@@ -202,29 +218,36 @@ async def _search_media_id(query: str, api_key=None):
         ratio = item[1]
         mtype = r.get('media_type')
         rd_str = r.get('release_date') or r.get('first_air_date')
+        
+        candidate = {
+            'type': mtype, 
+            'id': r['id'], 
+            'date': None, 
+            'score': r.get('popularity', 0), 
+            'ratio': ratio
+        }
+
         if not rd_str:
+            candidates_nodate.append(candidate)
             continue
+
         try:
             rd_date = datetime.strptime(rd_str, '%Y-%m-%d').date()
+            candidate['date'] = rd_date
         except ValueError:
+            candidates_nodate.append(candidate)
             continue
 
         if year and abs(rd_date.year - year) > 1:
             continue
 
-        candidate = {
-            'type': mtype, 
-            'id': r['id'], 
-            'date': rd_date, 
-            'score': r.get('popularity', 0), 
-            'ratio': ratio
-        }
         (candidates_upcoming if rd_date > today else candidates_past).append(candidate)
 
-    candidates_past.sort(key=lambda x: (round(x['ratio'], 1), x['score'], x['date']), reverse=True)
-    candidates_upcoming.sort(key=lambda x: (round(x['ratio'], 1), x['score'], x['date']), reverse=True)
+    candidates_past.sort(key=lambda x: (round(x['ratio'], 1), x['score'], x['date'] or today), reverse=True)
+    candidates_upcoming.sort(key=lambda x: (round(x['ratio'], 1), x['score']), reverse=True)
+    candidates_nodate.sort(key=lambda x: (round(x['ratio'], 1), x['score']), reverse=True)
     
-    final = candidates_past or candidates_upcoming
+    final = candidates_past or candidates_upcoming or candidates_nodate
     if not final:
         return None, None
     return final[0]['type'], final[0]['id']
@@ -242,9 +265,9 @@ def _process_images(images_data):
     languages = sorted(set(posters_by_lang) | set(backdrops_by_lang))
     return {'posters': posters_by_lang, 'backdrops': backdrops_by_lang, 'available_languages': languages}
 
-async def _fetch_tmdb_data(query: str, api_key=None):
+async def _fetch_tmdb_data(query: str, api_key=None, is_series: bool = None):
     title, season, year_extracted = _extract_title_year_and_season(query)
-    media_type, media_id = await _search_media_id(query, api_key=api_key)
+    media_type, media_id = await _search_media_id(query, api_key=api_key, is_series=is_series)
     if not media_id:
         return None
 
@@ -258,12 +281,14 @@ async def _fetch_tmdb_data(query: str, api_key=None):
             certificates = us[0]['release_dates'][0].get('certification')
 
     runtime_display = None
+    er_raw = details.get('episode_run_time', [])
+    er_val = er_raw[0] if isinstance(er_raw, list) and er_raw else None
+
     if media_type == 'movie':
         runtime = details.get('runtime')
         runtime_display = f"{runtime} min" if runtime else None
     else:
-        er = _list_to_str_tmdb(details.get('episode_run_time', []))
-        runtime_display = f"{er} min" if er else None
+        runtime_display = f"{er_val} min" if er_val else None
 
     images_structured = _process_images(details.get('images', {}))
     images_structured['original_language'] = details.get('original_language')
@@ -288,6 +313,7 @@ async def _fetch_tmdb_data(query: str, api_key=None):
         'rating': details.get('vote_average'),
         'votes': details.get('vote_count'),
         'runtime': runtime_display,
+        'episode_run_time': str(er_val) if er_val else None,
         'certificates': certificates,
         'genres': _list_to_str_tmdb(details.get('genres', []), key='name'),
         'languages': _list_to_str_tmdb(details.get('spoken_languages', []), key='english_name'),
@@ -316,7 +342,7 @@ async def _fetch_tmdb_data(query: str, api_key=None):
 
     return output_data
 
-async def get_movie_details(query, bulk=False, id=False, file=None):
+async def get_movie_details(query, bulk=False, id=False, file=None, is_series: bool = None):
     if not id:
         from utils import listx_to_str, imdb
         query = (query.strip()).lower()
@@ -333,21 +359,27 @@ async def get_movie_details(query, bulk=False, id=False, file=None):
                 year_val = year_list[0]
         
         search_result = await asyncio.to_thread(imdb.search_movie, title.lower())
-        if not search_result or not search_result.titles:
+        if not search_result:
             return None
-        
-        movie_list = search_result.titles[:MAX_LIST_ELM]
+            
+        movie_list = search_result.titles[:MAX_LIST_ELM] if hasattr(search_result, 'titles') else search_result[:MAX_LIST_ELM]
         
         if year_val:
-            filtered = [m for m in movie_list if m.year and str(m.year) == str(year_val)]
+            filtered = [m for m in movie_list if getattr(m, 'year', None) and str(m.year) == str(year_val)]
             if not filtered:
                 filtered = movie_list
         else:
             filtered = movie_list
-            
-        kind_filter = ['movie', 'tv series', 'tvSeries', 'tvMiniSeries', 'tvMovie']
-        filtered_kind = [m for m in filtered if m.kind and m.kind in kind_filter]
-        
+
+        # Series vs Movie IMDb Kind Filtering
+        if is_series is True:
+            kind_filter = ['tv series', 'tvSeries', 'tvMiniSeries']
+        elif is_series is False:
+            kind_filter = ['movie', 'tvMovie']
+        else:
+            kind_filter = ['movie', 'tv series', 'tvSeries', 'tvMiniSeries', 'tvMovie']
+
+        filtered_kind = [m for m in filtered if getattr(m, 'kind', None) in kind_filter]
         if not filtered_kind:
             filtered_kind = filtered
         
@@ -356,67 +388,72 @@ async def get_movie_details(query, bulk=False, id=False, file=None):
         if not filtered_kind:
             return None   
         movie_brief = filtered_kind[0]
-        movieid_str = movie_brief.imdb_id 
+        movieid_str = getattr(movie_brief, 'imdb_id', getattr(movie_brief, 'movieID', None))
     else:
         movieid_str = query
 
-    movie = await asyncio.to_thread(imdb.get_movie, movieid_str)
+    if not movieid_str:
+        return None
+
+    movie = await asyncio.to_thread(imdb.get_movie, str(movieid_str))
     if not movie:
         return None
 
-    date = movie.release_date or str(movie.year) if (movie.release_date or movie.year) else "N/A"
-    plot = movie.plot[0] if isinstance(movie.plot, list) else movie.plot or ""
+    date = getattr(movie, 'release_date', None) or str(getattr(movie, 'year', '')) or "N/A"
+    plot = movie.plot[0] if isinstance(getattr(movie, 'plot', None), list) else getattr(movie, 'plot', "") or ""
     if len(plot) > 800:
         plot = plot[:800] + "..."
-    imdb_id = movie.imdb_id
-    if not imdb_id.startswith("tt"):
+        
+    imdb_id = getattr(movie, 'imdb_id', getattr(movie, 'movieID', ''))
+    if imdb_id and not str(imdb_id).startswith("tt"):
         imdb_id = f"tt{imdb_id}"
+
     return {
-        'title': movie.title,
-        'votes': movie.votes,
-        "aka": listx_to_str(movie.title_akas),
+        'title': getattr(movie, 'title', ''),
+        'votes': getattr(movie, 'votes', 0),
+        "aka": listx_to_str(getattr(movie, 'title_akas', [])),
         "seasons": (
             len(movie.info_series.display_seasons)
             if getattr(movie, "info_series", None)
             and getattr(movie.info_series, "display_seasons", None)
             else "N/A"
         ),
-        "box_office": movie.worldwide_gross,
-        'localized_title': movie.title_localized,
-        'kind': movie.kind,
+        "box_office": getattr(movie, 'worldwide_gross', 'N/A'),
+        'localized_title': getattr(movie, 'title_localized', ''),
+        'kind': getattr(movie, 'kind', ''),
         "imdb_id": imdb_id,
-        "cast": listx_to_str(movie.stars),
-        "runtime": listx_to_str(movie.duration),
-        "countries": listx_to_str(movie.countries),
-        "certificates": listx_to_str(movie.certificates),
-        "languages": listx_to_str(movie.languages),
-        "director": listx_to_str(movie.directors),
-        "writer": listx_to_str([p.name for p in movie.writers]),
-        "producer": listx_to_str([p.name for p in movie.producers]),
-        "composer": listx_to_str([p.name for p in movie.composers]),
-        "cinematographer": listx_to_str([p.name for p in movie.cinematographers]),
-        "music_team": listx_to_str([p.name for p in movie.music_team]),
-        "distributors": listx_to_str([c.name for c in movie.distributors]),        
+        "cast": listx_to_str(getattr(movie, 'stars', [])),
+        "runtime": listx_to_str(getattr(movie, 'duration', [])),
+        "countries": listx_to_str(getattr(movie, 'countries', [])),
+        "certificates": listx_to_str(getattr(movie, 'certificates', [])),
+        "languages": listx_to_str(getattr(movie, 'languages', [])),
+        "director": listx_to_str(getattr(movie, 'directors', [])),
+        "writer": listx_to_str([p.name for p in getattr(movie, 'writers', []) if hasattr(p, 'name')]),
+        "producer": listx_to_str([p.name for p in getattr(movie, 'producers', []) if hasattr(p, 'name')]),
+        "composer": listx_to_str([p.name for p in getattr(movie, 'composers', []) if hasattr(p, 'name')]),
+        "cinematographer": listx_to_str([p.name for p in getattr(movie, 'cinematographers', []) if hasattr(p, 'name')]),
+        "music_team": listx_to_str([p.name for p in getattr(movie, 'music_team', []) if hasattr(p, 'name')]),
+        "distributors": listx_to_str([c.name for c in getattr(movie, 'distributors', []) if hasattr(c, 'name')]),        
         'release_date': date,
-        'year': movie.year,
-        'genres': listx_to_str(movie.genres),
-        'poster': movie.cover_url,
-        'poster_url': movie.cover_url.split("._V1_")[0] + "._V1_SX1280.jpg" if movie.cover_url and "._V1_" in movie.cover_url else movie.cover_url,
+        'year': getattr(movie, 'year', None),
+        'genres': listx_to_str(getattr(movie, 'genres', [])),
+        'poster': getattr(movie, 'cover_url', None),
+        'poster_url': movie.cover_url.split("._V1_")[0] + "._V1_SX1280.jpg" if getattr(movie, 'cover_url', None) and "._V1_" in movie.cover_url else getattr(movie, 'cover_url', None),
         'plot': plot,
-        'rating': str(movie.rating),
-        "url": movie.url or f"https://www.imdb.com/title/{imdb_id}"
+        'rating': str(getattr(movie, 'rating', 'x/10')),
+        "url": getattr(movie, 'url', None) or f"https://www.imdb.com/title/{imdb_id}"
     }
 
-async def get_movie_detailsx(query, id=False, file=None):
+async def get_movie_detailsx(query, id=False, file=None, is_series: bool = None):
     q = str(query).strip()
     try:
-        data = await _fetch_tmdb_data(q, api_key=TMDB_API_KEY or None)
+        data = await _fetch_tmdb_data(q, api_key=TMDB_API_KEY or None, is_series=is_series)
         if not data:
             logger.info(f"TMDB returned no results for '{q}' → switching to IMDb fallback")
-            return await get_movie_details(q)
+            return await get_movie_details(q, is_series=is_series)
     except Exception as e:
         logger.info(f"TMDB direct call failed → fallback IMDb: {e}")
-        return await get_movie_details(q)
+        return await get_movie_details(q, is_series=is_series)
 
     details = {}
     details['title'] = data.get('title') or data.get('localized_title')
@@ -425,6 +462,7 @@ async def get_movie_detailsx(query, id=False, file=None):
     details['rating'] = round(float(data.get('rating', 0)), 1) if data.get('rating') is not None else None
     details['votes'] = int(data.get('votes', 0))
     details['runtime'] = data.get('runtime')
+    details['episode_run_time'] = data.get('episode_run_time')
     details['certificates'] = data.get('certificates')
     details['tmdb_url'] = data.get('url')
     
