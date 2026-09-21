@@ -544,14 +544,15 @@ async def set_domain_handler(bot, message):
         await message.reply_text(f"❌ Failed to update domain: {e}")
 
 
-async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
+async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
     genres = "N/A"
     rating = "N/A"
     imdb_url = ""
+    is_series = False
     try:
         base_url = await get_hdhub_base_url()
         if not base_url:
-            return "N/A", "N/A", ""
+            return "N/A", "N/A", "", False
 
         clean_search_query = re.sub(r'\b(season|s)\s*\d+\b', '', base_name, flags=re.IGNORECASE)
         clean_query = re.sub(r"\b(19|20)\d{2}\b", "", clean_search_query).strip()
@@ -571,7 +572,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(search_url, headers=headers) as resp:
                 if resp.status != 200:
-                    return "N/A", "N/A", ""
+                    return "N/A", "N/A", "", False
                 html = await resp.text()
 
         soup = BeautifulSoup(html, "html.parser")
@@ -586,6 +587,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
         )
 
         movie_page_url = None
+        matched_title = ""
         for a in candidate_links:
             title_text = f"{a.get('title', '')} {a.get_text()}".strip()
             href = a.get("href", "")
@@ -594,6 +596,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
 
             if is_good_title_match(clean_query, title_text) or is_good_title_match(base_name, title_text):
                 movie_page_url = href
+                matched_title = title_text
                 break
 
         if not movie_page_url:
@@ -618,15 +621,20 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                     query_words and all(match_word(w, clean_target) for w in query_words)
                 ):
                     movie_page_url = href
+                    matched_title = title_text
                     break
 
         if not movie_page_url:
-            return "N/A", "N/A", ""
+            return "N/A", "N/A", "", False
+
+        # Post title se series check karein
+        if re.search(r'\b(?:Season\s*\d+|S\d{1,2}|Series|Episodes?|Complete)\b', matched_title, re.IGNORECASE):
+            is_series = True
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(movie_page_url, headers=headers) as resp:
                 if resp.status != 200:
-                    return "N/A", "N/A", ""
+                    return "N/A", "N/A", "", is_series
                 movie_html = await resp.text()
 
         movie_soup = BeautifulSoup(movie_html, "html.parser")
@@ -639,7 +647,14 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
         content = movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
         search_area = content if content else movie_soup
 
-        # Extract IMDb URL from link or text
+        # Categories se check karein ki post series hai ya nahi
+        cat_links = search_area.select(".cat-links a, a[rel='category tag'], .entry-category a, .genres a")
+        for c in cat_links:
+            cat_name = c.get_text().strip().lower()
+            if any(term in cat_name for term in ["web series", "tv shows", "tv series", "series", "k-drama", "anime"]):
+                is_series = True
+                break
+
         for a_tag in search_area.find_all("a", href=True):
             href = a_tag["href"].strip()
             clean_match = re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE)
@@ -694,7 +709,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                             rating = "x/10"
 
         if genres == "N/A":
-            cat_links = search_area.select(".cat-links a, a[rel='category tag'], .entry-category a, .genres a")
             ignored_cats = {
                 "uncategorized", "movies", "web series", "bollywood",
                 "hollywood", "dual audio", "hindi dubbed", "tv shows",
@@ -711,11 +725,11 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
     except Exception as e:
         logger.error(f"Error scraping HDHub4u data: {e}")
 
-    return genres, rating, imdb_url
+    return genres, rating, imdb_url, is_series
 
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
-    # Audio specs remove karein taaki false detection na ho
+    # False series detection se bachne ke liye 5.1/7.1 audio tags clean karein
     filename = AUDIO_CHANNELS_PATTERN.sub(" ", filename)
 
     if m := BONUS_RANGE_REGEX.search(filename):
@@ -1126,7 +1140,15 @@ async def _process_with_lock(
 
     if not movie_doc or is_mismatched:
         blogger_poster_url = await get_blogger_poster_url(base_name, media_info.get("year"))
-        hdhub_genres, hdhub_rating, hdhub_imdb_url = await get_hdhub4u_data(base_name)
+        
+        # HDHub4u se 4 values unpack karein
+        hdhub_genres, hdhub_rating, hdhub_imdb_url, hdhub_is_series = await get_hdhub4u_data(base_name)
+
+        # HDHub4u se Series detect hone par update karein
+        if not is_series and hdhub_is_series:
+            is_series = True
+            media_info["tag"] = "#SERIES"
+            file_data["tag"] = "#SERIES"
 
         tt_match = re.search(r'tt\d+', hdhub_imdb_url) if hdhub_imdb_url else None
         hdhub_imdb_id = tt_match.group(0) if tt_match else None
@@ -1189,7 +1211,7 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # HDHub4u URL na hone par IMDb/TMDb fallback URL banayein
+        # Clickable IMDb URL ka fallback check
         imdb_url = hdhub_imdb_url or ""
         if not imdb_url:
             final_imdb_id = (
@@ -1362,7 +1384,7 @@ async def _process_with_lock(
         current_db_imdb_url = movie_doc.get("imdb_url")
 
         if not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10") or not current_db_imdb_url:
-            _, hdhub_rating, hdhub_imdb = await get_hdhub4u_data(base_name)
+            _, hdhub_rating, hdhub_imdb, _ = await get_hdhub4u_data(base_name)
             if hdhub_rating and hdhub_rating != "N/A" and hdhub_rating != "x/10":
                 update_fields.setdefault("$set", {})["rating"] = hdhub_rating
             if not current_db_imdb_url and hdhub_imdb:
