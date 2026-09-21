@@ -558,7 +558,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
         clean_search_query = re.sub(r'\b(?:19|20)\d{2}\b', '', clean_search_query).strip()
         clean_query = normalize(clean_search_query).strip()
 
-        # Pehle 3 key words se query banayein taaki search miss na ho
         search_words = [w for w in clean_query.split() if len(w) >= 2][:3]
         effective_query = "+".join(search_words) if search_words else clean_query.replace(" ", "+")
         search_url = f"{base_url.rstrip('/')}/?s={effective_query}"
@@ -624,7 +623,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
 
         movie_soup = BeautifulSoup(movie_html, "html.parser")
 
-        # Block tags aur br ko newline me convert karein
         for br in movie_soup.find_all(["br", "hr"]):
             br.replace_with("\n")
         for block_elem in movie_soup.find_all(["p", "div", "h1", "h2", "h3", "h4", "li", "tr"]):
@@ -633,14 +631,12 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
         for tag in movie_soup(["header", "nav", "footer", "aside", "script", "style", "iframe"]):
             tag.decompose()
 
-        # Pure body/article ko target karein taaki container miss na ho
         search_area = (
             movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
             or movie_soup.body
             or movie_soup
         )
 
-        # Categories check
         cat_links = search_area.select(".cat-links a, a[rel='category tag'], .entry-category a, .genres a")
         extracted_categories = []
         for c in cat_links:
@@ -651,7 +647,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
             elif len(cat_name) >= 3 and not any(bad in cat_lower for bad in ["movies", "bollywood", "hollywood", "dual", "hindi", "720p", "480p", "1080p", "hevc"]):
                 extracted_categories.append(cat_name.title())
 
-        # IMDb Link dhoondhein
+        # IMDb Link sirf HDHub4u se uthayega
         for a_tag in search_area.find_all("a", href=True):
             clean_match = re.search(r'imdb\.com/title/(tt\d+)', a_tag["href"], re.IGNORECASE)
             if clean_match:
@@ -664,7 +660,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
             if text_match:
                 imdb_url = f"https://www.imdb.com/title/{text_match.group(1)}/"
 
-        # Line-by-Line Regex Processing
         lines = [re.sub(r'\s+', ' ', line).strip() for line in full_raw_text.splitlines() if line.strip()]
 
         for line in lines:
@@ -1201,16 +1196,8 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # IMDb clickable fallback URL
-        imdb_url = hdhub_imdb_url or ""
-        if not imdb_url:
-            final_imdb_id = (
-                imdb_details.get("imdb_id")
-                or (tmdb_details.get("imdb_id") if isinstance(tmdb_details, dict) else None)
-                or imdb_id
-            )
-            if final_imdb_id and str(final_imdb_id).startswith("tt"):
-                imdb_url = f"https://www.imdb.com/title/{final_imdb_id}/"
+        # Sirf HDHub4u se mila URL hi link banega; agar nahi hai toh empty rahega (Only Text)
+        imdb_url = hdhub_imdb_url.strip() if hdhub_imdb_url else ""
 
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
@@ -1721,6 +1708,7 @@ def generate_movie_message(movie_doc, base_name):
         clean_rating = raw_rating.replace("/10", "").strip()
         rating_display = f"<small>{clean_rating}/10</small>"
 
+    # Agar HDHub4u se URL aaya hoga to hyperlink banega, warna strictly plain text rahega
     if imdb_url:
         rating_text = f'<a href="{imdb_url}">{rating_display}</a>'
     else:
