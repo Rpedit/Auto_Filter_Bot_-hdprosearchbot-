@@ -181,6 +181,8 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     f_raw = YEAR_PATTERN.sub('', found_title).strip()
 
     def clean_words(s: str):
+        # Full movie / tags clean
+        s = re.sub(r'\(?\b(?:full\s*movie|full\s*film|hd|rip|dubbed)\b\)?', '', s, flags=re.IGNORECASE)
         s = re.sub(r'^(the|a|an)\s+', '', s, flags=re.IGNORECASE)
         s = re.sub(r"['’]", "", s)
         s = normalize(s).lower()
@@ -207,7 +209,8 @@ def is_good_title_match(query: str, found_title: str) -> bool:
             extra_words = f_words[len(q_words):]
             allowed_extra = {
                 "tv", "series", "hindi", "telugu", "tamil", "kannada", 
-                "malayalam", "korea", "korean", "ott", "season", "show"
+                "malayalam", "korea", "korean", "ott", "season", "show",
+                "full", "movie", "movies", "film", "dubbed", "dual", "org"
             }
             if set(extra_words).issubset(allowed_extra) or not extra_words:
                 return True
@@ -574,6 +577,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
         for widget in soup.select(".sidebar, #sidebar, .widget, .trending, .slider, .carousel, .featured"):
             widget.decompose()
 
+        # Broad candidate links selection
         candidate_links = soup.select(
             "h2 a, h3 a, .entry-title a, .archive-posts h2 a, .recent-movies a, .blog-posts a, article a, .post-item a"
         )
@@ -663,9 +667,10 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                     if cleaned:
                         genres = ", ".join(cleaned)
 
+            # Fixed: Dot (.), colon, bullet handle karega like ". 7.2 /10"
             if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating)\b', text, re.IGNORECASE):
                 r_match = re.search(
-                    r'\b(?:IMDb|IMDB|iMDB|Rating|Ratings)\s*(?:Rating|Ratings)?\s*[:\-•]?\s*([0-9]+(?:\.[0-9]+)?|[xX]|N/?A)\s*(?:/\s*10)?',
+                    r'\b(?:IMDb|IMDB|iMDB|Rating|Ratings)\s*(?:Rating|Ratings)?\s*[:\-•.\s]*\s*([0-9]+(?:\.[0-9]+)?|[xX]|N/?A)\s*(?:/\s*10)?',
                     text,
                     re.IGNORECASE
                 )
@@ -1165,7 +1170,7 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
-        # HDHub4u base IMDb link check
+        # HDHub4u base IMDb URL
         imdb_url = hdhub_imdb_url if hdhub_imdb_url else ""
 
         imdb_r = imdb_details.get("runtime")
