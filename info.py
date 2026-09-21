@@ -97,6 +97,7 @@ ABOVE_PREVIEW = is_enabled(environ.get('ABOVE_PREVIEW', "True"), True) # Shows l
 TMDB_API_KEY = environ.get('TMDB_API_KEY', '282fec93f7dac5a152e0b321327b46c4') # preffer to use your own tmdb API Key get it from https://www.themoviedb.org/settings/api
 TMDB_POSTER = is_enabled(environ.get('TMDB_POSTER', "True"), True) # Shows TMDB poster in notification msg
 LANDSCAPE_POSTER = is_enabled(environ.get('LANDSCAPE_POSTER', "True"), True) # Shows landscape poster in notification msg
+HDHUB_DOMAIN = environ.get('HDHUB_DOMAIN', 'https://new6.hdhub4u.cl')  # Default HDHub4u base domain[span_1](start_span)[span_1](end_span)
 
 # ============================
 # Verification Settings
@@ -252,7 +253,7 @@ Bot_cmds = {
     "pm_search": "ᴘᴍ sᴇᴀʀᴄʜ ᴏɴ ᴏғғ ᴀᴄᴄᴏʀᴅɪɴɢ ʏᴏᴜʀ ɴᴇᴇᴅᴇᴅ...",
     "trendlist": "Gᴇᴛ Tᴏᴘ Tʀᴀɴᴅɪɴɢ Sᴇᴀʀᴄʜ Lɪsᴛ",
     "broadcast": "ʙʀᴏᴀᴅᴄᴀꜱᴛ ᴀ ᴍᴇꜱꜱᴀɢᴇ ᴛᴏ ᴀʟʟ ᴜꜱᴇʀꜱ.",
-    "grp_broadcast": "ʙʀᴏᴀᴅᴄᴀsᴛ ᴀ ᴍᴇssᴀɢᴇ ᴛᴏ ᴀʟʟ ᴄᴏɴɴᴇᴄᴛᴇᴅ ɢʀᴏᴜᴘs",
+    "grp_broadcast": "ʙʀᴏᴀᴅᴄᴀsᴛ ᴀ ᴍᴇssᴀɢᴇ ᴛᴏ ᴀʟʟ ᴄᴏɴɴᴇᴄᴛᴇᴅ ɢʀᴏᴜps",
     "send": "ꜱᴇɴᴅ ᴍᴇꜱꜱᴀɢᴇ ᴛᴏ A ᴘᴀʀᴛɪᴄᴜʟᴀʀ ᴜꜱᴇʀ.",
     "add_premium": "ᴀᴅᴅ ᴀɴʏ ᴜꜱᴇʀ ᴛᴏ ᴘʀᴇᴍɪᴜᴍ.",
     "remove_premium": "ʀᴇᴍᴏᴠᴇ ᴀɴʏ ᴜꜱᴇʀ ꜰʀᴏᴍ ᴘʀᴇᴍɪᴜᴍ.",
