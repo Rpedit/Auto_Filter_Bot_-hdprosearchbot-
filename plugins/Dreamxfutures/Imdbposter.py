@@ -129,11 +129,9 @@ async def _fetch_season_poster(tv_id: int, season_number: int, api_key=None):
     return None
 
 async def _search_media_id(query: str, api_key=None, is_series: bool = None):
-    # Direct IMDb ID universal lookup
     if re.match(r'^tt\d+$', query.strip(), re.IGNORECASE):
         try:
             find_res = await _tmdb_get(f"find/{query.strip()}", params={'external_source': 'imdb_id'}, api_key=api_key)
-            # Agar series bola hai toh pehle tv check karega, warna movie
             order = ('tv', 'movie') if is_series else ('movie', 'tv')
             for mtype in order:
                 res_list = find_res.get(f"{mtype}_results", [])
@@ -172,7 +170,6 @@ async def _search_media_id(query: str, api_key=None, is_series: bool = None):
 
     scored_results = []
     query_words = set(clean_title_for_match.lower().split())
-
     target_type = 'tv' if is_series is True else ('movie' if is_series is False else None)
 
     for r in multi_results:
@@ -180,7 +177,6 @@ async def _search_media_id(query: str, api_key=None, is_series: bool = None):
         if mtype not in ['movie', 'tv']:
             continue
 
-        # Agar caller ne specifically series ya movie maanga hai toh preference boost
         type_bonus = 0.0
         if target_type:
             if mtype == target_type:
@@ -371,7 +367,6 @@ async def get_movie_details(query, bulk=False, id=False, file=None, is_series: b
         else:
             filtered = movie_list
 
-        # Series vs Movie IMDb Kind Filtering
         if is_series is True:
             kind_filter = ['tv series', 'tvSeries', 'tvMiniSeries']
         elif is_series is False:
