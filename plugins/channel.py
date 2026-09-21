@@ -1248,6 +1248,7 @@ async def _process_with_lock(
             else imdb_details.get("certificates", "N/A")
         )
 
+        # 1st Priority: HDHub4u Genres
         genre_list = []
         if hdhub_genres and hdhub_genres != "N/A":
             raw_parts = re.split(r'[,|/•]', hdhub_genres)
@@ -1266,8 +1267,9 @@ async def _process_with_lock(
                     if formatted_p not in genre_list and len(formatted_p) >= 2:
                         genre_list.append(formatted_p)
 
+        # 2nd Priority: IMDb, 3rd Priority: TMDb
         if not genre_list:
-            raw_genres = tmdb_details.get("genres") or imdb_details.get("genres", "N/A")
+            raw_genres = imdb_details.get("genres") or tmdb_details.get("genres", "N/A")
             fallback_genres = []
             if isinstance(raw_genres, str) and raw_genres != "N/A":
                 fallback_genres = [g.strip() for g in raw_genres.split(",") if g.strip() and g.strip() != "N/A"]
