@@ -547,7 +547,7 @@ async def set_domain_handler(bot, message):
 async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
     genres = "N/A"
     rating = "N/A"
-    imdb_url = ""
+    info_url = ""
     is_series = False
     try:
         base_url = await get_hdhub_base_url()
@@ -623,6 +623,44 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
 
         movie_soup = BeautifulSoup(movie_html, "html.parser")
 
+        search_area = (
+            movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
+            or movie_soup.body
+            or movie_soup
+        )
+
+        # 1. URL Extraction (IMDb OR TMDb dono check karega)
+        for a_tag in search_area.find_all("a", href=True):
+            href = a_tag["href"].strip()
+            # IMDb Check
+            clean_imdb = re.search(r'https?://(?:www\.)?(?:m\.)?imdb\.com/title/(tt\d+)/?', href, re.IGNORECASE)
+            if not clean_imdb:
+                clean_imdb = re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE)
+            if clean_imdb:
+                info_url = f"https://www.imdb.com/title/{clean_imdb.group(1)}/"
+                break
+
+            # TMDb Check (Series & K-Drama info source)
+            clean_tmdb = re.search(r'https?://(?:www\.)?themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE)
+            if not clean_tmdb:
+                clean_tmdb = re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE)
+            if clean_tmdb:
+                info_url = clean_tmdb.group(0)
+                if not info_url.startswith("http"):
+                    info_url = f"https://{info_url}"
+                break
+
+        # Plain text me URL dhoondo agar <a> me na mila ho
+        full_raw_text = search_area.get_text()
+        if not info_url:
+            imdb_match = re.search(r'https?://(?:www\.)?(?:m\.)?imdb\.com/title/(tt\d+)/?', full_raw_text, re.IGNORECASE)
+            if imdb_match:
+                info_url = f"https://www.imdb.com/title/{imdb_match.group(1)}/"
+            else:
+                tmdb_match = re.search(r'https?://(?:www\.)?themoviedb\.org/(?:movie|tv)/\d+', full_raw_text, re.IGNORECASE)
+                if tmdb_match:
+                    info_url = tmdb_match.group(0)
+
         for br in movie_soup.find_all(["br", "hr"]):
             br.replace_with("\n")
         for block_elem in movie_soup.find_all(["p", "div", "h1", "h2", "h3", "h4", "li", "tr"]):
@@ -630,12 +668,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
 
         for tag in movie_soup(["header", "nav", "footer", "aside", "script", "style", "iframe"]):
             tag.decompose()
-
-        search_area = (
-            movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
-            or movie_soup.body
-            or movie_soup
-        )
 
         cat_links = search_area.select(".cat-links a, a[rel='category tag'], .entry-category a, .genres a")
         extracted_categories = []
@@ -647,26 +679,13 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
             elif len(cat_name) >= 3 and not any(bad in cat_lower for bad in ["movies", "bollywood", "hollywood", "dual", "hindi", "720p", "480p", "1080p", "hevc"]):
                 extracted_categories.append(cat_name.title())
 
-        # IMDb Link sirf HDHub4u se uthayega
-        for a_tag in search_area.find_all("a", href=True):
-            clean_match = re.search(r'imdb\.com/title/(tt\d+)', a_tag["href"], re.IGNORECASE)
-            if clean_match:
-                imdb_url = f"https://www.imdb.com/title/{clean_match.group(1)}/"
-                break
-
-        full_raw_text = search_area.get_text()
-        if not imdb_url:
-            text_match = re.search(r'imdb\.com/title/(tt\d+)', full_raw_text, re.IGNORECASE)
-            if text_match:
-                imdb_url = f"https://www.imdb.com/title/{text_match.group(1)}/"
-
-        lines = [re.sub(r'\s+', ' ', line).strip() for line in full_raw_text.splitlines() if line.strip()]
+        lines = [re.sub(r'\s+', ' ', line).strip() for line in search_area.get_text().splitlines() if line.strip()]
 
         for line in lines:
             if not is_series and re.search(r'\b(?:Season|Episodes?|Complete Pack)\b\s*[:\-–]', line, re.IGNORECASE):
                 is_series = True
 
-            # Rating Parse
+            # Rating Parse: handles ". 7.2 /10" and "Rating: 6.0"
             if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating|Ratings)\b', line, re.IGNORECASE):
                 r_match = re.search(
                     r'(?:IMDb|IMDB|Rating|Ratings)\s*(?:Rating|Ratings)?\s*[:\-•.\s]*\s*([0-9]+(?:\.[0-9]+)?|[xX]|N/?A)',
@@ -713,7 +732,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
     except Exception as e:
         logger.error(f"Error scraping HDHub4u data: {e}")
 
-    return genres, rating, imdb_url, is_series
+    return genres, rating, info_url, is_series
 
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
@@ -1367,7 +1386,7 @@ async def _process_with_lock(
             if hdhub_rating and hdhub_rating != "N/A" and hdhub_rating != "x/10":
                 update_fields.setdefault("$set", {})["rating"] = hdhub_rating
             if not current_db_imdb_url and hdhub_imdb:
-                update_fields.setdefault("$set", {})["imdb_url"] = hdhub_imdb
+                update_fields.setdefault("$set", {})["imdb_url"] = hdhub_imdb.strip()
 
         await db.movie_updates.update_one(
             {"_id": base_name},
