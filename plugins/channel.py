@@ -137,7 +137,7 @@ SOURCE_PATTERN = re.compile(
 VERSION_STANDALONE = re.compile(r"\b(?:[vV]\d+|ver\.?\s*\d+|version\s*\d+)\b", re.IGNORECASE)
 YEAR_PATTERN = re.compile(r"(?<![A-Za-z0-9])(?:19|20)\d{2}(?![A-Za-z0-9])")
 
-# Season & Episode Patterns (Bonus & Special Safe)
+# Season & Episode Patterns
 BONUS_RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})\b', re.IGNORECASE)
 BONUS_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
 RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})', re.IGNORECASE)
@@ -575,14 +575,14 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
             widget.decompose()
 
         candidate_links = soup.select(
-            ".archive-posts h2 a, .recent-movies a, .blog-posts a, article a, .post-item a, .entry-title a"
+            "h2 a, h3 a, .entry-title a, .archive-posts h2 a, .recent-movies a, .blog-posts a, article a, .post-item a"
         )
 
         movie_page_url = None
         for a in candidate_links:
             title_text = f"{a.get('title', '')} {a.get_text()}".strip()
             href = a.get("href", "")
-            if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
+            if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/", "/wp-content/"]):
                 continue
 
             if is_good_title_match(clean_query, title_text) or is_good_title_match(base_name, title_text):
@@ -604,7 +604,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
             for a in candidate_links:
                 title_text = f"{a.get('title', '')} {a.get_text()}".lower()
                 href = a.get("href", "")
-                if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
+                if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/", "/wp-content/"]):
                     continue
                 clean_target = re.sub(r"['’]", "", title_text).lower()
                 if (clean_q in clean_target) or (
@@ -648,17 +648,18 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str]:
                 if m:
                     candidate = m.group(1).strip()
                     candidate = re.split(
-                        r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline)\b',
+                        r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline|Info|Trailer|Screenshot|Screenshots|Synopsis|Plot)\b',
                         candidate, flags=re.IGNORECASE
                     )[0]
                     candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
                     parts = re.split(r'[,|/•]', candidate)
-                    cleaned = [
-                        p.strip() for p in parts 
-                        if p.strip() and 2 <= len(p.strip()) <= 30 and not any(
-                            bad in p.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download", "info", "trailer"]
-                        )
-                    ]
+                    cleaned = []
+                    for p in parts:
+                        p_val = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip()
+                        if p_val and 2 <= len(p_val) <= 30 and not any(
+                            bad in p_val.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download"]
+                        ):
+                            cleaned.append(p_val)
                     if cleaned:
                         genres = ", ".join(cleaned)
 
@@ -1164,6 +1165,7 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
+        # HDHub4u base IMDb link check
         imdb_url = hdhub_imdb_url if hdhub_imdb_url else ""
 
         imdb_r = imdb_details.get("runtime")
@@ -1206,18 +1208,18 @@ async def _process_with_lock(
         if hdhub_genres and hdhub_genres != "N/A":
             raw_parts = re.split(r'[,|/•]', hdhub_genres)
             for p in raw_parts:
-                clean_p = p.strip()
-                if not clean_p or clean_p == "N/A" or any(bad in clean_p.lower() for bad in ["dropdown", "menu", "select", "category", "info", "trailer"]):
+                p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip()
+                if not p_clean or p_clean == "N/A" or any(bad in p_clean.lower() for bad in ["dropdown", "menu", "select", "category"]):
                     continue
 
-                if "&" in clean_p:
-                    for sub_p in clean_p.split("&"):
-                        sub_clean = sub_p.strip().title()
-                        if sub_clean and sub_clean not in genre_list:
+                if "&" in p_clean:
+                    for sub_p in p_clean.split("&"):
+                        sub_clean = re.sub(r'\b(?:info|trailer)\b', '', sub_p, flags=re.IGNORECASE).strip().title()
+                        if sub_clean and sub_clean not in genre_list and len(sub_clean) >= 2:
                             genre_list.append(sub_clean)
                 else:
-                    formatted_p = clean_p.title()
-                    if formatted_p not in genre_list:
+                    formatted_p = p_clean.title()
+                    if formatted_p not in genre_list and len(formatted_p) >= 2:
                         genre_list.append(formatted_p)
 
         if not genre_list:
@@ -1235,8 +1237,8 @@ async def _process_with_lock(
                         fallback_genres.append(g.strip())
 
             for g in fallback_genres:
-                clean_g = g.strip().title()
-                if clean_g and clean_g not in genre_list:
+                clean_g = re.sub(r'\b(?:info|trailer)\b', '', g, flags=re.IGNORECASE).strip().title()
+                if clean_g and clean_g not in genre_list and len(clean_g) >= 2:
                     genre_list.append(clean_g)
 
         genres = ", ".join(genre_list) if genre_list else "N/A"
