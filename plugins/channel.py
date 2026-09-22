@@ -318,7 +318,7 @@ def format_movie_qualities(quality_list: list) -> str:
                 attached = True
                 break
         if not attached:
-            source_list.append(version_str)
+            sources.append(version_str)
 
     final_parts = sorted_res + source_list
     return ", ".join(final_parts) if final_parts else "N/A"
@@ -395,13 +395,16 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
     elif "media_type" in sig.parameters:
         kwargs["media_type"] = "tv" if is_series else "movie"
 
+    # Series search ke waqt "Season X" hatayein taaki IMDb Episode 1 ka page na laye
+    search_name = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip() if is_series else base_name
+
     queries = []
     if is_series:
         if year:
-            queries.append(f"{base_name} {year}")
-        queries.append(f"{base_name} Series")
-        queries.append(f"{base_name} TV")
-        queries.append(base_name)
+            queries.append(f"{search_name} {year}")
+        queries.append(f"{search_name} Series")
+        queries.append(f"{search_name} TV")
+        queries.append(search_name)
     else:
         if year:
             queries.append(f"{base_name} {year}")
@@ -413,7 +416,7 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
             res = await get_movie_details(q, **kwargs) if kwargs else await get_movie_details(q)
             if res and isinstance(res, dict):
                 title = res.get("title")
-                if title and is_good_title_match(base_name, title):
+                if title and is_good_title_match(search_name if is_series else base_name, title):
                     return res
                 if not best_fallback and res:
                     best_fallback = res
@@ -1776,8 +1779,13 @@ def generate_movie_message(movie_doc, base_name):
 
     stored_title = movie_doc.get("title", base_name)
     
+    # Episode/Pilot/Colon hatane ke liye filter
+    stored_title = re.sub(r'[:,]?\s*(?:Episode|Ep)\s*\d+.*', '', stored_title, flags=re.IGNORECASE).strip()
+    stored_title = re.sub(r'["\']', '', stored_title).strip()
+    
     display_title = re.sub(r'\s+Season\s*\d+', '', stored_title, flags=re.IGNORECASE).strip()
     display_title = re.sub(r'\s+S\d+', '', display_title, flags=re.IGNORECASE).strip()
+    display_title = display_title.strip(" :,-\"'")
 
     movie_year = movie_doc.get("year")
     
