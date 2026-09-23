@@ -195,7 +195,6 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if not query or not found_title:
         return False
 
-    # Strict sequel check taaki Part 1 aur Part 2 aapas me match na hon
     q_seq = extract_sequel_num(query)
     f_seq = extract_sequel_num(found_title)
     if q_seq != f_seq:
@@ -413,6 +412,15 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
     elif "media_type" in sig.parameters:
         kwargs["media_type"] = "tv" if is_series else "movie"
 
+    # Direct IMDb tt ID pass
+    if str(base_name).strip().lower().startswith("tt"):
+        try:
+            res = await get_movie_details(str(base_name).strip(), id=True, **kwargs)
+            if res and isinstance(res, dict):
+                return res
+        except Exception as e:
+            logger.warning(f"Error fetching direct IMDb ID: {e}")
+
     search_name = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip() if is_series else base_name
 
     queries = []
@@ -454,9 +462,10 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
     elif "media_type" in sig.parameters:
         kwargs["media_type"] = "tv" if is_series else "movie"
 
-    if tmdb_query and tmdb_query.startswith("tt"):
+    # Direct numeric id ya tt... ID lookup
+    if tmdb_query and (str(tmdb_query).startswith("tt") or str(tmdb_query).isdigit()):
         try:
-            res = await get_movie_detailsx(tmdb_query, **kwargs) if kwargs else await get_movie_detailsx(tmdb_query)
+            res = await get_movie_detailsx(str(tmdb_query), **kwargs) if kwargs else await get_movie_detailsx(str(tmdb_query))
             if res and not res.get("error"):
                 return res
         except Exception:
@@ -621,7 +630,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
             clean_cand = normalize(title_text).lower()
             cand_sequel = extract_sequel_num(title_text)
 
-            # Strict Sequel Validation
+            # Strict Sequel Validation (Part 1 vs Part 2 Filter)
             if target_sequel != cand_sequel:
                 continue
 
@@ -1180,6 +1189,7 @@ async def _process_with_lock(
     if not movie_doc or is_mismatched:
         blogger_poster_url = await get_blogger_poster_url(base_name, media_info.get("year"))
         
+        # 1. HDHub4u Scrape Call
         hdhub_genres, hdhub_rating, hdhub_info_url, hdhub_is_series = await get_hdhub4u_data(base_name)
 
         if not is_series and hdhub_is_series:
@@ -1187,27 +1197,38 @@ async def _process_with_lock(
             media_info["tag"] = "#SERIES"
             file_data["tag"] = "#SERIES"
 
+        # 2. HDHub4u se IMDb ya TMDb links ko identify karna
         tt_match = re.search(r'tt\d+', hdhub_info_url) if hdhub_info_url else None
         hdhub_imdb_id = tt_match.group(0) if tt_match else None
 
-        imdb_details = await fetch_imdb_safely(
-            base_name,
-            is_series=is_series,
-            year=media_info.get("year")
-        ) or {}
+        tmdb_url_match = re.search(r'themoviedb\.org/(movie|tv)/(\d+)', hdhub_info_url) if hdhub_info_url else None
+        hdhub_tmdb_id = tmdb_url_match.group(2) if tmdb_url_match else None
+        hdhub_tmdb_type = tmdb_url_match.group(1) if tmdb_url_match else None
 
-        if not imdb_details or not is_good_title_match(base_name, imdb_details.get("title", "")):
-            imdb_id = hdhub_imdb_id
-            official_search_title = base_name
+        imdb_details = {}
+        tmdb_details = {}
+
+        # 3. Direct ID Lookup Routing
+        if hdhub_imdb_id:
+            logger.info(f"HDHub4u direct IMDb ID found: {hdhub_imdb_id}")
+            imdb_details = await fetch_imdb_safely(hdhub_imdb_id, is_series=is_series)
+            tmdb_details = await fetch_tmdb_safely(hdhub_imdb_id, base_name, is_series=is_series)
+
+        elif hdhub_tmdb_id:
+            logger.info(f"HDHub4u direct TMDb ID found: {hdhub_tmdb_id}")
+            tmdb_details = await fetch_tmdb_safely(hdhub_tmdb_id, base_name, is_series=(hdhub_tmdb_type == "tv" or is_series))
+            if tmdb_details and tmdb_details.get("imdb_id"):
+                imdb_details = await fetch_imdb_safely(tmdb_details["imdb_id"], is_series=is_series)
+
         else:
-            official_search_title = imdb_details.get("title", base_name)
-            imdb_id = hdhub_imdb_id or imdb_details.get("imdb_id")
-
-        tmdb_query = imdb_id if (imdb_id and imdb_id.startswith("tt")) else official_search_title
-        tmdb_details = await fetch_tmdb_safely(tmdb_query, base_name, is_series)
+            imdb_details = await fetch_imdb_safely(base_name, is_series=is_series, year=media_info.get("year")) or {}
+            final_lookup = imdb_details.get("imdb_id") or base_name
+            tmdb_details = await fetch_tmdb_safely(final_lookup, base_name, is_series=is_series)
 
         if not tmdb_details or tmdb_details.get("error"):
             error_tmdb = True
+
+        official_search_title = imdb_details.get("title") or tmdb_details.get("title") or tmdb_details.get("name") or base_name
 
         poster_url = ""
         is_backdrop = False
@@ -1239,8 +1260,11 @@ async def _process_with_lock(
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
-        if hdhub_rating and hdhub_rating != "N/A" and hdhub_rating != "x/10":
+        # 4. Rating Logic: HDHub4u text > TMDb/IMDb > Fallback
+        if hdhub_rating and hdhub_rating not in ("N/A", "x/10"):
             rating = hdhub_rating
+        elif hdhub_tmdb_id and tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+            rating = str(tmdb_rate).strip()
         elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
             rating = str(imdb_rate).strip()
         elif tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
@@ -1248,12 +1272,13 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
+        # 5. Clickable Link (HDHub4u se aaya hua exact link)
         imdb_url = hdhub_info_url.strip() if hdhub_info_url else ""
         if not imdb_url:
             final_imdb_id = (
                 imdb_details.get("imdb_id")
                 or (tmdb_details.get("imdb_id") if isinstance(tmdb_details, dict) else None)
-                or imdb_id
+                or hdhub_imdb_id
             )
             if final_imdb_id and str(final_imdb_id).startswith("tt"):
                 imdb_url = f"https://www.imdb.com/title/{final_imdb_id}/"
@@ -1802,7 +1827,6 @@ def generate_movie_message(movie_doc, base_name):
 
     stored_title = movie_doc.get("title", base_name)
     
-    # Episode/Pilot/Quotes ka filter
     stored_title = re.sub(r'[:,]?\s*(?:Episode|Ep)\s*\d+.*', '', stored_title, flags=re.IGNORECASE).strip()
     stored_title = re.sub(r'["\']', '', stored_title).strip()
     
