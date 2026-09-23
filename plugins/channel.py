@@ -179,8 +179,26 @@ def remove_ignored_words(text: str) -> str:
     )
 
 
+def extract_sequel_num(text: str) -> Optional[str]:
+    if not text:
+        return None
+    t = text.lower()
+    m = re.search(r'\b(?:part|chapter|volume|vol)?\s*([2-9]|ii|iii|iv|v|vi|vii|viii|ix|x)\b', t, re.IGNORECASE)
+    if m:
+        val = m.group(1).lower()
+        roman_map = {'ii': '2', 'iii': '3', 'iv': '4', 'v': '5', 'vi': '6', 'vii': '7', 'viii': '8', 'ix': '9', 'x': '10'}
+        return roman_map.get(val, val)
+    return None
+
+
 def is_good_title_match(query: str, found_title: str) -> bool:
     if not query or not found_title:
+        return False
+
+    # Strict sequel check taaki Part 1 aur Part 2 aapas me match na hon
+    q_seq = extract_sequel_num(query)
+    f_seq = extract_sequel_num(found_title)
+    if q_seq != f_seq:
         return False
 
     q_raw = YEAR_PATTERN.sub('', query).strip()
@@ -202,20 +220,7 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if q_words == f_words:
         return True
 
-    # Sequel / Part Mismatch Fix (Prevent Lust Stories 1 matching Lust Stories 2)
-    sequel_tokens = {"2", "3", "4", "5", "6", "7", "8", "9", "ii", "iii", "iv", "v", "vi"}
-    q_digits = {w for w in q_words if w in sequel_tokens or (w.isdigit() and len(w) <= 2)}
-    f_digits = {w for w in f_words if w in sequel_tokens or (w.isdigit() and len(w) <= 2)}
-
-    if not q_digits and f_digits:
-        return False
-    if q_digits and q_digits != f_digits:
-        return False
-
     if all(qw in f_words for qw in q_words):
-        extra_words = set(f_words) - set(q_words)
-        if any(w in sequel_tokens or (w.isdigit() and len(w) <= 2) for w in extra_words):
-            return False
         return True
 
     for sep in [':', '-', '–', '—', '|']:
@@ -331,7 +336,7 @@ def format_movie_qualities(quality_list: list) -> str:
                 attached = True
                 break
         if not attached:
-            source_list.append(version_str)
+            sources.append(version_str)
 
     final_parts = sorted_res + source_list
     return ", ".join(final_parts) if final_parts else "N/A"
@@ -610,9 +615,15 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
         movie_page_url = None
         matched_title = ""
         core_tokens = [re.sub(r'[^a-zA-Z0-9]', '', w).lower() for w in clean_query.split() if len(w) >= 2]
+        target_sequel = extract_sequel_num(base_name) or extract_sequel_num(clean_query)
 
         for title_text, href in candidate_items:
             clean_cand = normalize(title_text).lower()
+            cand_sequel = extract_sequel_num(title_text)
+
+            # Strict Sequel Validation
+            if target_sequel != cand_sequel:
+                continue
 
             if is_good_title_match(clean_query, title_text) or is_good_title_match(base_name, title_text):
                 movie_page_url = href
@@ -620,11 +631,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
                 break
 
             if core_tokens and all(tok in clean_cand for tok in core_tokens):
-                # Agar search query me koi digit nahi tha par candidate me sequel/part number hai toh skip karein
-                has_query_num = any(tok.isdigit() for tok in core_tokens)
-                has_cand_num = bool(re.search(r'\b(?:[2-9]|ii|iii|iv|v|part\s*[2-9]|chapter\s*[2-9])\b', clean_cand, re.IGNORECASE))
-                if not has_query_num and has_cand_num:
-                    continue
                 movie_page_url = href
                 matched_title = title_text
                 break
@@ -1796,7 +1802,7 @@ def generate_movie_message(movie_doc, base_name):
 
     stored_title = movie_doc.get("title", base_name)
     
-    # Episode/Pilot/Colon hatane ke liye filter
+    # Episode/Pilot/Quotes ka filter
     stored_title = re.sub(r'[:,]?\s*(?:Episode|Ep)\s*\d+.*', '', stored_title, flags=re.IGNORECASE).strip()
     stored_title = re.sub(r'["\']', '', stored_title).strip()
     
