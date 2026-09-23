@@ -202,7 +202,20 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if q_words == f_words:
         return True
 
+    # Sequel / Part Mismatch Fix (Prevent Lust Stories 1 matching Lust Stories 2)
+    sequel_tokens = {"2", "3", "4", "5", "6", "7", "8", "9", "ii", "iii", "iv", "v", "vi"}
+    q_digits = {w for w in q_words if w in sequel_tokens or (w.isdigit() and len(w) <= 2)}
+    f_digits = {w for w in f_words if w in sequel_tokens or (w.isdigit() and len(w) <= 2)}
+
+    if not q_digits and f_digits:
+        return False
+    if q_digits and q_digits != f_digits:
+        return False
+
     if all(qw in f_words for qw in q_words):
+        extra_words = set(f_words) - set(q_words)
+        if any(w in sequel_tokens or (w.isdigit() and len(w) <= 2) for w in extra_words):
+            return False
         return True
 
     for sep in [':', '-', '–', '—', '|']:
@@ -318,7 +331,7 @@ def format_movie_qualities(quality_list: list) -> str:
                 attached = True
                 break
         if not attached:
-            sources.append(version_str)
+            source_list.append(version_str)
 
     final_parts = sorted_res + source_list
     return ", ".join(final_parts) if final_parts else "N/A"
@@ -395,7 +408,6 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
     elif "media_type" in sig.parameters:
         kwargs["media_type"] = "tv" if is_series else "movie"
 
-    # Series search ke waqt "Season X" hatayein taaki IMDb Episode 1 ka page na laye
     search_name = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip() if is_series else base_name
 
     queries = []
@@ -608,6 +620,11 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
                 break
 
             if core_tokens and all(tok in clean_cand for tok in core_tokens):
+                # Agar search query me koi digit nahi tha par candidate me sequel/part number hai toh skip karein
+                has_query_num = any(tok.isdigit() for tok in core_tokens)
+                has_cand_num = bool(re.search(r'\b(?:[2-9]|ii|iii|iv|v|part\s*[2-9]|chapter\s*[2-9])\b', clean_cand, re.IGNORECASE))
+                if not has_query_num and has_cand_num:
+                    continue
                 movie_page_url = href
                 matched_title = title_text
                 break
