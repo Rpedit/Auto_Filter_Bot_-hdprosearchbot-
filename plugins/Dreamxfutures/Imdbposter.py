@@ -133,7 +133,6 @@ async def _search_media_id(query: str, api_key=None, is_series: bool = None):
     if re.match(r'^tt\d+$', query.strip(), re.IGNORECASE):
         try:
             find_res = await _tmdb_get(f"find/{query.strip()}", params={'external_source': 'imdb_id'}, api_key=api_key)
-            # Agar series bola hai toh pehle tv check karega, warna movie
             order = ('tv', 'movie') if is_series else ('movie', 'tv')
             for mtype in order:
                 res_list = find_res.get(f"{mtype}_results", [])
@@ -174,13 +173,14 @@ async def _search_media_id(query: str, api_key=None, is_series: bool = None):
     query_words = set(clean_title_for_match.lower().split())
 
     target_type = 'tv' if is_series is True else ('movie' if is_series is False else None)
+    sequel_tokens = {"2", "3", "4", "5", "6", "ii", "iii", "iv", "v"}
+    query_has_sequel = any(w in sequel_tokens or (w.isdigit() and len(w) <= 2) for w in query_words)
 
     for r in multi_results:
         mtype = r.get('media_type')
         if mtype not in ['movie', 'tv']:
             continue
 
-        # Agar caller ne specifically series ya movie maanga hai toh preference boost
         type_bonus = 0.0
         if target_type:
             if mtype == target_type:
@@ -197,8 +197,15 @@ async def _search_media_id(query: str, api_key=None, is_series: bool = None):
         )
         
         media_words = set(media_name.lower().split()) | set(orig_name.lower().split())
+        media_has_sequel = any(w in sequel_tokens or (w.isdigit() and len(w) <= 2) for w in media_words)
+
+        # Sequel mismatch penalty: Agar query me '2' nahi hai toh Part 2 ko penalty do
+        if not query_has_sequel and media_has_sequel:
+            type_bonus -= 0.60
+        elif query_has_sequel and not media_has_sequel:
+            type_bonus -= 0.60
+
         overlap = len(query_words.intersection(media_words))
-        
         lang_bonus = 0.15 if r.get('original_language') == 'hi' else 0.0
         final_ratio = ratio + type_bonus + lang_bonus
 
@@ -243,9 +250,10 @@ async def _search_media_id(query: str, api_key=None, is_series: bool = None):
 
         (candidates_upcoming if rd_date > today else candidates_past).append(candidate)
 
-    candidates_past.sort(key=lambda x: (round(x['ratio'], 1), x['score'], x['date'] or today), reverse=True)
-    candidates_upcoming.sort(key=lambda x: (round(x['ratio'], 1), x['score']), reverse=True)
-    candidates_nodate.sort(key=lambda x: (round(x['ratio'], 1), x['score']), reverse=True)
+    # Exact ratio sorting (round(ratio, 1) hata diya taaki Part 1 hamesha Part 2 se aage rahe)
+    candidates_past.sort(key=lambda x: (x['ratio'], x['score'], x['date'] or today), reverse=True)
+    candidates_upcoming.sort(key=lambda x: (x['ratio'], x['score']), reverse=True)
+    candidates_nodate.sort(key=lambda x: (x['ratio'], x['score']), reverse=True)
     
     final = candidates_past or candidates_upcoming or candidates_nodate
     if not final:
@@ -371,7 +379,9 @@ async def get_movie_details(query, bulk=False, id=False, file=None, is_series: b
         else:
             filtered = movie_list
 
-        # Series vs Movie IMDb Kind Filtering
+        # Episode ko kabhi accept na karein (Series me Episode 1 Pilot issue fix)
+        filtered = [m for m in filtered if getattr(m, 'kind', None) != 'episode']
+
         if is_series is True:
             kind_filter = ['tv series', 'tvSeries', 'tvMiniSeries']
         elif is_series is False:
