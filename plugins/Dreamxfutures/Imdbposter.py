@@ -80,14 +80,36 @@ def _list_to_str_tmdb(data_list, limit=10, key=None):
         return ", ".join(str(item.get(key, '')) for item in items if item)
     return ", ".join(str(item) for item in items if item)
 
+def extract_sequel_num(text: str):
+    if not text:
+        return None
+    t = text.lower()
+    m = re.search(r'\b(?:part|chapter|volume|vol)?\s*([2-9]|ii|iii|iv|v|vi|vii|viii|ix|x)\b', t, re.IGNORECASE)
+    if m:
+        val = m.group(1).lower()
+        roman_map = {'ii': '2', 'iii': '3', 'iv': '4', 'v': '5', 'vi': '6', 'vii': '7', 'viii': '8', 'ix': '9', 'x': '10'}
+        return roman_map.get(val, val)
+    return None
+
 def _extract_title_year_and_season(query: str):
-    match = re.search(r'^(.*?)(?:\s+(?:season|s)\s*(\d+))?(?:\s+(\d{4}))?$', query.strip(), re.IGNORECASE)
-    if match:
-        title, season_str, year_str = match.groups()
-        season = int(season_str) if season_str and season_str.isdigit() else None
-        year = int(year_str) if year_str and year_str.isdigit() else None
-        return title.strip(), season, year
-    return query.strip(), None, None
+    q = query.strip()
+    if re.match(r'^tt\d+$', q, re.IGNORECASE):
+        return q, None, None
+
+    year = None
+    y_match = re.search(r'\b(19\d{2}|20\d{2})\b', q)
+    if y_match:
+        year = int(y_match.group(1))
+        q = re.sub(rf'\b{year}\b', '', q).strip()
+
+    season = None
+    s_match = re.search(r'\b(?:season|s)\s*0*(\d{1,2})\b', q, re.IGNORECASE)
+    if s_match:
+        season = int(s_match.group(1))
+        q = re.sub(r'\b(?:season|s)\s*0*\d{1,2}\b', '', q, flags=re.IGNORECASE).strip()
+
+    q = re.sub(r'\s+', ' ', q).strip()
+    return q, season, year
 
 async def _tmdb_get(path, params=None, api_key=None):
     url = f"{TMDB_BASE_URL}/{path.lstrip('/')}"
@@ -142,13 +164,13 @@ async def _search_media_id(query: str, api_key=None, is_series: bool = None):
             pass
 
     title, season, year = _extract_title_year_and_season(query)
-    clean_title_for_match = re.sub(r'\b(season|part|vol|volume)\b.*', '', title, flags=re.IGNORECASE).strip()
-    if not clean_title_for_match:
-        clean_title_for_match = title
+    clean_title_for_match = title
 
     multi_results = []
-    queries_to_try = list(dict.fromkeys([title, clean_title_for_match]))
-    
+    queries_to_try = [title]
+    if year:
+        queries_to_try.append(f"{title} {year}")
+
     for target_query in queries_to_try:
         if not target_query:
             continue
@@ -171,10 +193,8 @@ async def _search_media_id(query: str, api_key=None, is_series: bool = None):
 
     scored_results = []
     query_words = set(clean_title_for_match.lower().split())
-
     target_type = 'tv' if is_series is True else ('movie' if is_series is False else None)
-    sequel_tokens = {"2", "3", "4", "5", "6", "ii", "iii", "iv", "v"}
-    query_has_sequel = any(w in sequel_tokens or (w.isdigit() and len(w) <= 2) for w in query_words)
+    q_sequel = extract_sequel_num(clean_title_for_match)
 
     for r in multi_results:
         mtype = r.get('media_type')
@@ -196,15 +216,15 @@ async def _search_media_id(query: str, api_key=None, is_series: bool = None):
             get_ratio(orig_name, clean_title_for_match)
         )
         
+        m_sequel = extract_sequel_num(media_name) or extract_sequel_num(orig_name)
+
+        # Sequel Validation
+        if q_sequel != m_sequel:
+            type_bonus -= 1.0  # Heavy penalty so Part 1 and Part 2 never cross-match
+        else:
+            type_bonus += 0.30
+
         media_words = set(media_name.lower().split()) | set(orig_name.lower().split())
-        media_has_sequel = any(w in sequel_tokens or (w.isdigit() and len(w) <= 2) for w in media_words)
-
-        # Sequel mismatch penalty: Agar query me '2' nahi hai toh Part 2 ko penalty do
-        if not query_has_sequel and media_has_sequel:
-            type_bonus -= 0.60
-        elif query_has_sequel and not media_has_sequel:
-            type_bonus -= 0.60
-
         overlap = len(query_words.intersection(media_words))
         lang_bonus = 0.15 if r.get('original_language') == 'hi' else 0.0
         final_ratio = ratio + type_bonus + lang_bonus
@@ -245,12 +265,14 @@ async def _search_media_id(query: str, api_key=None, is_series: bool = None):
             candidates_nodate.append(candidate)
             continue
 
-        if year and abs(rd_date.year - year) > 1:
-            continue
+        if year:
+            if abs(rd_date.year - year) == 0:
+                candidate['ratio'] += 0.40
+            elif abs(rd_date.year - year) > 1:
+                candidate['ratio'] -= 0.50
 
         (candidates_upcoming if rd_date > today else candidates_past).append(candidate)
 
-    # Exact ratio sorting (round(ratio, 1) hata diya taaki Part 1 hamesha Part 2 se aage rahe)
     candidates_past.sort(key=lambda x: (x['ratio'], x['score'], x['date'] or today), reverse=True)
     candidates_upcoming.sort(key=lambda x: (x['ratio'], x['score']), reverse=True)
     candidates_nodate.sort(key=lambda x: (x['ratio'], x['score']), reverse=True)
@@ -351,36 +373,28 @@ async def _fetch_tmdb_data(query: str, api_key=None, is_series: bool = None):
     return output_data
 
 async def get_movie_details(query, bulk=False, id=False, file=None, is_series: bool = None):
+    from utils import listx_to_str, imdb
+
+    q_str = str(query).strip()
+    if q_str.lower().startswith("tt") and q_str[2:].isdigit():
+        id = True
+        movieid_str = q_str
+
     if not id:
-        from utils import listx_to_str, imdb
-        query = (query.strip()).lower()
-        title = query
-        year_val = None
-        
-        year_list = re.findall(r'[1-2]\d{3}$', query, re.IGNORECASE)
-        if year_list:
-            year_val = year_list[0]
-            title = (query.replace(year_val, "")).strip()
-        elif file is not None:
-            year_list = re.findall(r'[1-2]\d{3}', file, re.IGNORECASE)
-            if year_list:
-                year_val = year_list[0]
-        
+        title, season, year_val = _extract_title_year_and_season(q_str)
+        if file is not None and not year_val:
+            y_m = re.search(r'\b(19\d{2}|20\d{2})\b', file)
+            if y_m:
+                year_val = int(y_m.group(1))
+
         search_result = await asyncio.to_thread(imdb.search_movie, title.lower())
         if not search_result:
             return None
             
         movie_list = search_result.titles[:MAX_LIST_ELM] if hasattr(search_result, 'titles') else search_result[:MAX_LIST_ELM]
-        
-        if year_val:
-            filtered = [m for m in movie_list if getattr(m, 'year', None) and str(m.year) == str(year_val)]
-            if not filtered:
-                filtered = movie_list
-        else:
-            filtered = movie_list
 
-        # Episode ko kabhi accept na karein (Series me Episode 1 Pilot issue fix)
-        filtered = [m for m in filtered if getattr(m, 'kind', None) != 'episode']
+        # Episode pages ko filter karein
+        movie_list = [m for m in movie_list if getattr(m, 'kind', None) != 'episode']
 
         if is_series is True:
             kind_filter = ['tv series', 'tvSeries', 'tvMiniSeries']
@@ -389,15 +403,44 @@ async def get_movie_details(query, bulk=False, id=False, file=None, is_series: b
         else:
             kind_filter = ['movie', 'tv series', 'tvSeries', 'tvMiniSeries', 'tvMovie']
 
-        filtered_kind = [m for m in filtered if getattr(m, 'kind', None) in kind_filter]
-        if not filtered_kind:
-            filtered_kind = filtered
-        
+        valid_kinds = [m for m in movie_list if getattr(m, 'kind', None) in kind_filter]
+        if valid_kinds:
+            movie_list = valid_kinds
+
+        # IMDb Sequel & Year Ranking Engine
+        q_seq = extract_sequel_num(title)
+
+        def match_score(m):
+            m_title = getattr(m, 'title', '')
+            m_year = getattr(m, 'year', None)
+            m_seq = extract_sequel_num(m_title)
+            
+            score = 0.0
+            if q_seq == m_seq:
+                score += 5.0
+            else:
+                score -= 10.0
+
+            if year_val and m_year:
+                if str(m_year) == str(year_val):
+                    score += 4.0
+                elif abs(int(m_year) - int(year_val)) <= 1:
+                    score += 2.0
+                else:
+                    score -= 3.0
+
+            ratio = SequenceMatcher(None, title.lower(), m_title.lower()).ratio()
+            score += ratio * 3.0
+            return score
+
+        movie_list.sort(key=match_score, reverse=True)
+
         if bulk:
-            return filtered_kind[:MAX_LIST_ELM]
-        if not filtered_kind:
+            return movie_list[:MAX_LIST_ELM]
+        if not movie_list:
             return None   
-        movie_brief = filtered_kind[0]
+
+        movie_brief = movie_list[0]
         movieid_str = getattr(movie_brief, 'imdb_id', getattr(movie_brief, 'movieID', None))
     else:
         movieid_str = query
@@ -405,7 +448,7 @@ async def get_movie_details(query, bulk=False, id=False, file=None, is_series: b
     if not movieid_str:
         return None
 
-    movie = await asyncio.to_thread(imdb.get_movie, str(movieid_str))
+    movie = await asyncio.to_thread(imdb.get_movie, str(movieid_str).replace("tt", ""))
     if not movie:
         return None
 
