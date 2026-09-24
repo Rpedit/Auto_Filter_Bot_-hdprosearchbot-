@@ -26,7 +26,7 @@ _BASE_IGNORE_WORDS = {
     "rarbg", "dub", "sub", "sample", "mkv", "mp4", "avi", "aac", "ac3", "eac3", "ddp", "ddp5", "atmos", "dts",
     "combined", "esub", "msub", "proper", "repack", "unrated", "extended", "imax", "remux", "10bit", "10-bit",
     "x264", "x265", "h264", "h265", "hevc", "avc", "dovi", "hdr", "hdr10",
-    "web", "dl", "bonus", "special",
+    "web", "dl", "bonus", "special", "ott", "ott-dl", "ottplay",
     "action", "adventure", "animation", "biography", "comedy", "crime",
     "documentary", "drama", "fantasy", "film-noir", "history",
     "horror", "music", "musical", "mystery", "romance", "sci-fi", "sport",
@@ -989,7 +989,8 @@ def extract_media_info(filename: str, caption: str):
             r"\b[vV]\d+\b",
             r"\b(?:version|ver)\.?\s*\d+\b",
             r"\b(?:dd|ddp|ac3|eac3|aac)?\s*[257]\s*[._]\s*[01]\b",
-            r"\b(?:dd|ddp)\s*[257]\b"
+            r"\b(?:dd|ddp)\s*[257]\b",
+            r"\bott\b"
         ]
 
         for p in patterns:
@@ -1827,6 +1828,7 @@ def generate_movie_message(movie_doc, base_name):
 
     stored_title = movie_doc.get("title", base_name)
     
+    # Episode/Pilot/Colon hatane ke liye filter
     stored_title = re.sub(r'[:,]?\s*(?:Episode|Ep)\s*\d+.*', '', stored_title, flags=re.IGNORECASE).strip()
     stored_title = re.sub(r'["\']', '', stored_title).strip()
     
