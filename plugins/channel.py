@@ -216,10 +216,14 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if not q_words or not f_words:
         return False
 
+    # OTT Strict Check: agar ek me OTT hai aur doosre me nahi, toh reject karo
+    if ('ott' in f_words) != ('ott' in q_words):
+        return False
+
     if q_words == f_words:
         return True
 
-    if all(qw in f_words for qw in q_words):
+    if all(qw in f_words for qw in q_words) and len(f_words) <= len(q_words) + 1:
         return True
 
     for sep in [':', '-', '–', '—', '|']:
@@ -412,7 +416,6 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
     elif "media_type" in sig.parameters:
         kwargs["media_type"] = "tv" if is_series else "movie"
 
-    # Direct IMDb tt ID pass
     if str(base_name).strip().lower().startswith("tt"):
         try:
             res = await get_movie_details(str(base_name).strip(), id=True, **kwargs)
@@ -462,7 +465,6 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
     elif "media_type" in sig.parameters:
         kwargs["media_type"] = "tv" if is_series else "movie"
 
-    # Direct numeric id ya tt... ID lookup
     if tmdb_query and (str(tmdb_query).startswith("tt") or str(tmdb_query).isdigit()):
         try:
             res = await get_movie_detailsx(str(tmdb_query), **kwargs) if kwargs else await get_movie_detailsx(str(tmdb_query))
@@ -626,13 +628,30 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
         core_tokens = [re.sub(r'[^a-zA-Z0-9]', '', w).lower() for w in clean_query.split() if len(w) >= 2]
         target_sequel = extract_sequel_num(base_name) or extract_sequel_num(clean_query)
 
+        target_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', base_name, re.IGNORECASE)
+        target_season = int(target_s_match.group(1)) if target_s_match else None
+        target_has_ott = bool(re.search(r'\bott\b', base_name, re.IGNORECASE))
+
         for title_text, href in candidate_items:
             clean_cand = normalize(title_text).lower()
             cand_sequel = extract_sequel_num(title_text)
 
-            # Strict Sequel Validation (Part 1 vs Part 2 Filter)
+            # Strict Sequel Validation
             if target_sequel != cand_sequel:
                 continue
+
+            # Strict OTT Separation
+            cand_has_ott = bool(re.search(r'\bott\b', title_text, re.IGNORECASE))
+            if target_has_ott != cand_has_ott:
+                continue
+
+            # Strict Season Number Matching
+            if target_season is not None:
+                cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', title_text, re.IGNORECASE)
+                if cand_s_match:
+                    cand_season = int(cand_s_match.group(1))
+                    if cand_season != target_season:
+                        continue
 
             if is_good_title_match(clean_query, title_text) or is_good_title_match(base_name, title_text):
                 movie_page_url = href
@@ -1828,7 +1847,6 @@ def generate_movie_message(movie_doc, base_name):
 
     stored_title = movie_doc.get("title", base_name)
     
-    # Episode/Pilot/Colon hatane ke liye filter
     stored_title = re.sub(r'[:,]?\s*(?:Episode|Ep)\s*\d+.*', '', stored_title, flags=re.IGNORECASE).strip()
     stored_title = re.sub(r'["\']', '', stored_title).strip()
     
