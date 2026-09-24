@@ -3,6 +3,7 @@ import logging
 import asyncio
 import aiohttp
 import inspect
+from urllib.parse import quote_plus
 from datetime import datetime
 from bs4 import BeautifulSoup
 from collections import defaultdict
@@ -223,7 +224,7 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if q_words == f_words:
         return True
 
-    if all(qw in f_words for qw in q_words) and len(f_words) <= len(q_words) + 1:
+    if all(qw in f_words for qw in q_words):
         return True
 
     for sep in [':', '-', '–', '—', '|']:
@@ -475,7 +476,11 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
 
     queries = []
     if is_series:
-        queries.append(f"{base_name} Series")
+        clean_series = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip()
+        if tmdb_query and tmdb_query != base_name:
+            queries.append(tmdb_query)
+        queries.append(clean_series)
+        queries.append(f"{clean_series} Series")
         queries.append(base_name)
     else:
         queries.append(tmdb_query or base_name)
@@ -486,7 +491,8 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
             res = await get_movie_detailsx(q, **kwargs) if kwargs else await get_movie_detailsx(q)
             if res and not res.get("error"):
                 title = res.get("title") or res.get("name")
-                if title and is_good_title_match(base_name, title):
+                clean_target = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip() if is_series else base_name
+                if title and (is_good_title_match(clean_target, title) or is_good_title_match(base_name, title)):
                     return res
                 if not best_fallback:
                     best_fallback = res
@@ -515,32 +521,79 @@ async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> 
             if setting and setting.get("url"):
                 blog_url = setting["url"].rstrip("/")
 
-        feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
+        clean_series = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip()
+        target_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', base_name, re.IGNORECASE)
+        target_season = int(target_s_match.group(1)) if target_s_match else None
+
+        search_term = clean_series or base_name
+        feed_urls = [
+            f"{blog_url}/feeds/posts/default?q={quote_plus(search_term)}&alt=json&max-results=25",
+            f"{blog_url}/feeds/posts/default?alt=json&max-results=150"
+        ]
 
         timeout = aiohttp.ClientTimeout(total=8)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(feed_url) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.json()
+            for feed_url in feed_urls:
+                try:
+                    async with session.get(feed_url) as resp:
+                        if resp.status != 200:
+                            continue
+                        data = await resp.json()
+                except Exception:
+                    continue
 
-        entries = data.get("feed", {}).get("entry", [])
-        if not entries:
-            return None
+                entries = data.get("feed", {}).get("entry", [])
+                if not entries:
+                    continue
 
-        clean_query = f"{base_name} {year}".strip() if year else base_name
+                for entry in entries:
+                    post_title = entry.get("title", {}).get("$t", "").strip()
+                    cand_lower = post_title.lower()
 
-        for entry in entries:
-            post_title = entry.get("title", {}).get("$t", "")
-            if is_good_title_match(clean_query, post_title) or is_good_title_match(base_name, post_title):
-                content_html = entry.get("content", {}).get("$t", "")
-                soup = BeautifulSoup(content_html, "html.parser")
-                img_tag = soup.find("img")
-                if img_tag and img_tag.get("src"):
-                    img_url = img_tag["src"]
-                    img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
-                    img_url = re.sub(r'/w\d+-[h\d]+/', '/', img_url)
-                    return img_url
+                    # OTT check
+                    if ('ott' in cand_lower) != ('ott' in base_name.lower()):
+                        continue
+
+                    # Match verify
+                    matched = False
+                    if is_good_title_match(base_name, post_title) or is_good_title_match(clean_series, post_title):
+                        matched = True
+                    elif clean_series.lower() in cand_lower:
+                        cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', post_title, re.IGNORECASE)
+                        if target_season and cand_s_match:
+                            if int(cand_s_match.group(1)) == target_season:
+                                matched = True
+                        elif not cand_s_match:
+                            # General show poster (like Salman Khan Bigg Boss)
+                            matched = True
+
+                    if matched:
+                        content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
+                        soup = BeautifulSoup(content_html, "html.parser")
+                        img_tag = soup.find("img")
+                        img_url = None
+
+                        if img_tag:
+                            img_url = img_tag.get("src") or img_tag.get("data-src")
+
+                        if not img_url:
+                            for a in soup.find_all("a", href=True):
+                                href = a["href"]
+                                if any(href.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]) or "googleusercontent.com" in href:
+                                    img_url = href
+                                    break
+
+                        if not img_url and "media$thumbnail" in entry:
+                            img_url = entry["media$thumbnail"].get("url")
+
+                        if img_url:
+                            # Original High-Res conversion
+                            img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
+                            img_url = re.sub(r'/w\d+-h\d+.*?/', '/s1600/', img_url)
+                            img_url = re.sub(r'=w\d+-h\d+.*$', '=s1600', img_url)
+                            img_url = re.sub(r'=s\d+.*$', '=s1600', img_url)
+                            return img_url
+
     except Exception as e:
         logger.error(f"Error fetching Blogger poster: {e}")
     return None
@@ -652,6 +705,8 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
                     cand_season = int(cand_s_match.group(1))
                     if cand_season != target_season:
                         continue
+                else:
+                    continue
 
             if is_good_title_match(clean_query, title_text) or is_good_title_match(base_name, title_text):
                 movie_page_url = href
@@ -1217,7 +1272,7 @@ async def _process_with_lock(
             media_info["tag"] = "#SERIES"
             file_data["tag"] = "#SERIES"
 
-        # 2. HDHub4u se IMDb ya TMDb links ko identify karna
+        # 2. HDHub4u IDs
         tt_match = re.search(r'tt\d+', hdhub_info_url) if hdhub_info_url else None
         hdhub_imdb_id = tt_match.group(0) if tt_match else None
 
@@ -1289,10 +1344,12 @@ async def _process_with_lock(
             rating = str(imdb_rate).strip()
         elif tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
             rating = str(tmdb_rate).strip()
+        elif hdhub_rating == "x/10":
+            rating = "x/10"
         else:
             rating = "x/10"
 
-        # 5. Clickable Link (HDHub4u se aaya hua exact link)
+        # 5. Clickable Link
         imdb_url = hdhub_info_url.strip() if hdhub_info_url else ""
         if not imdb_url:
             final_imdb_id = (
@@ -1470,7 +1527,7 @@ async def _process_with_lock(
 
         if not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10") or not current_db_imdb_url:
             _, hdhub_rating, hdhub_info, _ = await get_hdhub4u_data(base_name)
-            if hdhub_rating and hdhub_rating != "N/A" and hdhub_rating != "x/10":
+            if hdhub_rating and hdhub_rating != "N/A":
                 update_fields.setdefault("$set", {})["rating"] = hdhub_rating
             if not current_db_imdb_url:
                 if hdhub_info:
