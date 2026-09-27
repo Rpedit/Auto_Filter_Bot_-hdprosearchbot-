@@ -145,7 +145,6 @@ AUDIO_CHANNELS_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Dot (.) aur separators support ke sath updated regexes
 BONUS_RANGE_REGEX = re.compile(
     r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b',
     re.IGNORECASE
@@ -850,10 +849,10 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
     filename = AUDIO_CHANNELS_PATTERN.sub(" ", filename)
 
     if m := BONUS_RANGE_REGEX.search(filename):
-        return int(m.group(1)), f"Bonus {int(m.group(2))}-{int(m.group(3))}"
+        return int(m.group(1)), f"{int(m.group(2))}-{int(m.group(3))}"
 
     if m := BONUS_REGEX.search(filename):
-        return int(m.group(1)), f"Bonus {int(m.group(2))}"
+        return int(m.group(1)), str(int(m.group(2)))
 
     if m := RANGE_REGEX.search(filename):
         return int(m.group(1)), f"{int(m.group(2))}-{int(m.group(3))}"
@@ -1411,9 +1410,6 @@ async def _process_with_lock(
             else imdb_details.get("certificates", "N/A")
         )
 
-        # ==========================================
-        # 6. GENRES FIX: IMDb/TMDb First, HDHub4u Fallback
-        # ==========================================
         genre_list = []
         raw_genres = imdb_details.get("genres") or tmdb_details.get("genres", "N/A")
         fallback_genres = []
@@ -1835,24 +1831,17 @@ def generate_movie_message(movie_doc, base_name):
             key=lambda x: int(x[0])
         ):
             regular_eps = set()
-            bonus_eps = set()
 
             for ep in episodes:
                 ep_str = str(ep).strip()
-                if not ep_str or ep_str.lower() in ("bonus", "special", "episodes", "episode"):
+                if not ep_str or ep_str.lower() in ("episodes", "episode"):
                     continue
 
-                if ep_str.lower().startswith("bonus"):
-                    val = re.sub(r'(?i)bonus\s*', '', ep_str).strip()
-                    if "-" in val:
-                        try:
-                            p1, p2 = val.split("-")
-                            bonus_eps.update(range(int(p1), int(p2) + 1))
-                        except ValueError:
-                            pass
-                    elif val.isdigit():
-                        bonus_eps.add(int(val))
-                elif "-" in ep_str:
+                # Agar bonus/special ho toh "Bonus" word hata kar seedha number le lo
+                if ep_str.lower().startswith("bonus") or ep_str.lower().startswith("special"):
+                    ep_str = re.sub(r'(?i)(?:bonus|special)\s*', '', ep_str).strip()
+
+                if "-" in ep_str:
                     try:
                         p1, p2 = ep_str.split("-")
                         regular_eps.update(range(int(p1), int(p2) + 1))
@@ -1880,10 +1869,6 @@ def generate_movie_message(movie_doc, base_name):
             reg_list = collapse_range(regular_eps)
             if reg_list:
                 line_parts.append(", ".join(reg_list))
-
-            bon_list = collapse_range(bonus_eps)
-            if bon_list:
-                line_parts.append(f"Bonus {', '.join(bon_list)}")
 
             if line_parts:
                 episode_lines.append(f"S{int(season)}: {', '.join(line_parts)}")
