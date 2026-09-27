@@ -145,7 +145,7 @@ AUDIO_CHANNELS_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Dot (.) aur separators support
+# Dot (.) aur separators support ke sath updated regexes
 BONUS_RANGE_REGEX = re.compile(
     r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b',
     re.IGNORECASE
@@ -233,7 +233,6 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if not q_words or not f_words:
         return False
 
-    # OTT Strict Check: agar ek me OTT hai aur doosre me nahi, toh reject karo
     if ('ott' in f_words) != ('ott' in q_words):
         return False
 
@@ -566,11 +565,9 @@ async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> 
                     post_title = entry.get("title", {}).get("$t", "").strip()
                     cand_lower = post_title.lower()
 
-                    # OTT check
                     if ('ott' in cand_lower) != ('ott' in base_name.lower()):
                         continue
 
-                    # Match verify
                     matched = False
                     if is_good_title_match(base_name, post_title) or is_good_title_match(clean_series, post_title):
                         matched = True
@@ -580,7 +577,6 @@ async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> 
                             if int(cand_s_match.group(1)) == target_season:
                                 matched = True
                         elif not cand_s_match:
-                            # General show poster (like Salman Khan Bigg Boss)
                             matched = True
 
                     if matched:
@@ -603,7 +599,6 @@ async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> 
                             img_url = entry["media$thumbnail"].get("url")
 
                         if img_url:
-                            # Original High-Res conversion
                             img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
                             img_url = re.sub(r'/w\d+-h\d+.*?/', '/s1600/', img_url)
                             img_url = re.sub(r'=w\d+-h\d+.*$', '=s1600', img_url)
@@ -705,16 +700,13 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
             clean_cand = normalize(title_text).lower()
             cand_sequel = extract_sequel_num(title_text)
 
-            # Strict Sequel Validation
             if target_sequel != cand_sequel:
                 continue
 
-            # Strict OTT Separation
             cand_has_ott = bool(re.search(r'\bott\b', title_text, re.IGNORECASE))
             if target_has_ott != cand_has_ott:
                 continue
 
-            # Strict Season Number Matching
             if target_season is not None:
                 cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', title_text, re.IGNORECASE)
                 if cand_s_match:
@@ -858,10 +850,10 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
     filename = AUDIO_CHANNELS_PATTERN.sub(" ", filename)
 
     if m := BONUS_RANGE_REGEX.search(filename):
-        return int(m.group(1)), f"{int(m.group(2))}-{int(m.group(3))}"
+        return int(m.group(1)), f"Bonus {int(m.group(2))}-{int(m.group(3))}"
 
     if m := BONUS_REGEX.search(filename):
-        return int(m.group(1)), str(int(m.group(2)))
+        return int(m.group(1)), f"Bonus {int(m.group(2))}"
 
     if m := RANGE_REGEX.search(filename):
         return int(m.group(1)), f"{int(m.group(2))}-{int(m.group(3))}"
@@ -887,7 +879,6 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
     if m := NO_S_REGEX.search(filename):
         return int(m.group(1)), str(int(m.group(2)))
 
-    # Fallback me filename se Season check karein taaki default 1 par na gire
     s_match = re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b', filename, re.IGNORECASE)
     detected_season = int(s_match.group(1)) if s_match else 1
 
@@ -1420,8 +1411,29 @@ async def _process_with_lock(
             else imdb_details.get("certificates", "N/A")
         )
 
+        # ==========================================
+        # 6. GENRES FIX: IMDb/TMDb First, HDHub4u Fallback
+        # ==========================================
         genre_list = []
-        if hdhub_genres and hdhub_genres != "N/A":
+        raw_genres = imdb_details.get("genres") or tmdb_details.get("genres", "N/A")
+        fallback_genres = []
+        if isinstance(raw_genres, str) and raw_genres != "N/A":
+            fallback_genres = [g.strip() for g in raw_genres.split(",") if g.strip() and g.strip() != "N/A"]
+        elif isinstance(raw_genres, (list, tuple)):
+            for g in raw_genres:
+                if isinstance(g, dict):
+                    name = g.get("name") or g.get("genre")
+                    if name:
+                        fallback_genres.append(str(name).strip())
+                elif isinstance(g, str):
+                    fallback_genres.append(g.strip())
+
+        for g in fallback_genres:
+            clean_g = re.sub(r'\b(?:info|trailer)\b', '', g, flags=re.IGNORECASE).strip().title()
+            if clean_g and clean_g not in genre_list and len(clean_g) >= 2:
+                genre_list.append(clean_g)
+
+        if not genre_list and hdhub_genres and hdhub_genres != "N/A":
             raw_parts = re.split(r'[,|/•]', hdhub_genres)
             for p in raw_parts:
                 p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip()
@@ -1437,25 +1449,6 @@ async def _process_with_lock(
                     formatted_p = p_clean.title()
                     if formatted_p not in genre_list and len(formatted_p) >= 2:
                         genre_list.append(formatted_p)
-
-        if not genre_list:
-            raw_genres = imdb_details.get("genres") or tmdb_details.get("genres", "N/A")
-            fallback_genres = []
-            if isinstance(raw_genres, str) and raw_genres != "N/A":
-                fallback_genres = [g.strip() for g in raw_genres.split(",") if g.strip() and g.strip() != "N/A"]
-            elif isinstance(raw_genres, (list, tuple)):
-                for g in raw_genres:
-                    if isinstance(g, dict):
-                        name = g.get("name") or g.get("genre")
-                        if name:
-                            fallback_genres.append(str(name).strip())
-                    elif isinstance(g, str):
-                        fallback_genres.append(g.strip())
-
-            for g in fallback_genres:
-                clean_g = re.sub(r'\b(?:info|trailer)\b', '', g, flags=re.IGNORECASE).strip().title()
-                if clean_g and clean_g not in genre_list and len(clean_g) >= 2:
-                    genre_list.append(clean_g)
 
         genres = ", ".join(genre_list) if genre_list else "N/A"
 
