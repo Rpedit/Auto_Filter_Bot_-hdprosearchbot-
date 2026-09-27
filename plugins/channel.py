@@ -145,7 +145,7 @@ AUDIO_CHANNELS_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Dot (.) aur separators support ke sath exact regexes
+# Dot (.) aur separators support
 BONUS_RANGE_REGEX = re.compile(
     r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b',
     re.IGNORECASE
@@ -233,7 +233,7 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if not q_words or not f_words:
         return False
 
-    # OTT Strict Check
+    # OTT Strict Check: agar ek me OTT hai aur doosre me nahi, toh reject karo
     if ('ott' in f_words) != ('ott' in q_words):
         return False
 
