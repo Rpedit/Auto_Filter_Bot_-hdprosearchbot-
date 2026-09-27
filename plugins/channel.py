@@ -145,7 +145,7 @@ AUDIO_CHANNELS_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Dot (.) aur separators ke sath updated patterns
+# Dot (.) support regex
 BONUS_RANGE_REGEX = re.compile(
     r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b',
     re.IGNORECASE
@@ -200,12 +200,6 @@ def extract_sequel_num(text: str) -> Optional[str]:
     if not text:
         return None
     t = text.lower()
-    t = AUDIO_CHANNELS_PATTERN.sub(" ", t)
-    t = re.sub(r'\b[257]\.[01]\b', ' ', t)
-    t = re.sub(r'\b(?:season|s|episode|ep|day)\s*0*\d+\b', ' ', t)
-    t = re.sub(r'\b(?:2160p|4k|1440p|1080p|720p|540p|480p|360p|240p)\b', ' ', t)
-    t = YEAR_PATTERN.sub(' ', t)
-
     m = re.search(r'\b(?:part|chapter|volume|vol)?\s*([2-9]|ii|iii|iv|v|vi|vii|viii|ix|x)\b', t, re.IGNORECASE)
     if m:
         val = m.group(1).lower()
@@ -223,12 +217,6 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if q_seq != f_seq:
         return False
 
-    q_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', query, re.IGNORECASE)
-    f_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', found_title, re.IGNORECASE)
-    if q_s_match and f_s_match:
-        if int(q_s_match.group(1)) != int(f_s_match.group(1)):
-            return False
-
     q_raw = YEAR_PATTERN.sub('', query).strip()
     f_raw = YEAR_PATTERN.sub('', found_title).strip()
 
@@ -245,7 +233,7 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if not q_words or not f_words:
         return False
 
-    # OTT Strict Check: agar ek me OTT hai aur doosre me nahi, toh reject karo
+    # OTT Strict Check
     if ('ott' in f_words) != ('ott' in q_words):
         return False
 
@@ -553,7 +541,7 @@ async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> 
         target_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', base_name, re.IGNORECASE)
         target_season = int(target_s_match.group(1)) if target_s_match else None
 
-        search_term = base_name if target_season else (clean_series or base_name)
+        search_term = clean_series or base_name
         feed_urls = [
             f"{blog_url}/feeds/posts/default?q={quote_plus(search_term)}&alt=json&max-results=25",
             f"{blog_url}/feeds/posts/default?alt=json&max-results=150"
@@ -582,20 +570,17 @@ async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> 
                     if ('ott' in cand_lower) != ('ott' in base_name.lower()):
                         continue
 
-                    cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', post_title, re.IGNORECASE)
-                    cand_season = int(cand_s_match.group(1)) if cand_s_match else None
-
-                    # Strict Season Isolation
-                    if target_season and cand_season and target_season != cand_season:
-                        continue
-
+                    # Match verify
                     matched = False
-                    if is_good_title_match(base_name, post_title):
+                    if is_good_title_match(base_name, post_title) or is_good_title_match(clean_series, post_title):
                         matched = True
-                    elif target_season and cand_season == target_season and clean_series.lower() in cand_lower:
-                        matched = True
-                    elif not target_season and is_good_title_match(clean_series, post_title):
-                        matched = True
+                    elif clean_series.lower() in cand_lower:
+                        cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', post_title, re.IGNORECASE)
+                        if target_season and cand_s_match:
+                            if int(cand_s_match.group(1)) == target_season:
+                                matched = True
+                        elif not cand_s_match:
+                            matched = True
 
                     if matched:
                         content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
@@ -617,8 +602,7 @@ async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> 
                             img_url = entry["media$thumbnail"].get("url")
 
                         if img_url:
-                            if img_url.startswith("//"):
-                                img_url = f"https:{img_url}"
+                            # Original High-Res conversion
                             img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
                             img_url = re.sub(r'/w\d+-h\d+.*?/', '/s1600/', img_url)
                             img_url = re.sub(r'=w\d+-h\d+.*$', '=s1600', img_url)
@@ -736,7 +720,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
                     cand_season = int(cand_s_match.group(1))
                     if cand_season != target_season:
                         continue
-                elif target_season > 1:
+                else:
                     continue
 
             if is_good_title_match(clean_query, title_text) or is_good_title_match(base_name, title_text):
@@ -872,11 +856,12 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
     filename = AUDIO_CHANNELS_PATTERN.sub(" ", filename)
 
+    # Bonus ko direct normal episode number bana diya (No "Bonus" text)
     if m := BONUS_RANGE_REGEX.search(filename):
-        return int(m.group(1)), f"Bonus {int(m.group(2))}-{int(m.group(3))}"
+        return int(m.group(1)), f"{int(m.group(2))}-{int(m.group(3))}"
 
     if m := BONUS_REGEX.search(filename):
-        return int(m.group(1)), f"Bonus {int(m.group(2))}"
+        return int(m.group(1)), str(int(m.group(2)))
 
     if m := RANGE_REGEX.search(filename):
         return int(m.group(1)), f"{int(m.group(2))}-{int(m.group(3))}"
@@ -902,28 +887,13 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
     if m := NO_S_REGEX.search(filename):
         return int(m.group(1)), str(int(m.group(2)))
 
-    # Flexible Matcher: Tags aur dots hone par bhi exact connect karein
-    m_flex_bonus = re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b.*?\b(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b', filename, re.IGNORECASE)
-    if m_flex_bonus:
-        return int(m_flex_bonus.group(1)), f"Bonus {int(m_flex_bonus.group(2))}"
-
-    m_flex = re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b.*?\b(?:Episode|Ep|E)[\s._-]*0*(\d{1,3})\b', filename, re.IGNORECASE)
-    if m_flex:
-        ep_val = int(m_flex.group(2))
-        if ep_val not in (264, 265, 720, 1080, 480, 2160):
-            return int(m_flex.group(1)), str(ep_val)
-
-    # Filename me Season check karein taaki hardcoded 1 par na gire
-    s_match = re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b', filename, re.IGNORECASE)
-    detected_season = int(s_match.group(1)) if s_match else 1
-
     if m := EP_ONLY_RANGE.search(filename):
-        return detected_season, f"{int(m.group(1))}-{int(m.group(2))}"
+        return 1, f"{int(m.group(1))}-{int(m.group(2))}"
 
     if m := EP_ONLY_SINGLE.search(filename):
         ep_val = int(m.group(1))
-        if ep_val not in (264, 265, 720, 1080, 480, 2160):
-            return detected_season, str(ep_val)
+        if ep_val not in (264, 265):
+            return 1, str(ep_val)
 
     return None, None
 
@@ -994,14 +964,6 @@ def extract_media_info(filename: str, caption: str):
     )
 
     season, episode = extract_season_episode(filename)
-    if season is None and caption:
-        season, episode = extract_season_episode(caption)
-
-    # Caption me agar koi Season tag ho toh use detect karein
-    if season == 1 and caption:
-        c_s_match = re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b', caption, re.IGNORECASE)
-        if c_s_match:
-            season = int(c_s_match.group(1))
 
     if season is not None:
         tag = "#SERIES"
@@ -1109,6 +1071,8 @@ def extract_media_info(filename: str, caption: str):
             r"\b\d{1,2}x\d{1,3}\b",
             r"\bSeason\s*\d{1,2}\b",
             r"\bEp(?:isode)?[\s._-]*0*\d{1,3}\b",
+            r"\bEpisode\s*\d{1,3}\b",
+            r"\bPart\s*\d{1,2}\b",
             r"\bDay\s*\d{1,3}\b",
             r"\bBonus\b",
             r"\bSpecial\b",
@@ -1118,9 +1082,6 @@ def extract_media_info(filename: str, caption: str):
             r"\b(?:dd|ddp)\s*[257]\b",
             r"\bott\b"
         ]
-
-        if season is not None:
-            patterns.append(r"\bPart\s*\d{1,2}\b")
 
         for p in patterns:
             name = re.sub(p, " ", name, flags=re.IGNORECASE)
@@ -1582,7 +1543,7 @@ async def _process_with_lock(
 
         if not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10") or not current_db_imdb_url:
             _, hdhub_rating, hdhub_info, _ = await get_hdhub4u_data(base_name)
-            if hdhub_rating and hdhub_rating not in ("N/A", "x/10"):
+            if hdhub_rating and hdhub_rating != "N/A":
                 update_fields.setdefault("$set", {})["rating"] = hdhub_rating
             if not current_db_imdb_url:
                 if hdhub_info:
@@ -1592,8 +1553,6 @@ async def _process_with_lock(
                     final_imdb_id = imdb_details.get("imdb_id")
                     if final_imdb_id and str(final_imdb_id).startswith("tt"):
                         update_fields.setdefault("$set", {})["imdb_url"] = f"https://www.imdb.com/title/{final_imdb_id}/"
-                    if (not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10")) and imdb_details.get("rating"):
-                        update_fields.setdefault("$set", {})["rating"] = str(imdb_details["rating"]).strip()
 
         await db.movie_updates.update_one(
             {"_id": base_name},
@@ -1879,24 +1838,17 @@ def generate_movie_message(movie_doc, base_name):
             key=lambda x: int(x[0])
         ):
             regular_eps = set()
-            bonus_eps = set()
 
             for ep in episodes:
                 ep_str = str(ep).strip()
-                if not ep_str or ep_str.lower() in ("bonus", "special", "episodes", "episode"):
+                if not ep_str or ep_str.lower() in ("episodes", "episode"):
                     continue
 
+                # Agar DB me pehle se "Bonus 4" pada ho, to use direct normal 4 me convert karein
                 if ep_str.lower().startswith("bonus"):
-                    val = re.sub(r'(?i)bonus\s*', '', ep_str).strip()
-                    if "-" in val:
-                        try:
-                            p1, p2 = val.split("-")
-                            bonus_eps.update(range(int(p1), int(p2) + 1))
-                        except ValueError:
-                            pass
-                    elif val.isdigit():
-                        bonus_eps.add(int(val))
-                elif "-" in ep_str:
+                    ep_str = re.sub(r'(?i)bonus\s*', '', ep_str).strip()
+
+                if "-" in ep_str:
                     try:
                         p1, p2 = ep_str.split("-")
                         regular_eps.update(range(int(p1), int(p2) + 1))
@@ -1924,10 +1876,6 @@ def generate_movie_message(movie_doc, base_name):
             reg_list = collapse_range(regular_eps)
             if reg_list:
                 line_parts.append(", ".join(reg_list))
-
-            bon_list = collapse_range(bonus_eps)
-            if bon_list:
-                line_parts.append(f"Bonus {', '.join(bon_list)}")
 
             if line_parts:
                 episode_lines.append(f"S{int(season)}: {', '.join(line_parts)}")
