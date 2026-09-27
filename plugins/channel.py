@@ -145,7 +145,7 @@ AUDIO_CHANNELS_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Dot (.) support regex
+# Dot (.) aur separators support ke sath exact regexes
 BONUS_RANGE_REGEX = re.compile(
     r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b',
     re.IGNORECASE
@@ -580,6 +580,7 @@ async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> 
                             if int(cand_s_match.group(1)) == target_season:
                                 matched = True
                         elif not cand_s_match:
+                            # General show poster (like Salman Khan Bigg Boss)
                             matched = True
 
                     if matched:
@@ -856,7 +857,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
     filename = AUDIO_CHANNELS_PATTERN.sub(" ", filename)
 
-    # Bonus ko direct normal episode number bana diya (No "Bonus" text)
     if m := BONUS_RANGE_REGEX.search(filename):
         return int(m.group(1)), f"{int(m.group(2))}-{int(m.group(3))}"
 
@@ -887,13 +887,17 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
     if m := NO_S_REGEX.search(filename):
         return int(m.group(1)), str(int(m.group(2)))
 
+    # Fallback me filename se Season check karein taaki default 1 par na gire
+    s_match = re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b', filename, re.IGNORECASE)
+    detected_season = int(s_match.group(1)) if s_match else 1
+
     if m := EP_ONLY_RANGE.search(filename):
-        return 1, f"{int(m.group(1))}-{int(m.group(2))}"
+        return detected_season, f"{int(m.group(1))}-{int(m.group(2))}"
 
     if m := EP_ONLY_SINGLE.search(filename):
         ep_val = int(m.group(1))
         if ep_val not in (264, 265):
-            return 1, str(ep_val)
+            return detected_season, str(ep_val)
 
     return None, None
 
@@ -1838,17 +1842,24 @@ def generate_movie_message(movie_doc, base_name):
             key=lambda x: int(x[0])
         ):
             regular_eps = set()
+            bonus_eps = set()
 
             for ep in episodes:
                 ep_str = str(ep).strip()
-                if not ep_str or ep_str.lower() in ("episodes", "episode"):
+                if not ep_str or ep_str.lower() in ("bonus", "special", "episodes", "episode"):
                     continue
 
-                # Agar DB me pehle se "Bonus 4" pada ho, to use direct normal 4 me convert karein
                 if ep_str.lower().startswith("bonus"):
-                    ep_str = re.sub(r'(?i)bonus\s*', '', ep_str).strip()
-
-                if "-" in ep_str:
+                    val = re.sub(r'(?i)bonus\s*', '', ep_str).strip()
+                    if "-" in val:
+                        try:
+                            p1, p2 = val.split("-")
+                            bonus_eps.update(range(int(p1), int(p2) + 1))
+                        except ValueError:
+                            pass
+                    elif val.isdigit():
+                        bonus_eps.add(int(val))
+                elif "-" in ep_str:
                     try:
                         p1, p2 = ep_str.split("-")
                         regular_eps.update(range(int(p1), int(p2) + 1))
@@ -1876,6 +1887,10 @@ def generate_movie_message(movie_doc, base_name):
             reg_list = collapse_range(regular_eps)
             if reg_list:
                 line_parts.append(", ".join(reg_list))
+
+            bon_list = collapse_range(bonus_eps)
+            if bon_list:
+                line_parts.append(f"Bonus {', '.join(bon_list)}")
 
             if line_parts:
                 episode_lines.append(f"S{int(season)}: {', '.join(line_parts)}")
