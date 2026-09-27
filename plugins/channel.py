@@ -145,16 +145,32 @@ AUDIO_CHANNELS_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-BONUS_RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})\b', re.IGNORECASE)
-BONUS_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
-RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?)?0*(\d{1,3})', re.IGNORECASE)
-SINGLE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
-NAMED_REGEX = re.compile(r'Season\s*0*(\d{1,2})[\s\-,:]*(?:Part)?[\s\-,:]*Ep(?:isode)?\s*0*(\d{1,3})\b', re.IGNORECASE)
+# Dot (.) aur separators ke sath updated patterns
+BONUS_RANGE_REGEX = re.compile(
+    r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b',
+    re.IGNORECASE
+)
+BONUS_REGEX = re.compile(
+    r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b',
+    re.IGNORECASE
+)
+RANGE_REGEX = re.compile(
+    r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?[\s._-]*0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})',
+    re.IGNORECASE
+)
+SINGLE_REGEX = re.compile(
+    r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?[\s._-]*0*(\d{1,3})\b',
+    re.IGNORECASE
+)
+NAMED_REGEX = re.compile(
+    r'Season\s*0*(\d{1,2})[\s\-,:._]*(?:Part)?[\s\-,:._]*Ep(?:isode)?[\s._-]*0*(\d{1,3})\b',
+    re.IGNORECASE
+)
 X_REGEX = re.compile(r'(?<!\d)\b0*([1-9]\d?)\s*[xX]\s*0*([1-9]\d?)\b(?!\d)', re.IGNORECASE)
 DAY_REGEX = re.compile(r'\b(?:S(?:eason)?\s*0*(\d{1,2})[\s._-]*)?(?:Day\s*0*(\d{1,3})|D0*([1-9]\d{0,2}))\b', re.IGNORECASE)
-NO_S_REGEX = re.compile(r'\b(?:Season|S)\s*0*(\d{1,2})[\s._-]+E(?:p(?:isode)?)?0*(\d{1,3})\b', re.IGNORECASE)
-EP_ONLY_RANGE = re.compile(r'\b(?:EP|Episode)0*(\d{1,3})\s*-\s*0*(\d{1,3})\b', re.IGNORECASE)
-EP_ONLY_SINGLE = re.compile(r'\b(?:EP|Episode)\.?\s*0*(\d{1,3})\b', re.IGNORECASE)
+NO_S_REGEX = re.compile(r'\b(?:Season|S)\s*0*(\d{1,2})[\s._-]+E(?:p(?:isode)?)?[\s._-]*0*(\d{1,3})\b', re.IGNORECASE)
+EP_ONLY_RANGE = re.compile(r'\b(?:EP|Episode)[\s._-]*0*(\d{1,3})\s*-\s*0*(\d{1,3})\b', re.IGNORECASE)
+EP_ONLY_SINGLE = re.compile(r'\b(?:EP|Episode)\.?[\s._-]*0*(\d{1,3})\b', re.IGNORECASE)
 
 MEDIA_FILTER = filters.document | filters.video | filters.audio
 
@@ -184,6 +200,12 @@ def extract_sequel_num(text: str) -> Optional[str]:
     if not text:
         return None
     t = text.lower()
+    t = AUDIO_CHANNELS_PATTERN.sub(" ", t)
+    t = re.sub(r'\b[257]\.[01]\b', ' ', t)
+    t = re.sub(r'\b(?:season|s|episode|ep|day)\s*0*\d+\b', ' ', t)
+    t = re.sub(r'\b(?:2160p|4k|1440p|1080p|720p|540p|480p|360p|240p)\b', ' ', t)
+    t = YEAR_PATTERN.sub(' ', t)
+
     m = re.search(r'\b(?:part|chapter|volume|vol)?\s*([2-9]|ii|iii|iv|v|vi|vii|viii|ix|x)\b', t, re.IGNORECASE)
     if m:
         val = m.group(1).lower()
@@ -200,6 +222,12 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     f_seq = extract_sequel_num(found_title)
     if q_seq != f_seq:
         return False
+
+    q_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', query, re.IGNORECASE)
+    f_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', found_title, re.IGNORECASE)
+    if q_s_match and f_s_match:
+        if int(q_s_match.group(1)) != int(f_s_match.group(1)):
+            return False
 
     q_raw = YEAR_PATTERN.sub('', query).strip()
     f_raw = YEAR_PATTERN.sub('', found_title).strip()
@@ -525,7 +553,7 @@ async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> 
         target_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', base_name, re.IGNORECASE)
         target_season = int(target_s_match.group(1)) if target_s_match else None
 
-        search_term = clean_series or base_name
+        search_term = base_name if target_season else (clean_series or base_name)
         feed_urls = [
             f"{blog_url}/feeds/posts/default?q={quote_plus(search_term)}&alt=json&max-results=25",
             f"{blog_url}/feeds/posts/default?alt=json&max-results=150"
@@ -554,18 +582,20 @@ async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> 
                     if ('ott' in cand_lower) != ('ott' in base_name.lower()):
                         continue
 
-                    # Match verify
+                    cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', post_title, re.IGNORECASE)
+                    cand_season = int(cand_s_match.group(1)) if cand_s_match else None
+
+                    # Strict Season Isolation
+                    if target_season and cand_season and target_season != cand_season:
+                        continue
+
                     matched = False
-                    if is_good_title_match(base_name, post_title) or is_good_title_match(clean_series, post_title):
+                    if is_good_title_match(base_name, post_title):
                         matched = True
-                    elif clean_series.lower() in cand_lower:
-                        cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', post_title, re.IGNORECASE)
-                        if target_season and cand_s_match:
-                            if int(cand_s_match.group(1)) == target_season:
-                                matched = True
-                        elif not cand_s_match:
-                            # General show poster (like Salman Khan Bigg Boss)
-                            matched = True
+                    elif target_season and cand_season == target_season and clean_series.lower() in cand_lower:
+                        matched = True
+                    elif not target_season and is_good_title_match(clean_series, post_title):
+                        matched = True
 
                     if matched:
                         content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
@@ -587,7 +617,8 @@ async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> 
                             img_url = entry["media$thumbnail"].get("url")
 
                         if img_url:
-                            # Original High-Res conversion
+                            if img_url.startswith("//"):
+                                img_url = f"https:{img_url}"
                             img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
                             img_url = re.sub(r'/w\d+-h\d+.*?/', '/s1600/', img_url)
                             img_url = re.sub(r'=w\d+-h\d+.*$', '=s1600', img_url)
@@ -705,7 +736,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
                     cand_season = int(cand_s_match.group(1))
                     if cand_season != target_season:
                         continue
-                else:
+                elif target_season > 1:
                     continue
 
             if is_good_title_match(clean_query, title_text) or is_good_title_match(base_name, title_text):
@@ -871,13 +902,28 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
     if m := NO_S_REGEX.search(filename):
         return int(m.group(1)), str(int(m.group(2)))
 
+    # Flexible Matcher: Tags aur dots hone par bhi exact connect karein
+    m_flex_bonus = re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b.*?\b(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b', filename, re.IGNORECASE)
+    if m_flex_bonus:
+        return int(m_flex_bonus.group(1)), f"Bonus {int(m_flex_bonus.group(2))}"
+
+    m_flex = re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b.*?\b(?:Episode|Ep|E)[\s._-]*0*(\d{1,3})\b', filename, re.IGNORECASE)
+    if m_flex:
+        ep_val = int(m_flex.group(2))
+        if ep_val not in (264, 265, 720, 1080, 480, 2160):
+            return int(m_flex.group(1)), str(ep_val)
+
+    # Filename me Season check karein taaki hardcoded 1 par na gire
+    s_match = re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b', filename, re.IGNORECASE)
+    detected_season = int(s_match.group(1)) if s_match else 1
+
     if m := EP_ONLY_RANGE.search(filename):
-        return 1, f"{int(m.group(1))}-{int(m.group(2))}"
+        return detected_season, f"{int(m.group(1))}-{int(m.group(2))}"
 
     if m := EP_ONLY_SINGLE.search(filename):
         ep_val = int(m.group(1))
-        if ep_val not in (264, 265):
-            return 1, str(ep_val)
+        if ep_val not in (264, 265, 720, 1080, 480, 2160):
+            return detected_season, str(ep_val)
 
     return None, None
 
@@ -948,6 +994,14 @@ def extract_media_info(filename: str, caption: str):
     )
 
     season, episode = extract_season_episode(filename)
+    if season is None and caption:
+        season, episode = extract_season_episode(caption)
+
+    # Caption me agar koi Season tag ho toh use detect karein
+    if season == 1 and caption:
+        c_s_match = re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b', caption, re.IGNORECASE)
+        if c_s_match:
+            season = int(c_s_match.group(1))
 
     if season is not None:
         tag = "#SERIES"
@@ -1047,16 +1101,14 @@ def extract_media_info(filename: str, caption: str):
             name = name[:year_match.start()].strip()
 
         patterns = [
-            r"\bS\d{1,2}[\s._-]*(?:Bonus|Special)[\s._-]*E(?:p(?:isode)?)?0*\d{1,3}\b",
-            r"\b(?:Bonus|Special)[\s._-]*Ep(?:isode)?\.?\s*\d{1,3}\b",
-            r"\bS\d{1,2}E\d{1,3}\b",
+            r"\bS\d{1,2}[\s._-]*(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*\d{1,3}\b",
+            r"\b(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*\d{1,3}\b",
+            r"\bS\d{1,2}[\s._-]*E(?:p(?:isode)?)?[\s._-]*0*\d{1,3}\b",
             r"\bS\d{1,2}\b",
             r"\bE\d{1,3}\b",
             r"\b\d{1,2}x\d{1,3}\b",
             r"\bSeason\s*\d{1,2}\b",
-            r"\bEp(?:isode)?\.?\s*\d{1,3}\b",
-            r"\bEpisode\s*\d{1,3}\b",
-            r"\bPart\s*\d{1,2}\b",
+            r"\bEp(?:isode)?[\s._-]*0*\d{1,3}\b",
             r"\bDay\s*\d{1,3}\b",
             r"\bBonus\b",
             r"\bSpecial\b",
@@ -1066,6 +1118,9 @@ def extract_media_info(filename: str, caption: str):
             r"\b(?:dd|ddp)\s*[257]\b",
             r"\bott\b"
         ]
+
+        if season is not None:
+            patterns.append(r"\bPart\s*\d{1,2}\b")
 
         for p in patterns:
             name = re.sub(p, " ", name, flags=re.IGNORECASE)
@@ -1527,7 +1582,7 @@ async def _process_with_lock(
 
         if not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10") or not current_db_imdb_url:
             _, hdhub_rating, hdhub_info, _ = await get_hdhub4u_data(base_name)
-            if hdhub_rating and hdhub_rating != "N/A":
+            if hdhub_rating and hdhub_rating not in ("N/A", "x/10"):
                 update_fields.setdefault("$set", {})["rating"] = hdhub_rating
             if not current_db_imdb_url:
                 if hdhub_info:
@@ -1537,6 +1592,8 @@ async def _process_with_lock(
                     final_imdb_id = imdb_details.get("imdb_id")
                     if final_imdb_id and str(final_imdb_id).startswith("tt"):
                         update_fields.setdefault("$set", {})["imdb_url"] = f"https://www.imdb.com/title/{final_imdb_id}/"
+                    if (not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10")) and imdb_details.get("rating"):
+                        update_fields.setdefault("$set", {})["rating"] = str(imdb_details["rating"]).strip()
 
         await db.movie_updates.update_one(
             {"_id": base_name},
