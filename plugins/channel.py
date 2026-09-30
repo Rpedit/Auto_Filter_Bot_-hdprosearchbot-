@@ -211,7 +211,6 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if not query or not found_title:
         return False
 
-    # Ignore reviews, trailers, interviews completely
     if re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', found_title, re.IGNORECASE):
         return False
 
@@ -683,7 +682,6 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
             img_alt = art.find("img").get("alt", "") if art.find("img") else ""
             title_text = f"{a_tag.get('title', '')} {a_tag.get_text()} {img_alt}".strip()
             
-            # Skip reviews or trailers in search results
             if re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', title_text, re.IGNORECASE):
                 continue
 
@@ -1422,70 +1420,52 @@ async def _process_with_lock(
         )
 
         # ==========================================
-        # 6. SMART MERGE GENRES FIX: HDHub4u + IMDb + TMDb Combined
+        # 6. STRICT PRIORITY WITH UNIQUE CLEAN GENRES FIX
         # ==========================================
-        genre_set = set()
+        raw_genre_list = []
 
+        def extract_clean(source_data):
+            if not source_data or source_data == "N/A":
+                return
+            if isinstance(source_data, str):
+                for p in re.split(r'[,|/•&]+', source_data):
+                    p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip().title()
+                    if p_clean and len(p_clean) >= 2 and p_clean.lower() not in ["n/a", "none", "dropdown", "menu", "select", "category"]:
+                        if p_clean not in raw_genre_list:
+                            raw_genre_list.append(p_clean)
+            elif isinstance(source_data, (list, tuple)):
+                for g in source_data:
+                    if isinstance(g, dict):
+                        name = g.get("name") or g.get("genre")
+                        if name:
+                            nm = str(name).strip().title()
+                            if nm and nm not in raw_genre_list:
+                                raw_genre_list.append(nm)
+                    elif isinstance(g, str):
+                        g_clean = g.strip().title()
+                        if g_clean and g_clean != "N/A" and g_clean not in raw_genre_list and len(g_clean) >= 2:
+                            raw_genre_list.append(g_clean)
+
+        # 1. First Priority: HDHub4u
         if hdhub_genres and hdhub_genres != "N/A":
-            raw_parts = re.split(r'[,|/•]', hdhub_genres)
-            for p in raw_parts:
-                p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip()
-                if not p_clean or p_clean.lower() in ["n/a", "none"] or any(bad in p_clean.lower() for bad in ["dropdown", "menu", "select", "category"]):
-                    continue
+            extract_clean(hdhub_genres)
 
-                if "&" in p_clean:
-                    for sub_p in p_clean.split("&"):
-                        sub_clean = re.sub(r'\b(?:info|trailer)\b', '', sub_p, flags=re.IGNORECASE).strip().title()
-                        if sub_clean and len(sub_clean) >= 2:
-                            genre_set.add(sub_clean)
-                else:
-                    formatted_p = p_clean.title()
-                    if formatted_p and len(formatted_p) >= 2:
-                        genre_set.add(formatted_p)
+        # 2. Second Priority: IMDb (Only if HDHub4u is missing)
+        if not raw_genre_list and imdb_details and isinstance(imdb_details, dict):
+            extract_clean(imdb_details.get("genres"))
 
-        if imdb_details and isinstance(imdb_details, dict):
-            raw_imdb = imdb_details.get("genres")
-            if raw_imdb and raw_imdb != "N/A":
-                if isinstance(raw_imdb, str):
-                    for g in raw_imdb.split(","):
-                        clean_g = g.strip().title()
-                        if clean_g and clean_g != "N/A" and len(clean_g) >= 2:
-                            genre_set.add(clean_g)
-                elif isinstance(raw_imdb, (list, tuple)):
-                    for g in raw_imdb:
-                        if isinstance(g, dict):
-                            name = g.get("name") or g.get("genre")
-                            if name:
-                                nm = str(name).strip().title()
-                                if nm and len(nm) >= 2:
-                                    genre_set.add(nm)
-                        elif isinstance(g, str):
-                            clean_g = g.strip().title()
-                            if clean_g and clean_g != "N/A" and len(clean_g) >= 2:
-                                genre_set.add(clean_g)
+        # 3. Third Priority: TMDb (Only if both are missing)
+        if not raw_genre_list and tmdb_details and isinstance(tmdb_details, dict):
+            extract_clean(tmdb_details.get("genres"))
 
-        if tmdb_details and isinstance(tmdb_details, dict):
-            raw_tmdb = tmdb_details.get("genres")
-            if raw_tmdb and raw_tmdb != "N/A":
-                if isinstance(raw_tmdb, str):
-                    for g in raw_tmdb.split(","):
-                        clean_g = g.strip().title()
-                        if clean_g and clean_g != "N/A" and len(clean_g) >= 2:
-                            genre_set.add(clean_g)
-                elif isinstance(raw_tmdb, (list, tuple)):
-                    for g in raw_tmdb:
-                        if isinstance(g, dict):
-                            name = g.get("name") or g.get("genre")
-                            if name:
-                                nm = str(name).strip().title()
-                                if nm and len(nm) >= 2:
-                                    genre_set.add(nm)
-                        elif isinstance(g, str):
-                            clean_g = g.strip().title()
-                            if clean_g and clean_g != "N/A" and len(clean_g) >= 2:
-                                genre_set.add(clean_g)
+        # Remove sub-string duplicates (e.g., remove "Action" if "Action & Adventure" is present)
+        cleaned_genres = []
+        sorted_candidates = sorted(list(set(raw_genre_list)), key=len, reverse=True)
+        for g in sorted_candidates:
+            if not any(g.lower() in existing.lower() and g.lower() != existing.lower() for existing in cleaned_genres):
+                cleaned_genres.append(g)
 
-        genres = ", ".join(sorted(genre_set)) if genre_set else "N/A"
+        genres = ", ".join(sorted(cleaned_genres)) if cleaned_genres else "N/A"
 
         movie_year = (
             media_info.get("year")
