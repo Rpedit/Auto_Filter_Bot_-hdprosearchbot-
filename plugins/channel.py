@@ -211,6 +211,10 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if not query or not found_title:
         return False
 
+    # Ignore reviews, trailers, interviews completely
+    if re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', found_title, re.IGNORECASE):
+        return False
+
     q_seq = extract_sequel_num(query)
     f_seq = extract_sequel_num(found_title)
     if q_seq != f_seq:
@@ -678,13 +682,20 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
                 continue
             img_alt = art.find("img").get("alt", "") if art.find("img") else ""
             title_text = f"{a_tag.get('title', '')} {a_tag.get_text()} {img_alt}".strip()
+            
+            # Skip reviews or trailers in search results
+            if re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', title_text, re.IGNORECASE):
+                continue
+
             candidate_items.append((title_text, href))
 
         if not candidate_items:
             for a in soup.select("h2 a, h3 a, .entry-title a, .recent-movies a, a[rel='bookmark']"):
                 href = a.get("href", "")
+                title_text = a.get_text().strip()
                 if href and not any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
-                    candidate_items.append((a.get_text().strip(), href))
+                    if not re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', title_text, re.IGNORECASE):
+                        candidate_items.append((title_text, href))
 
         movie_page_url = None
         matched_title = ""
