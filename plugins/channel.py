@@ -1410,7 +1410,26 @@ async def _process_with_lock(
             else imdb_details.get("certificates", "N/A")
         )
 
-        genre_list = []
+        # 6. SMART GENRES FIX: HDHub4u First + IMDb/TMDb Merge
+        genre_set = set()
+
+        if hdhub_genres and hdhub_genres != "N/A":
+            raw_parts = re.split(r'[,|/•]', hdhub_genres)
+            for p in raw_parts:
+                p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip()
+                if not p_clean or p_clean == "N/A" or any(bad in p_clean.lower() for bad in ["dropdown", "menu", "select", "category"]):
+                    continue
+
+                if "&" in p_clean:
+                    for sub_p in p_clean.split("&"):
+                        sub_clean = re.sub(r'\b(?:info|trailer)\b', '', sub_p, flags=re.IGNORECASE).strip().title()
+                        if sub_clean and len(sub_clean) >= 2:
+                            genre_set.add(sub_clean)
+                else:
+                    formatted_p = p_clean.title()
+                    if formatted_p and len(formatted_p) >= 2:
+                        genre_set.add(formatted_p)
+
         raw_genres = imdb_details.get("genres") or tmdb_details.get("genres", "N/A")
         fallback_genres = []
         if isinstance(raw_genres, str) and raw_genres != "N/A":
@@ -1426,27 +1445,10 @@ async def _process_with_lock(
 
         for g in fallback_genres:
             clean_g = re.sub(r'\b(?:info|trailer)\b', '', g, flags=re.IGNORECASE).strip().title()
-            if clean_g and clean_g not in genre_list and len(clean_g) >= 2:
-                genre_list.append(clean_g)
+            if clean_g and len(clean_g) >= 2:
+                genre_set.add(clean_g)
 
-        if not genre_list and hdhub_genres and hdhub_genres != "N/A":
-            raw_parts = re.split(r'[,|/•]', hdhub_genres)
-            for p in raw_parts:
-                p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip()
-                if not p_clean or p_clean == "N/A" or any(bad in p_clean.lower() for bad in ["dropdown", "menu", "select", "category"]):
-                    continue
-
-                if "&" in p_clean:
-                    for sub_p in p_clean.split("&"):
-                        sub_clean = re.sub(r'\b(?:info|trailer)\b', '', sub_p, flags=re.IGNORECASE).strip().title()
-                        if sub_clean and sub_clean not in genre_list and len(sub_clean) >= 2:
-                            genre_list.append(sub_clean)
-                else:
-                    formatted_p = p_clean.title()
-                    if formatted_p not in genre_list and len(formatted_p) >= 2:
-                        genre_list.append(formatted_p)
-
-        genres = ", ".join(genre_list) if genre_list else "N/A"
+        genres = ", ".join(sorted(genre_set)) if genre_set else "N/A"
 
         movie_year = (
             media_info.get("year")
@@ -1837,7 +1839,6 @@ def generate_movie_message(movie_doc, base_name):
                 if not ep_str or ep_str.lower() in ("episodes", "episode"):
                     continue
 
-                # Agar bonus/special ho toh "Bonus" word hata kar seedha number le lo
                 if ep_str.lower().startswith("bonus") or ep_str.lower().startswith("special"):
                     ep_str = re.sub(r'(?i)(?:bonus|special)\s*', '', ep_str).strip()
 
