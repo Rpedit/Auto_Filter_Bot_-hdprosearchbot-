@@ -241,10 +241,8 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if q_words == f_words:
         return True
 
-    q_joined = " ".join(q_words)
-    f_joined = " ".join(f_words)
-    if q_joined not in f_joined:
-        return False
+    if all(qw in f_words for qw in q_words):
+        return True
 
     for sep in [':', '-', '–', '—', '|']:
         if sep in f_raw:
@@ -440,9 +438,7 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
         try:
             res = await get_movie_details(str(base_name).strip(), id=True, **kwargs)
             if res and isinstance(res, dict):
-                title = res.get("title")
-                if title and is_good_title_match(base_name, title):
-                    return res
+                return res
         except Exception as e:
             logger.warning(f"Error fetching direct IMDb ID: {e}")
 
@@ -453,24 +449,27 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
         if year:
             queries.append(f"{search_name} {year}")
         queries.append(f"{search_name} Series")
+        queries.append(f"{search_name} TV")
         queries.append(search_name)
     else:
         if year:
             queries.append(f"{base_name} {year}")
         queries.append(base_name)
 
+    best_fallback = {}
     for q in queries:
         try:
             res = await get_movie_details(q, **kwargs) if kwargs else await get_movie_details(q)
             if res and isinstance(res, dict):
                 title = res.get("title")
-                # STRICT VALIDATION: Ensure IMDb result title matches search query properly
                 if title and is_good_title_match(search_name if is_series else base_name, title):
                     return res
+                if not best_fallback and res:
+                    best_fallback = res
         except Exception as e:
             logger.warning(f"Error fetching IMDb details for '{q}': {e}")
 
-    return {}
+    return best_fallback
 
 
 async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) -> dict:
@@ -488,35 +487,36 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
         try:
             res = await get_movie_detailsx(str(tmdb_query), **kwargs) if kwargs else await get_movie_detailsx(str(tmdb_query))
             if res and not res.get("error"):
-                title = res.get("title") or res.get("name")
-                if title and is_good_title_match(base_name, title):
-                    return res
+                return res
         except Exception:
             pass
 
-    clean_series = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip()
     queries = []
     if is_series:
+        clean_series = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip()
         if tmdb_query and tmdb_query != base_name:
             queries.append(tmdb_query)
         queries.append(clean_series)
         queries.append(f"{clean_series} Series")
+        queries.append(base_name)
     else:
         queries.append(tmdb_query or base_name)
 
+    best_fallback = {}
     for q in queries:
         try:
             res = await get_movie_detailsx(q, **kwargs) if kwargs else await get_movie_detailsx(q)
             if res and not res.get("error"):
                 title = res.get("title") or res.get("name")
-                clean_target = clean_series if is_series else base_name
-                # STRICT VALIDATION: Ensure TMDb result title matches search query properly
-                if title and is_good_title_match(clean_target, title):
+                clean_target = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip() if is_series else base_name
+                if title and (is_good_title_match(clean_target, title) or is_good_title_match(base_name, title)):
                     return res
+                if not best_fallback:
+                    best_fallback = res
         except Exception:
             pass
 
-    return {}
+    return best_fallback
 
 
 async def get_hdhub_base_url() -> str:
@@ -725,6 +725,11 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
                     continue
 
             if is_good_title_match(clean_query, title_text) or is_good_title_match(base_name, title_text):
+                movie_page_url = href
+                matched_title = title_text
+                break
+
+            if core_tokens and all(tok in clean_cand for tok in core_tokens):
                 movie_page_url = href
                 matched_title = title_text
                 break
@@ -1278,6 +1283,7 @@ async def _process_with_lock(
     if not movie_doc or is_mismatched:
         blogger_poster_url = await get_blogger_poster_url(base_name, media_info.get("year"))
         
+        # 1. HDHub4u Scrape Call
         hdhub_genres, hdhub_rating, hdhub_info_url, hdhub_is_series = await get_hdhub4u_data(base_name)
 
         if not is_series and hdhub_is_series:
@@ -1285,6 +1291,7 @@ async def _process_with_lock(
             media_info["tag"] = "#SERIES"
             file_data["tag"] = "#SERIES"
 
+        # 2. HDHub4u IDs
         tt_match = re.search(r'tt\d+', hdhub_info_url) if hdhub_info_url else None
         hdhub_imdb_id = tt_match.group(0) if tt_match else None
 
@@ -1295,22 +1302,22 @@ async def _process_with_lock(
         imdb_details = {}
         tmdb_details = {}
 
+        # 3. Direct ID Lookup Routing
         if hdhub_imdb_id:
+            logger.info(f"HDHub4u direct IMDb ID found: {hdhub_imdb_id}")
             imdb_details = await fetch_imdb_safely(hdhub_imdb_id, is_series=is_series)
-            if not is_good_title_match(base_name, imdb_details.get("title", "")):
-                imdb_details = {}
+            tmdb_details = await fetch_tmdb_safely(hdhub_imdb_id, base_name, is_series=is_series)
 
-        if hdhub_tmdb_id and not imdb_details:
+        elif hdhub_tmdb_id:
+            logger.info(f"HDHub4u direct TMDb ID found: {hdhub_tmdb_id}")
             tmdb_details = await fetch_tmdb_safely(hdhub_tmdb_id, base_name, is_series=(hdhub_tmdb_type == "tv" or is_series))
             if tmdb_details and tmdb_details.get("imdb_id"):
                 imdb_details = await fetch_imdb_safely(tmdb_details["imdb_id"], is_series=is_series)
 
-        if not imdb_details:
+        else:
             imdb_details = await fetch_imdb_safely(base_name, is_series=is_series, year=media_info.get("year")) or {}
-
-        final_lookup = imdb_details.get("imdb_id") or base_name
-        if not tmdb_details or tmdb_details.get("error"):
-            tmdb_details = await fetch_tmdb_safely(final_lookup, base_name, is_series=is_series) or {}
+            final_lookup = imdb_details.get("imdb_id") or base_name
+            tmdb_details = await fetch_tmdb_safely(final_lookup, base_name, is_series=is_series)
 
         if not tmdb_details or tmdb_details.get("error"):
             error_tmdb = True
@@ -1347,29 +1354,34 @@ async def _process_with_lock(
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
+        # 4. Rating Logic: HDHub4u text > TMDb/IMDb > Fallback
         if hdhub_rating and hdhub_rating not in ("N/A", "x/10"):
             rating = hdhub_rating
-        elif tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+        elif hdhub_tmdb_id and tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
             rating = str(tmdb_rate).strip()
         elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
             rating = str(imdb_rate).strip()
+        elif tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+            rating = str(tmdb_rate).strip()
         elif hdhub_rating == "x/10":
             rating = "x/10"
         else:
             rating = "x/10"
 
-        imdb_url = ""
-        final_imdb_id = (
-            imdb_details.get("imdb_id")
-            or (tmdb_details.get("imdb_id") if isinstance(tmdb_details, dict) else None)
-            or hdhub_imdb_id
-        )
-        if final_imdb_id and str(final_imdb_id).startswith("tt"):
-            imdb_url = f"https://www.imdb.com/title/{final_imdb_id}/"
-        elif is_series and tmdb_details.get("id"):
-            imdb_url = f"https://www.themoviedb.org/tv/{tmdb_details.get('id')}"
-        elif tmdb_details.get("id"):
-            imdb_url = f"https://www.themoviedb.org/movie/{tmdb_details.get('id')}"
+        # 5. Clickable Link
+        imdb_url = hdhub_info_url.strip() if hdhub_info_url else ""
+        if not imdb_url:
+            final_imdb_id = (
+                imdb_details.get("imdb_id")
+                or (tmdb_details.get("imdb_id") if isinstance(tmdb_details, dict) else None)
+                or hdhub_imdb_id
+            )
+            if final_imdb_id and str(final_imdb_id).startswith("tt"):
+                imdb_url = f"https://www.imdb.com/title/{final_imdb_id}/"
+            elif is_series and tmdb_details.get("id"):
+                imdb_url = f"https://www.themoviedb.org/tv/{tmdb_details.get('id')}"
+            elif tmdb_details.get("id"):
+                imdb_url = f"https://www.themoviedb.org/movie/{tmdb_details.get('id')}"
 
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
@@ -1407,6 +1419,9 @@ async def _process_with_lock(
             else imdb_details.get("certificates", "N/A")
         )
 
+        # ==========================================
+        # 6. STRICT PRIORITY WITH UNIQUE CLEAN GENRES FIX
+        # ==========================================
         raw_genre_list = []
 
         def extract_clean(source_data):
@@ -1431,13 +1446,19 @@ async def _process_with_lock(
                         if g_clean and g_clean != "N/A" and g_clean not in raw_genre_list and len(g_clean) >= 2:
                             raw_genre_list.append(g_clean)
 
-        if imdb_details and isinstance(imdb_details, dict):
-            extract_clean(imdb_details.get("genres"))
-        if not raw_genre_list and tmdb_details and isinstance(tmdb_details, dict):
-            extract_clean(tmdb_details.get("genres"))
-        if not raw_genre_list and hdhub_genres and hdhub_genres != "N/A":
+        # 1. First Priority: HDHub4u
+        if hdhub_genres and hdhub_genres != "N/A":
             extract_clean(hdhub_genres)
 
+        # 2. Second Priority: IMDb (Only if HDHub4u is missing)
+        if not raw_genre_list and imdb_details and isinstance(imdb_details, dict):
+            extract_clean(imdb_details.get("genres"))
+
+        # 3. Third Priority: TMDb (Only if both are missing)
+        if not raw_genre_list and tmdb_details and isinstance(tmdb_details, dict):
+            extract_clean(tmdb_details.get("genres"))
+
+        # Remove sub-string duplicates (e.g., remove "Action" if "Action & Adventure" is present)
         cleaned_genres = []
         sorted_candidates = sorted(list(set(raw_genre_list)), key=len, reverse=True)
         for g in sorted_candidates:
@@ -1533,12 +1554,17 @@ async def _process_with_lock(
         current_db_imdb_url = movie_doc.get("imdb_url")
 
         if not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10") or not current_db_imdb_url:
-            imdb_details = await fetch_imdb_safely(base_name, is_series=is_series, year=media_info.get("year")) or {}
-            final_imdb_id = imdb_details.get("imdb_id")
-            if final_imdb_id and str(final_imdb_id).startswith("tt"):
-                update_fields.setdefault("$set", {})["imdb_url"] = f"https://www.imdb.com/title/{final_imdb_id}/"
-            if imdb_details.get("rating"):
-                update_fields.setdefault("$set", {})["rating"] = str(imdb_details.get("rating"))
+            _, hdhub_rating, hdhub_info, _ = await get_hdhub4u_data(base_name)
+            if hdhub_rating and hdhub_rating != "N/A":
+                update_fields.setdefault("$set", {})["rating"] = hdhub_rating
+            if not current_db_imdb_url:
+                if hdhub_info:
+                    update_fields.setdefault("$set", {})["imdb_url"] = hdhub_info.strip()
+                else:
+                    imdb_details = await fetch_imdb_safely(base_name, is_series=is_series, year=media_info.get("year")) or {}
+                    final_imdb_id = imdb_details.get("imdb_id")
+                    if final_imdb_id and str(final_imdb_id).startswith("tt"):
+                        update_fields.setdefault("$set", {})["imdb_url"] = f"https://www.imdb.com/title/{final_imdb_id}/"
 
         await db.movie_updates.update_one(
             {"_id": base_name},
