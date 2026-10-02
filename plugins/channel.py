@@ -464,7 +464,6 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
             res = await get_movie_details(q, **kwargs) if kwargs else await get_movie_details(q)
             if res and isinstance(res, dict):
                 title = res.get("title")
-                # STRICT VALIDATION: Reject IMDb results that do not properly match query title
                 if title and is_good_title_match(search_name if is_series else base_name, title):
                     return res
         except Exception as e:
@@ -510,7 +509,6 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
             if res and not res.get("error"):
                 title = res.get("title") or res.get("name")
                 clean_target = clean_series if is_series else base_name
-                # STRICT VALIDATION: Reject TMDb results that do not properly match query title
                 if title and is_good_title_match(clean_target, title):
                     return res
         except Exception:
@@ -824,26 +822,25 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
                         except ValueError:
                             rating = "x/10"
 
-            if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b', line, re.IGNORECASE):
-                g_match = re.search(r'\b(?:Genre|Genres)\s*[:\-–]\s*([^\n\r]+)', line, re.IGNORECASE)
-                if g_match:
-                    candidate = g_match.group(1).strip()
-                    candidate = re.split(
-                        r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline|Info|Trailer|Screenshots?|Plot)\b',
-                        candidate,
-                        flags=re.IGNORECASE
-                    )[0]
-                    candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
-                    parts = re.split(r'[,|/•]', candidate)
-                    cleaned_genres = []
-                    for p in parts:
-                        p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip().title()
-                        if p_clean and 2 <= len(p_clean) <= 25 and not any(
-                            bad in p_clean.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download"]
-                        ):
-                            cleaned_genres.append(p_clean)
-                    if cleaned_genres:
-                        genres = ", ".join(cleaned_genres)
+            if genres == "N/A" and (re.search(r'\b(?:Genre|Genres)\b', line, re.IGNORECASE) or "|" in line and any(g in line.lower() for g in ["adventure", "horror", "action", "drama", "comedy", "thriller", "romance", "sci-fi"])):
+                g_match = re.search(r'(?:Genre|Genres)\s*[:\-–]\s*([^\n\r]+)', line, re.IGNORECASE)
+                candidate = g_match.group(1).strip() if g_match else line
+                candidate = re.split(
+                    r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline|Info|Trailer|Screenshots?|Plot)\b',
+                    candidate,
+                    flags=re.IGNORECASE
+                )[0]
+                candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
+                parts = re.split(r'[,|/•]+', candidate)
+                cleaned_genres = []
+                for p in parts:
+                    p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip().title()
+                    if p_clean and 2 <= len(p_clean) <= 25 and not any(
+                        bad in p_clean.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download"]
+                    ):
+                        cleaned_genres.append(p_clean)
+                if cleaned_genres:
+                    genres = ", ".join(cleaned_genres)
 
         if genres == "N/A" and extracted_categories:
             genres = ", ".join(extracted_categories[:4])
