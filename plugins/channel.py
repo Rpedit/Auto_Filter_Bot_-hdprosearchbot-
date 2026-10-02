@@ -241,8 +241,11 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if q_words == f_words:
         return True
 
-    if all(qw in f_words for qw in q_words):
-        return True
+    # STRICT CHECK: Ensure all query words are present consecutively or fully in found title to block partial mismatches (e.g., Red Queen vs The Cursed Queens)
+    q_joined = " ".join(q_words)
+    f_joined = " ".join(f_words)
+    if q_joined not in f_joined:
+        return False
 
     for sep in [':', '-', '–', '—', '|']:
         if sep in f_raw:
