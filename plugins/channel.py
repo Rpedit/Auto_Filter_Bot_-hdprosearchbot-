@@ -438,6 +438,7 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
     elif "media_type" in sig.parameters:
         kwargs["media_type"] = "tv" if is_series else "movie"
 
+    # Agar direct ID mili hai (e.g. tt31841438) toh bina kisi query ke exact details uthao
     if str(base_name).strip().lower().startswith("tt"):
         try:
             res = await get_movie_details(str(base_name).strip(), id=True, **kwargs)
@@ -464,6 +465,11 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
         try:
             res = await get_movie_details(q, **kwargs) if kwargs else await get_movie_details(q)
             if res and isinstance(res, dict) and not res.get("error"):
+                # Individual Episode ko Series ke roop me reject karo
+                media_kind = str(res.get("kind") or res.get("type") or "").lower()
+                if is_series and "episode" in media_kind:
+                    continue
+
                 title = res.get("title")
                 if not title or is_good_title_match(search_name, title):
                     return res
@@ -711,6 +717,7 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
             or movie_soup
         )
 
+        # Direct IMDb link extract
         for a in search_area.find_all("a", href=True):
             if "imdb.com/title/tt" in a["href"]:
                 imdb_link = a["href"].split("?")[0].strip()
@@ -729,6 +736,8 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
                     r_match = re.search(r'(?:Rating|IMDb)\s*[:\-•.\s]*\s*([0-9](?:\.[0-9])?)', line, re.IGNORECASE)
                 if r_match:
                     rating = r_match.group(1).strip()
+                elif "x/10" in line.lower() or "na/10" in line.lower():
+                    rating = "x/10"
 
             if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b\s*[:\-–]', line, re.IGNORECASE):
                 cand = re.split(r'\b(?:Genre|Genres)\b\s*[:\-–]\s*', line, flags=re.IGNORECASE)[-1]
@@ -1163,6 +1172,8 @@ async def _process_with_lock(
 
     if not movie_doc or is_mismatched:
         blogger_poster_url = await get_blogger_poster_url(base_name, media_info.get("year"))
+        
+        # 1. HDHub4u scrape first (Most reliable for Dual-Audio/Bollywood & correct IMDb link)
         hdhub_genres, hdhub_rating, hdhub_imdb_url, hdhub_is_series = await get_hdhub4u_data(base_name)
 
         if not is_series and hdhub_is_series:
@@ -1170,8 +1181,19 @@ async def _process_with_lock(
             media_info["tag"] = "#SERIES"
             file_data["tag"] = "#SERIES"
 
-        imdb_details = await fetch_imdb_safely(base_name, is_series=is_series, year=media_info.get("year")) or {}
-        final_lookup = imdb_details.get("imdb_id") or base_name
+        # 2. Extract IMDb ID agar HDHub4u ke article me mili ho
+        hdhub_tt_id = None
+        if hdhub_imdb_url and "title/tt" in hdhub_imdb_url:
+            m_tt = re.search(r'(tt\d+)', hdhub_imdb_url)
+            if m_tt:
+                hdhub_tt_id = m_tt.group(1)
+
+        # 3. IMDb Lookup: Pehle HDHub4u ki tt-ID use karo taaki wrong 1991 match na ho
+        imdb_lookup_key = hdhub_tt_id or base_name
+        imdb_details = await fetch_imdb_safely(imdb_lookup_key, is_series=is_series, year=media_info.get("year")) or {}
+
+        # 4. TMDb Lookup
+        final_lookup = imdb_details.get("imdb_id") or hdhub_tt_id or base_name
         tmdb_details = await fetch_tmdb_safely(final_lookup, base_name, is_series=is_series) or {}
 
         if not tmdb_details or tmdb_details.get("error"):
@@ -1201,6 +1223,7 @@ async def _process_with_lock(
                 or imdb_details.get("backdrop_url", "")
             )
 
+        # Rating Logic: HDHub4u -> TMDb -> IMDb -> Default
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
@@ -1215,9 +1238,11 @@ async def _process_with_lock(
         else:
             rating = "x/10"
 
+        # Clickable IMDb URL Guarantee
         imdb_url = ""
         final_imdb_id = (
             imdb_details.get("imdb_id")
+            or hdhub_tt_id
             or (tmdb_details.get("imdb_id") if isinstance(tmdb_details, dict) else None)
         )
         if final_imdb_id and str(final_imdb_id).startswith("tt"):
@@ -1293,6 +1318,7 @@ async def _process_with_lock(
                         if g_clean and g_clean != "N/A" and g_clean not in raw_genre_list and len(g_clean) >= 2:
                             raw_genre_list.append(g_clean)
 
+        # HDHub4u genres priority taaki IMDb ke galat episode ke genre na aayein
         if hdhub_genres and hdhub_genres != "N/A":
             extract_clean(hdhub_genres)
 
@@ -1724,6 +1750,7 @@ def generate_movie_message(movie_doc, base_name):
         if epi_str:
             epi_block = f"\n📺 ᴇᴘɪsᴏᴅᴇs : <b>{epi_str}</b>"
 
+    # Quotes completely remove karke clean genre banayein
     genres = movie_doc.get("genres", "N/A")
     if genres and genres != "N/A":
         genres = re.sub(r'[\'"`“”‘’\\]', '', str(genres)).strip().rstrip(" ,-")
@@ -1741,6 +1768,7 @@ def generate_movie_message(movie_doc, base_name):
         clean_rating = raw_rating.replace("/10", "").strip()
         rating_display = f"<small>{clean_rating}/10</small>"
 
+    # Clickable link ensure karein
     if imdb_url:
         rating_text = f'<a href="{imdb_url}">{rating_display}</a>'
     else:
