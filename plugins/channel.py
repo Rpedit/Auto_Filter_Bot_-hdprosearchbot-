@@ -1173,7 +1173,7 @@ async def _process_with_lock(
     if not movie_doc or is_mismatched:
         blogger_poster_url = await get_blogger_poster_url(base_name, media_info.get("year"))
         
-        # 1. HDHub4u scrape first (Most reliable for Dual-Audio/Bollywood & correct IMDb link)
+        # 1. HDHub4u scrape first (Most reliable for Dual-Audio & correct IMDb link)
         hdhub_genres, hdhub_rating, hdhub_imdb_url, hdhub_is_series = await get_hdhub4u_data(base_name)
 
         if not is_series and hdhub_is_series:
@@ -1188,7 +1188,7 @@ async def _process_with_lock(
             if m_tt:
                 hdhub_tt_id = m_tt.group(1)
 
-        # 3. IMDb Lookup: Pehle HDHub4u ki tt-ID use karo taaki wrong 1991 match na ho
+        # 3. IMDb Lookup: Pehle HDHub4u ki tt-ID use karo taaki wrong episode match na ho
         imdb_lookup_key = hdhub_tt_id or base_name
         imdb_details = await fetch_imdb_safely(imdb_lookup_key, is_series=is_series, year=media_info.get("year")) or {}
 
@@ -1293,48 +1293,46 @@ async def _process_with_lock(
             else imdb_details.get("certificates", "N/A")
         )
 
-        raw_genre_list = []
-
-        def extract_clean(source_data):
+        # --- STRICT GENRES PRIORITY FIX ---
+        def parse_genre_string_or_list(source_data):
+            extracted = []
             if not source_data or source_data == "N/A":
-                return
+                return extracted
             if isinstance(source_data, str):
                 for p in re.split(r'[,|/•&]+', source_data):
                     p_clean = re.sub(r'[\'"`“”‘’\\{}\[\]()<>]', '', p)
                     p_clean = re.sub(r'\b(?:info|trailer)\b', '', p_clean, flags=re.IGNORECASE).strip().title()
                     if p_clean and len(p_clean) >= 2 and p_clean.lower() not in ["n/a", "none", "dropdown", "menu", "select", "category"]:
-                        if p_clean not in raw_genre_list:
-                            raw_genre_list.append(p_clean)
+                        if p_clean not in extracted:
+                            extracted.append(p_clean)
             elif isinstance(source_data, (list, tuple)):
                 for g in source_data:
                     if isinstance(g, dict):
                         name = g.get("name") or g.get("genre")
                         if name:
                             nm = re.sub(r'[\'"`“”‘’\\{}\[\]()<>]', '', str(name)).strip().title()
-                            if nm and nm not in raw_genre_list:
-                                raw_genre_list.append(nm)
+                            if nm and nm not in extracted:
+                                extracted.append(nm)
                     elif isinstance(g, str):
                         g_clean = re.sub(r'[\'"`“”‘’\\{}\[\]()<>]', '', g).strip().title()
-                        if g_clean and g_clean != "N/A" and g_clean not in raw_genre_list and len(g_clean) >= 2:
-                            raw_genre_list.append(g_clean)
+                        if g_clean and g_clean != "N/A" and g_clean not in extracted and len(g_clean) >= 2:
+                            extracted.append(g_clean)
+            return extracted
 
-        # HDHub4u genres priority taaki IMDb ke galat episode ke genre na aayein
+        final_genre_list = []
+        # 1. HDHub4u se Genres
         if hdhub_genres and hdhub_genres != "N/A":
-            extract_clean(hdhub_genres)
+            final_genre_list = parse_genre_string_or_list(hdhub_genres)
 
-        if not raw_genre_list and imdb_details and isinstance(imdb_details, dict):
-            extract_clean(imdb_details.get("genres"))
+        # 2. Agar HDHub4u me nahi mila, tab IMDb se Genres
+        if not final_genre_list and imdb_details and isinstance(imdb_details, dict):
+            final_genre_list = parse_genre_string_or_list(imdb_details.get("genres"))
 
-        if not raw_genre_list and tmdb_details and isinstance(tmdb_details, dict):
-            extract_clean(tmdb_details.get("genres"))
+        # 3. Agar dono me na mile, tab sirf fallback me TMDb ke Genres
+        if not final_genre_list and tmdb_details and isinstance(tmdb_details, dict):
+            final_genre_list = parse_genre_string_or_list(tmdb_details.get("genres"))
 
-        cleaned_genres = []
-        sorted_candidates = sorted(list(set(raw_genre_list)), key=len, reverse=True)
-        for g in sorted_candidates:
-            if not any(g.lower() in existing.lower() and g.lower() != existing.lower() for existing in cleaned_genres):
-                cleaned_genres.append(g)
-
-        genres = ", ".join(sorted(cleaned_genres)) if cleaned_genres else "N/A"
+        genres = ", ".join(final_genre_list) if final_genre_list else "N/A"
 
         movie_year = (
             media_info.get("year")
