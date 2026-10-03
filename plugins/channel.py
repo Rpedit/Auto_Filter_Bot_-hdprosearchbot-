@@ -207,25 +207,42 @@ def extract_sequel_num(text: str) -> Optional[str]:
     return None
 
 
-def is_good_title_match(query: str, found_title: str) -> bool:
+def extract_year_from_text(text: str) -> Optional[int]:
+    matches = YEAR_PATTERN.findall(text)
+    if matches:
+        return int(matches[-1])
+    return None
+
+
+def is_good_title_match(query: str, found_title: str, query_year: Optional[int] = None) -> bool:
     if not query or not found_title:
         return False
 
     if re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', found_title, re.IGNORECASE):
         return False
 
+    # ADVANCED: Strict Old Movie Year Guard
+    # Agar query me year specify hai to check karo ki found_title me koi conflicting year to nahi hai
+    if not query_year:
+        query_year = extract_year_from_text(query)
+
+    found_year = extract_year_from_text(found_title)
+    if query_year and found_year:
+        if abs(query_year - found_year) > 1:
+            return False
+
     q_seq = extract_sequel_num(query)
     f_seq = extract_sequel_num(found_title)
-    if q_seq and f_seq and q_seq != f_seq:
+    if q_seq != f_seq:
         return False
 
     q_raw = YEAR_PATTERN.sub('', query).strip()
     f_raw = YEAR_PATTERN.sub('', found_title).strip()
 
     def clean_words(s: str):
-        s = re.sub(r'\(?\b(?:full\s*movie|full\s*series|full\s*film|hd|rip|dubbed|complete|web\s*series)\b\)?', '', s, flags=re.IGNORECASE)
+        s = re.sub(r'\(?\b(?:full\s*movie|full\s*series|full\s*film|hd|rip|dubbed)\b\)?', '', s, flags=re.IGNORECASE)
         s = re.sub(r'^(the|a|an)\s+', '', s, flags=re.IGNORECASE)
-        s = re.sub(r"['’\"]", "", s)
+        s = re.sub(r"['’]", "", s)
         s = normalize(s).lower()
         return [w for w in s.split() if w]
 
@@ -235,24 +252,22 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if not q_words or not f_words:
         return False
 
+    if ('ott' in f_words) != ('ott' in q_words):
+        return False
+
     if q_words == f_words:
         return True
 
     q_joined = " ".join(q_words)
     f_joined = " ".join(f_words)
-
-    if q_joined in f_joined or f_joined in q_joined:
-        return True
-
-    overlap = set(q_words) & set(f_words)
-    if len(overlap) >= max(1, int(len(q_words) * 0.65)):
-        return True
+    if q_joined not in f_joined:
+        return False
 
     for sep in [':', '-', '–', '—', '|']:
         if sep in f_raw:
             main_part = f_raw.split(sep)[0].strip()
             main_words = clean_words(main_part)
-            if q_words == main_words or " ".join(q_words) in " ".join(main_words):
+            if q_words == main_words:
                 return True
 
     return False
@@ -378,8 +393,11 @@ def extract_ott_platform(text: str) -> str:
 
 
 def get_clean_title(name: str) -> str:
+    """Retains year for older films to prevent multi-year collisions"""
+    y = extract_year_from_text(name)
     t = re.sub(r'\b(19|20)\d{2}\b', '', name)
-    return normalize(t).lower()
+    clean_t = normalize(t).lower()
+    return f"{clean_t} {y}" if y else clean_t
 
 
 def format_runtime(runtime_val, is_series: bool = False) -> str:
@@ -438,7 +456,8 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
     elif "media_type" in sig.parameters:
         kwargs["media_type"] = "tv" if is_series else "movie"
 
-    # Direct IMDb ID handler
+    target_year = int(year) if year and str(year).isdigit() else extract_year_from_text(base_name)
+
     if str(base_name).strip().lower().startswith("tt"):
         try:
             res = await get_movie_details(str(base_name).strip(), id=True, **kwargs)
@@ -448,29 +467,29 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
             logger.warning(f"Error fetching direct IMDb ID: {e}")
 
     search_name = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip() if is_series else base_name
-    search_name = re.sub(r'\b(19|20)\d{2}\b', '', search_name).strip()
+    clean_search = re.sub(r'\b(19|20)\d{2}\b', '', search_name).strip()
 
     queries = []
+    # Old movies ke liye Year-First Search queries
+    if target_year:
+        queries.append(f"{clean_search} {target_year}")
     if is_series:
-        if year:
-            queries.append(f"{search_name} {year}")
         queries.append(f"{search_name} Series")
         queries.append(search_name)
     else:
-        if year:
-            queries.append(f"{search_name} {year}")
         queries.append(search_name)
+        queries.append(clean_search)
 
     for q in queries:
         try:
             res = await get_movie_details(q, **kwargs) if kwargs else await get_movie_details(q)
-            if res and isinstance(res, dict) and not res.get("error"):
-                media_kind = str(res.get("kind") or res.get("type") or "").lower()
-                if is_series and "episode" in media_kind:
-                    continue
-
+            if res and isinstance(res, dict):
                 title = res.get("title")
-                if not title or is_good_title_match(search_name, title):
+                res_year = res.get("year")
+                if res_year and str(res_year).isdigit() and target_year:
+                    if abs(int(res_year) - target_year) > 1:
+                        continue  # Skip wrong year/remake match
+                if title and is_good_title_match(clean_search, title, query_year=target_year):
                     return res
         except Exception as e:
             logger.warning(f"Error fetching IMDb details for '{q}': {e}")
@@ -478,7 +497,7 @@ async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str]
     return {}
 
 
-async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) -> dict:
+async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool, year: Optional[str] = None) -> dict:
     if not TMDB_POSTER:
         return {}
 
@@ -489,6 +508,8 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
     elif "media_type" in sig.parameters:
         kwargs["media_type"] = "tv" if is_series else "movie"
 
+    target_year = int(year) if year and str(year).isdigit() else extract_year_from_text(base_name)
+
     if tmdb_query and (str(tmdb_query).startswith("tt") or str(tmdb_query).isdigit()):
         try:
             res = await get_movie_detailsx(str(tmdb_query), **kwargs) if kwargs else await get_movie_detailsx(str(tmdb_query))
@@ -498,23 +519,30 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
             pass
 
     clean_series = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip()
-    clean_series = re.sub(r'\b(19|20)\d{2}\b', '', clean_series).strip()
+    clean_target = re.sub(r'\b(19|20)\d{2}\b', '', clean_series if is_series else base_name).strip()
 
     queries = []
+    if target_year:
+        queries.append(f"{clean_target} {target_year}")
     if is_series:
         if tmdb_query and tmdb_query != base_name:
             queries.append(tmdb_query)
         queries.append(clean_series)
         queries.append(f"{clean_series} Series")
     else:
-        queries.append(tmdb_query or clean_series)
+        queries.append(tmdb_query or base_name)
+        queries.append(clean_target)
 
     for q in queries:
         try:
             res = await get_movie_detailsx(q, **kwargs) if kwargs else await get_movie_detailsx(q)
             if res and not res.get("error"):
                 title = res.get("title") or res.get("name")
-                if not title or is_good_title_match(clean_series, title):
+                res_year = res.get("year")
+                if res_year and str(res_year).isdigit() and target_year:
+                    if abs(int(res_year) - target_year) > 1:
+                        continue  # Prevent newer remake override
+                if title and is_good_title_match(clean_target, title, query_year=target_year):
                     return res
         except Exception:
             pass
@@ -533,8 +561,7 @@ async def get_hdhub_base_url() -> str:
     return DEFAULT_HDHUB_DOMAIN
 
 
-# --- BLOGGER DATA EXTRACTION: IMAGE & HYPERLINK ---
-async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Optional[dict]:
+async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> Optional[str]:
     try:
         blog_url = "https://tmdbimdbhdhub4u.blogspot.com"
         if hasattr(db, 'db'):
@@ -542,12 +569,12 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Option
             if setting and setting.get("url"):
                 blog_url = setting["url"].rstrip("/")
 
+        target_year = int(year) if year and str(year).isdigit() else extract_year_from_text(base_name)
         clean_series = re.sub(r'\s+Season\s*\d+', '', base_name, flags=re.IGNORECASE).strip()
-        clean_series = re.sub(r'\b(19|20)\d{2}\b', '', clean_series).strip()
         target_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', base_name, re.IGNORECASE)
         target_season = int(target_s_match.group(1)) if target_s_match else None
 
-        search_term = clean_series or base_name
+        search_term = f"{clean_series} {target_year}" if target_year else clean_series
         feed_urls = [
             f"{blog_url}/feeds/posts/default?q={quote_plus(search_term)}&alt=json&max-results=25",
             f"{blog_url}/feeds/posts/default?alt=json&max-results=150"
@@ -572,8 +599,17 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Option
                     post_title = entry.get("title", {}).get("$t", "").strip()
                     cand_lower = post_title.lower()
 
+                    if ('ott' in cand_lower) != ('ott' in base_name.lower()):
+                        continue
+
+                    # Strict Year Verification for Old Classics
+                    cand_year = extract_year_from_text(post_title)
+                    if target_year and cand_year:
+                        if abs(target_year - cand_year) > 1:
+                            continue
+
                     matched = False
-                    if is_good_title_match(base_name, post_title) or is_good_title_match(clean_series, post_title):
+                    if is_good_title_match(base_name, post_title, query_year=target_year) or is_good_title_match(clean_series, post_title, query_year=target_year):
                         matched = True
                     elif clean_series.lower() in cand_lower:
                         cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', post_title, re.IGNORECASE)
@@ -586,63 +622,31 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Option
                     if matched:
                         content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
                         soup = BeautifulSoup(content_html, "html.parser")
-                        
-                        poster_url = None
-                        target_url = None
+                        img_tag = soup.find("img")
+                        img_url = None
 
-                        # Check 1: <a> tag containing <img> with an IMDb/TMDb link
-                        for img in soup.find_all("img"):
-                            p_url = img.get("src") or img.get("data-src")
-                            parent_a = img.find_parent("a")
-                            if parent_a and parent_a.get("href"):
-                                href = parent_a["href"].strip()
-                                if re.search(r'(?:imdb\.com/title/tt\d+|themoviedb\.org/(?:movie|tv)/\d+)', href, re.IGNORECASE):
-                                    poster_url = p_url
-                                    target_url = href
-                                    break
+                        if img_tag:
+                            img_url = img_tag.get("src") or img_tag.get("data-src")
 
-                        # Check 2: Separate anchor tags if not directly wrapped
-                        if not target_url:
+                        if not img_url:
                             for a in soup.find_all("a", href=True):
-                                href = a["href"].strip()
-                                if re.search(r'(?:imdb\.com/title/tt\d+|themoviedb\.org/(?:movie|tv)/\d+)', href, re.IGNORECASE):
-                                    target_url = href
+                                href = a["href"]
+                                if any(href.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]) or "googleusercontent.com" in href:
+                                    img_url = href
                                     break
 
-                        # Check 3: Raw image extraction fallback
-                        if not poster_url:
-                            img_tag = soup.find("img")
-                            if img_tag:
-                                poster_url = img_tag.get("src") or img_tag.get("data-src")
-                            if not poster_url:
-                                for a in soup.find_all("a", href=True):
-                                    href = a["href"]
-                                    if any(href.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]) or "googleusercontent.com" in href:
-                                        poster_url = href
-                                        break
-                            if not poster_url and "media$thumbnail" in entry:
-                                poster_url = entry["media$thumbnail"].get("url")
+                        if not img_url and "media$thumbnail" in entry:
+                            img_url = entry["media$thumbnail"].get("url")
 
-                        # Direct content regex for link if still not found
-                        if not target_url:
-                            m_raw = re.search(r'https?://(?:www\.)?(?:imdb\.com/title/tt\d+|themoviedb\.org/(?:movie|tv)/\d+)', content_html, re.IGNORECASE)
-                            if m_raw:
-                                target_url = m_raw.group(0)
-
-                        if poster_url:
-                            poster_url = re.sub(r'/s\d+(-c)?/', '/s1600/', poster_url)
-                            poster_url = re.sub(r'/w\d+-h\d+.*?/', '/s1600/', poster_url)
-                            poster_url = re.sub(r'=w\d+-h\d+.*$', '=s1600', poster_url)
-                            poster_url = re.sub(r'=s\d+.*$', '=s1600', poster_url)
-
-                        if poster_url or target_url:
-                            return {
-                                "poster_url": poster_url,
-                                "target_url": target_url
-                            }
+                        if img_url:
+                            img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
+                            img_url = re.sub(r'/w\d+-h\d+.*?/', '/s1600/', img_url)
+                            img_url = re.sub(r'=w\d+-h\d+.*$', '=s1600', img_url)
+                            img_url = re.sub(r'=s\d+.*$', '=s1600', img_url)
+                            return img_url
 
     except Exception as e:
-        logger.error(f"Error fetching Blogger data: {e}")
+        logger.error(f"Error fetching Blogger poster: {e}")
     return None
 
 
@@ -666,11 +670,12 @@ async def set_domain_handler(bot, message):
         await message.reply_text(f"❌ Failed to update domain: {e}")
 
 
-async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
+async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) -> Tuple[str, str, str, bool]:
     genres = "N/A"
     rating = "N/A"
-    imdb_link = ""
+    info_url = ""
     is_series = False
+
     try:
         base_url = await get_hdhub_base_url()
         if not base_url:
@@ -681,6 +686,9 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
         clean_query = normalize(clean_search_query).strip()
 
         search_words = [w for w in clean_query.split() if len(w) >= 2][:3]
+        if target_year:
+            search_words.append(str(target_year))
+
         effective_query = "+".join(search_words) if search_words else clean_query.replace(" ", "+")
         search_url = f"{base_url.rstrip('/')}/?s={effective_query}"
 
@@ -689,52 +697,88 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
             ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-            "Referer": f"{base_url.rstrip('/')}/"
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer": base_url
         }
 
         timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(search_url, headers=headers, allow_redirects=True) as resp:
                 if resp.status != 200:
-                    logger.warning(f"HDHub4u search returned status {resp.status}")
                     return "N/A", "N/A", "", False
                 html = await resp.text()
 
         soup = BeautifulSoup(html, "html.parser")
+
         for tag in soup(["header", "nav", "footer", "aside", "script", "style", "form"]):
             tag.decompose()
 
         candidate_items = []
-        for art in soup.select("article, .post-item, .recent-movies li, .entry-title, .thumb, h2 a, h3 a"):
-            a_tag = art if art.name == "a" else art.find("a", href=True)
-            if not a_tag or not a_tag.get("href"):
+        for art in soup.select("article, .post-item, .recent-movies li, .entry-title, .thumb"):
+            a_tag = art.find("a", href=True)
+            if not a_tag:
                 continue
             href = a_tag["href"].strip()
             if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/", "/wp-content/"]):
                 continue
-            title_text = f"{a_tag.get('title', '')} {a_tag.get_text()}".strip()
-            if not re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', title_text, re.IGNORECASE):
-                candidate_items.append((title_text, href))
+            img_alt = art.find("img").get("alt", "") if art.find("img") else ""
+            title_text = f"{a_tag.get('title', '')} {a_tag.get_text()} {img_alt}".strip()
+            
+            if re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', title_text, re.IGNORECASE):
+                continue
+
+            candidate_items.append((title_text, href))
+
+        if not candidate_items:
+            for a in soup.select("h2 a, h3 a, .entry-title a, .recent-movies a, a[rel='bookmark']"):
+                href = a.get("href", "")
+                title_text = a.get_text().strip()
+                if href and not any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
+                    if not re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', title_text, re.IGNORECASE):
+                        candidate_items.append((title_text, href))
 
         movie_page_url = None
+        matched_title = ""
+        target_sequel = extract_sequel_num(base_name) or extract_sequel_num(clean_query)
+
         target_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', base_name, re.IGNORECASE)
         target_season = int(target_s_match.group(1)) if target_s_match else None
+        target_has_ott = bool(re.search(r'\bott\b', base_name, re.IGNORECASE))
 
         for title_text, href in candidate_items:
-            if target_season is not None:
-                cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', title_text, re.IGNORECASE)
-                if cand_s_match and int(cand_s_match.group(1)) != target_season:
+            cand_year = extract_year_from_text(title_text)
+            # Old movie guard: Never select another year's release
+            if target_year and cand_year:
+                if abs(target_year - cand_year) > 1:
                     continue
 
-            if is_good_title_match(clean_query, title_text) or clean_query.lower() in title_text.lower():
+            cand_sequel = extract_sequel_num(title_text)
+            if target_sequel != cand_sequel:
+                continue
+
+            cand_has_ott = bool(re.search(r'\bott\b', title_text, re.IGNORECASE))
+            if target_has_ott != cand_has_ott:
+                continue
+
+            if target_season is not None:
+                cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', title_text, re.IGNORECASE)
+                if cand_s_match:
+                    cand_season = int(cand_s_match.group(1))
+                    if cand_season != target_season:
+                        continue
+                else:
+                    continue
+
+            if is_good_title_match(clean_query, title_text, query_year=target_year) or is_good_title_match(base_name, title_text, query_year=target_year):
                 movie_page_url = href
-                if re.search(r'\b(?:Season\s*\d+|S\d{1,2}|Series|Episodes?|Complete)\b', title_text, re.IGNORECASE):
-                    is_series = True
+                matched_title = title_text
                 break
 
         if not movie_page_url:
             return "N/A", "N/A", "", False
+
+        if re.search(r'\b(?:Season\s*\d+|S\d{1,2}|Series|Episodes?|Complete)\b', matched_title, re.IGNORECASE):
+            is_series = True
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(movie_page_url, headers=headers, allow_redirects=True) as resp:
@@ -743,52 +787,103 @@ async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
                 movie_html = await resp.text()
 
         movie_soup = BeautifulSoup(movie_html, "html.parser")
+
         search_area = (
             movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
             or movie_soup.body
             or movie_soup
         )
 
-        # Direct IMDb link extract
-        for a in search_area.find_all("a", href=True):
-            if "imdb.com/title/tt" in a["href"]:
-                imdb_link = a["href"].split("?")[0].strip()
+        for a_tag in search_area.find_all("a", href=True):
+            href = a_tag["href"].strip()
+            m_imdb = re.search(r'(?:imdb\.com/(?:title/)?|title/)(tt\d+)', href, re.IGNORECASE)
+            if m_imdb:
+                info_url = f"https://www.imdb.com/title/{m_imdb.group(1)}/"
                 break
 
-        text_content = search_area.get_text("\n")
-        lines = [re.sub(r'\s+', ' ', l).strip() for l in text_content.splitlines() if l.strip()]
+            m_tmdb = re.search(r'themoviedb\.org/(movie|tv)/(\d+)', href, re.IGNORECASE)
+            if m_tmdb:
+                info_url = f"https://www.themoviedb.org/{m_tmdb.group(1)}/{m_tmdb.group(2)}"
+                break
+
+        raw_content_str = str(search_area)
+        if not info_url:
+            m_imdb = re.search(r'https?://(?:www\.)?(?:m\.)?imdb\.com/title/(tt\d+)/?', raw_content_str, re.IGNORECASE)
+            if m_imdb:
+                info_url = f"https://www.imdb.com/title/{m_imdb.group(1)}/"
+            else:
+                m_tmdb = re.search(r'https?://(?:www\.)?themoviedb\.org/(movie|tv)/(\d+)', raw_content_str, re.IGNORECASE)
+                if m_tmdb:
+                    info_url = f"https://www.themoviedb.org/{m_tmdb.group(1)}/{m_tmdb.group(2)}"
+
+        for br in movie_soup.find_all(["br", "hr"]):
+            br.replace_with("\n")
+        for block_elem in movie_soup.find_all(["p", "div", "h1", "h2", "h3", "h4", "li", "tr"]):
+            block_elem.append("\n")
+
+        for tag in movie_soup(["header", "nav", "footer", "aside", "script", "style", "iframe"]):
+            tag.decompose()
+
+        cat_links = search_area.select(".cat-links a, a[rel='category tag'], .entry-category a, .genres a")
+        extracted_categories = []
+        for c in cat_links:
+            cat_name = c.get_text().strip()
+            cat_lower = cat_name.lower()
+            if any(term in cat_lower for term in ["web series", "tv shows", "tv series", "series", "k-drama", "anime"]):
+                is_series = True
+            elif len(cat_name) >= 3 and not any(bad in cat_lower for bad in ["movies", "bollywood", "hollywood", "dual", "hindi", "720p", "480p", "1080p", "hevc"]):
+                extracted_categories.append(cat_name.title())
+
+        lines = [re.sub(r'\s+', ' ', line).strip() for line in search_area.get_text().splitlines() if line.strip()]
 
         for line in lines:
             if not is_series and re.search(r'\b(?:Season|Episodes?|Complete Pack)\b\s*[:\-–]', line, re.IGNORECASE):
                 is_series = True
 
-            if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating|Ratings)\b', line, re.IGNORECASE):
-                r_match = re.search(r'([0-9](?:\.[0-9])?)\s*/\s*10', line)
-                if not r_match:
-                    r_match = re.search(r'(?:Rating|IMDb)\s*[:\-•.\s]*\s*([0-9](?:\.[0-9])?)', line, re.IGNORECASE)
+            # Extract Rating with strong pattern
+            if rating == "N/A" and re.search(r'(?:IMDb|IMDB|TMDb|TMDB|Rating|Ratings|Score|⭐|★)\b', line, re.IGNORECASE):
+                r_match = re.search(
+                    r'(?:IMDb|IMDB|TMDb|TMDB|Rating|Ratings|Score)?\s*[:\-•.\s]*\s*([0-9](?:\.[0-9]+)?)\s*(?:/\s*10)?\b',
+                    line,
+                    re.IGNORECASE
+                )
                 if r_match:
-                    rating = r_match.group(1).strip()
-                elif "x/10" in line.lower() or "na/10" in line.lower():
-                    rating = "x/10"
+                    try:
+                        val = float(r_match.group(1).strip())
+                        if 1.0 <= val <= 10.0:
+                            rating = f"{val:.1f}"
+                    except ValueError:
+                        pass
 
-            if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b\s*[:\-–]', line, re.IGNORECASE):
-                cand = re.split(r'\b(?:Genre|Genres)\b\s*[:\-–]\s*', line, flags=re.IGNORECASE)[-1]
-                cand = re.split(r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source)\b', cand, flags=re.IGNORECASE)[0]
-                cand = re.sub(r'[\'"`“”‘’\\{}\[\]()<>]', '', cand).strip()
-                parts = [p.strip().title() for p in re.split(r'[,|/•&]+', cand) if len(p.strip()) >= 2]
-                if parts:
-                    genres = ", ".join(parts[:4])
+            # Extract Genres
+            if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b', line, re.IGNORECASE):
+                g_match = re.search(r'\b(?:Genre|Genres)\s*[:\-–]\s*([^\n\r]+)', line, re.IGNORECASE)
+                if g_match:
+                    candidate = g_match.group(1).strip()
+                    candidate = re.split(
+                        r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline|Info|Trailer|Screenshots?|Plot)\b',
+                        candidate,
+                        flags=re.IGNORECASE
+                    )[0]
+                    candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
+                    parts = re.split(r'[,|/•&]', candidate)
+                    cleaned_genres = []
+                    for p in parts:
+                        p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip().title()
+                        if p_clean and 2 <= len(p_clean) <= 25 and not any(
+                            bad in p_clean.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download", "n/a"]
+                        ):
+                            cleaned_genres.append(p_clean)
+                    if cleaned_genres:
+                        genres = ", ".join(cleaned_genres)
 
-        if genres == "N/A":
-            cat_links = search_area.select(".cat-links a, a[rel='category tag'], .entry-category a")
-            cats = [c.get_text().strip().title() for c in cat_links if len(c.get_text().strip()) >= 3 and not any(bad in c.get_text().lower() for bad in ["movies", "bollywood", "hollywood", "dual", "hindi", "720p", "480p", "1080p"])]
-            if cats:
-                genres = ", ".join(cats[:3])
+        if genres == "N/A" and extracted_categories:
+            genres = ", ".join(extracted_categories[:4])
 
     except Exception as e:
         logger.error(f"Error scraping HDHub4u data: {e}")
 
-    return genres, rating, imdb_link, is_series
+    return genres, rating, info_url, is_series
 
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
@@ -825,18 +920,15 @@ def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]
         return int(m.group(1)), str(int(m.group(2)))
 
     s_match = re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b', filename, re.IGNORECASE)
-    detected_season = int(s_match.group(1)) if s_match else None
+    detected_season = int(s_match.group(1)) if s_match else 1
 
     if m := EP_ONLY_RANGE.search(filename):
-        return detected_season or 1, f"{int(m.group(1))}-{int(m.group(2))}"
+        return detected_season, f"{int(m.group(1))}-{int(m.group(2))}"
 
     if m := EP_ONLY_SINGLE.search(filename):
         ep_val = int(m.group(1))
         if ep_val not in (264, 265):
-            return detected_season or 1, str(ep_val)
-
-    if detected_season is not None:
-        return detected_season, None
+            return detected_season, str(ep_val)
 
     return None, None
 
@@ -923,7 +1015,6 @@ def extract_media_info(filename: str, caption: str):
             or NO_S_REGEX.search(clean_fn)
             or EP_ONLY_RANGE.search(clean_fn)
             or EP_ONLY_SINGLE.search(clean_fn)
-            or re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b', clean_fn, re.IGNORECASE)
         )
 
         if m:
@@ -945,6 +1036,7 @@ def extract_media_info(filename: str, caption: str):
                 if yi != -1:
                     processed_raw = filename[:yi + 4]
                     base_raw += f" {y}"
+
     else:
         year_match = YEAR_PATTERN.search(unified)
 
@@ -955,6 +1047,7 @@ def extract_media_info(filename: str, caption: str):
             if year_idx != -1:
                 processed_raw = filename[:year_idx + 4]
                 base_raw = processed_raw
+
         else:
             qual_match = SOURCE_PATTERN.search(unified) or RESOLUTION_PATTERN.search(unified)
 
@@ -985,6 +1078,7 @@ def extract_media_info(filename: str, caption: str):
             "",
             base_name
         )
+
         if year:
             base_name += f" {year}"
 
@@ -998,6 +1092,7 @@ def extract_media_info(filename: str, caption: str):
         )
 
         year_part = ""
+
         if year_match:
             year_part = year_match.group(0)
             name = name[:year_match.start()].strip()
@@ -1080,8 +1175,10 @@ async def media_handler(bot, message):
         return
 
     duration_secs = getattr(media, "duration", None)
+
     if not duration_secs and message.video:
         duration_secs = message.video.duration
+
     if not duration_secs and message.audio:
         duration_secs = message.audio.duration
 
@@ -1100,6 +1197,7 @@ async def media_handler(bot, message):
     media.caption = message.caption or ""
 
     success, info = await save_file(media)
+
     if not success:
         return
 
@@ -1122,7 +1220,11 @@ async def process_and_send_update(
     file_runtime_mins=None
 ):
     try:
-        media_info = extract_media_info(filename, caption)
+        media_info = extract_media_info(
+            filename,
+            caption
+        )
+
         base_name = media_info["base_name"]
         processed = media_info["processed"]
 
@@ -1154,6 +1256,7 @@ async def process_and_send_update(
 
     except PyMongoError as e:
         logger.error(f"Database error in process_and_send_update: {e}")
+
     except Exception as e:
         logger.exception(f"Processing failed in process_and_send_update: {e}")
 
@@ -1171,23 +1274,37 @@ async def _process_with_lock(
         db.movie_updates = db.db.movie_updates
 
     clean_title = get_clean_title(base_name)
-    movie_doc = await db.movie_updates.find_one({"_id": base_name})
+    movie_doc = await db.movie_updates.find_one(
+        {"_id": base_name}
+    )
     if not movie_doc:
         movie_doc = await db.movie_updates.find_one({"clean_title": clean_title})
         if movie_doc:
             base_name = movie_doc["_id"]
 
     is_series = media_info["tag"] == "#SERIES"
-    is_mismatched = False
+    target_year = int(media_info["year"]) if media_info.get("year") else extract_year_from_text(base_name)
 
+    is_mismatched = False
     if movie_doc:
         stored_title = movie_doc.get("title", "")
-        if stored_title and not is_good_title_match(base_name, stored_title):
-            logger.warning(f"Title mismatch detected: '{stored_title}' for '{base_name}'. Re-fetching!")
+        stored_year = movie_doc.get("year")
+        # Check title AND year to avoid old-movie mismatch
+        if stored_title and not is_good_title_match(base_name, stored_title, query_year=target_year):
+            logger.warning(f"Title/Year mismatch: '{stored_title}' ({stored_year}) vs '{base_name}' ({target_year}). Re-fetching!")
             is_mismatched = True
+        elif target_year and stored_year and str(stored_year).isdigit():
+            if abs(target_year - int(stored_year)) > 1:
+                logger.warning(f"Old movie year conflict detected: {stored_year} vs {target_year}. Re-fetching!")
+                is_mismatched = True
 
     error_tmdb = False
-    final_file_runtime = f"{file_runtime_mins}" if file_runtime_mins else "N/A"
+
+    final_file_runtime = (
+        f"{file_runtime_mins}"
+        if file_runtime_mins
+        else "N/A"
+    )
 
     file_data = {
         "filename": filename,
@@ -1203,54 +1320,42 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
-        # Check Blogger for Poster & Hyperlink
-        blogger_data = await get_blogger_data(base_name, media_info.get("year"))
-        blogger_poster = blogger_data.get("poster_url") if blogger_data else None
-        blogger_target = blogger_data.get("target_url") if blogger_data else None
+        blogger_poster_url = await get_blogger_poster_url(base_name, media_info.get("year"))
+        
+        # HDHub4u with Year Protection
+        hdhub_genres, hdhub_rating, hdhub_info_url, hdhub_is_series = await get_hdhub4u_data(base_name, target_year=target_year)
+
+        if not is_series and hdhub_is_series:
+            is_series = True
+            media_info["tag"] = "#SERIES"
+            file_data["tag"] = "#SERIES"
+
+        tt_match = re.search(r'tt\d+', hdhub_info_url) if hdhub_info_url else None
+        hdhub_imdb_id = tt_match.group(0) if tt_match else None
+
+        tmdb_url_match = re.search(r'themoviedb\.org/(movie|tv)/(\d+)', hdhub_info_url) if hdhub_info_url else None
+        hdhub_tmdb_id = tmdb_url_match.group(2) if tmdb_url_match else None
+        hdhub_tmdb_type = tmdb_url_match.group(1) if tmdb_url_match else None
 
         imdb_details = {}
         tmdb_details = {}
 
-        # 1. Hyperlinked IMDb / TMDb URL Detection
-        if blogger_target:
-            tt_m = re.search(r'tt\d+', blogger_target)
-            tmdb_m = re.search(r'themoviedb\.org/(movie|tv)/(\d+)', blogger_target, re.IGNORECASE)
+        if hdhub_imdb_id:
+            imdb_details = await fetch_imdb_safely(hdhub_imdb_id, is_series=is_series, year=media_info.get("year"))
+            if not is_good_title_match(base_name, imdb_details.get("title", ""), query_year=target_year):
+                imdb_details = {}
 
-            if tt_m:
-                imdb_id = tt_m.group(0)
-                imdb_details = await fetch_imdb_safely(imdb_id, is_series=is_series)
-                tmdb_details = await fetch_tmdb_safely(imdb_id, base_name, is_series=is_series)
-            elif tmdb_m:
-                tm_type = tmdb_m.group(1).lower()
-                tm_id = tmdb_m.group(2)
-                tmdb_details = await fetch_tmdb_safely(tm_id, base_name, is_series=(tm_type == "tv" or is_series))
-                if tmdb_details and tmdb_details.get("imdb_id"):
-                    imdb_details = await fetch_imdb_safely(tmdb_details["imdb_id"], is_series=is_series)
+        if hdhub_tmdb_id and not imdb_details:
+            tmdb_details = await fetch_tmdb_safely(hdhub_tmdb_id, base_name, is_series=(hdhub_tmdb_type == "tv" or is_series), year=media_info.get("year"))
+            if tmdb_details and tmdb_details.get("imdb_id"):
+                imdb_details = await fetch_imdb_safely(tmdb_details["imdb_id"], is_series=is_series, year=media_info.get("year"))
 
-        # 2. Fallback scrape if Blogger link is missing
-        hdhub_genres = "N/A"
-        hdhub_rating = "N/A"
-        hdhub_imdb_url = ""
-        hdhub_tt_id = None
+        if not imdb_details:
+            imdb_details = await fetch_imdb_safely(base_name, is_series=is_series, year=media_info.get("year")) or {}
 
-        if not imdb_details and not tmdb_details:
-            hdhub_genres, hdhub_rating, hdhub_imdb_url, hdhub_is_series = await get_hdhub4u_data(base_name)
-
-            if not is_series and hdhub_is_series:
-                is_series = True
-                media_info["tag"] = "#SERIES"
-                file_data["tag"] = "#SERIES"
-
-            if hdhub_imdb_url and "title/tt" in hdhub_imdb_url:
-                m_tt = re.search(r'(tt\d+)', hdhub_imdb_url)
-                if m_tt:
-                    hdhub_tt_id = m_tt.group(1)
-
-            imdb_lookup_key = hdhub_tt_id or base_name
-            imdb_details = await fetch_imdb_safely(imdb_lookup_key, is_series=is_series, year=media_info.get("year")) or {}
-
-            final_lookup = imdb_details.get("imdb_id") or hdhub_tt_id or base_name
-            tmdb_details = await fetch_tmdb_safely(final_lookup, base_name, is_series=is_series) or {}
+        final_lookup = imdb_details.get("imdb_id") or base_name
+        if not tmdb_details or tmdb_details.get("error"):
+            tmdb_details = await fetch_tmdb_safely(final_lookup, base_name, is_series=is_series, year=media_info.get("year")) or {}
 
         if not tmdb_details or tmdb_details.get("error"):
             error_tmdb = True
@@ -1260,9 +1365,8 @@ async def _process_with_lock(
         poster_url = ""
         is_backdrop = False
 
-        # Poster Selection: Blogger First
-        if blogger_poster:
-            poster_url = blogger_poster
+        if blogger_poster_url:
+            poster_url = blogger_poster_url
             is_backdrop = True
         elif (
             LANDSCAPE_POSTER
@@ -1272,59 +1376,47 @@ async def _process_with_lock(
         ):
             poster_url = tmdb_details.get("backdrop_url")
             is_backdrop = True
-        elif tmdb_details.get("poster_url") and not error_tmdb:
+
+        elif (
+            tmdb_details.get("poster_url")
+            and not error_tmdb
+        ):
             poster_url = tmdb_details.get("poster_url")
+
         else:
             poster_url = (
                 imdb_details.get("poster_url")
                 or imdb_details.get("backdrop_url", "")
             )
 
-        # Rating Logic
+        # Rating selection (HDHub4u -> TMDb -> IMDb -> Fallback)
         imdb_rate = imdb_details.get("rating")
         tmdb_rate = tmdb_details.get("rating")
 
-        if blogger_target:
-            if tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-                rating = f"{float(tmdb_rate):.1f}"
-            elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-                rating = str(imdb_rate).strip()
-            else:
-                rating = "x/10"
+        if hdhub_rating and hdhub_rating not in ("N/A", "x/10"):
+            rating = hdhub_rating
+        elif tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+            rating = str(tmdb_rate).strip()
+        elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+            rating = str(imdb_rate).strip()
         else:
-            if hdhub_rating and hdhub_rating not in ("N/A", "x/10"):
-                rating = hdhub_rating
-            elif tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-                rating = str(tmdb_rate).strip()
-            elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-                rating = str(imdb_rate).strip()
-            elif hdhub_rating == "x/10":
-                rating = "x/10"
-            else:
-                rating = "x/10"
+            rating = "x/10"
 
-        # IMDb URL Logic
+        # Construct IMDb/TMDb link URL
         imdb_url = ""
         final_imdb_id = (
-            imdb_details.get("imdb_id")
-            or (re.search(r'tt\d+', blogger_target).group(0) if blogger_target and re.search(r'tt\d+', blogger_target) else None)
-            or hdhub_tt_id
+            hdhub_imdb_id
+            or imdb_details.get("imdb_id")
             or (tmdb_details.get("imdb_id") if isinstance(tmdb_details, dict) else None)
         )
         if final_imdb_id and str(final_imdb_id).startswith("tt"):
             imdb_url = f"https://www.imdb.com/title/{final_imdb_id}/"
-        elif blogger_target:
-            imdb_url = blogger_target
-        elif hdhub_imdb_url:
-            imdb_url = hdhub_imdb_url
+        elif hdhub_info_url and ("imdb.com" in hdhub_info_url or "themoviedb.org" in hdhub_info_url):
+            imdb_url = hdhub_info_url
+        elif is_series and tmdb_details.get("id"):
+            imdb_url = f"https://www.themoviedb.org/tv/{tmdb_details.get('id')}"
         elif tmdb_details.get("id"):
-            media_type = "tv" if is_series else "movie"
-            imdb_url = f"https://www.themoviedb.org/{media_type}/{tmdb_details.get('id')}"
-        elif imdb_details.get("url"):
-            imdb_url = imdb_details.get("url")
-        else:
-            clean_q = re.sub(r'[^a-zA-Z0-9\s]', '', official_search_title).strip()
-            imdb_url = f"https://www.imdb.com/find/?q={quote_plus(clean_q)}"
+            imdb_url = f"https://www.themoviedb.org/movie/{tmdb_details.get('id')}"
 
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
@@ -1357,54 +1449,55 @@ async def _process_with_lock(
 
         certificates = (
             tmdb_details.get("certificates")
-            if tmdb_details.get("certificates") and tmdb_details.get("certificates") != "N/A"
+            if tmdb_details.get("certificates")
+            and tmdb_details.get("certificates") != "N/A"
             else imdb_details.get("certificates", "N/A")
         )
 
-        # Genres extraction helper
-        def parse_genre_string_or_list(source_data):
-            extracted = []
+        # Genres Priority (Merge HDHub4u + TMDb + IMDb without duplicates)
+        raw_genre_list = []
+
+        def extract_clean(source_data):
             if not source_data or source_data == "N/A":
-                return extracted
+                return
             if isinstance(source_data, str):
                 for p in re.split(r'[,|/•&]+', source_data):
-                    p_clean = re.sub(r'[\'"`“”‘’\\{}\[\]()<>]', '', p)
-                    p_clean = re.sub(r'\b(?:info|trailer)\b', '', p_clean, flags=re.IGNORECASE).strip().title()
+                    p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip().title()
                     if p_clean and len(p_clean) >= 2 and p_clean.lower() not in ["n/a", "none", "dropdown", "menu", "select", "category"]:
-                        if p_clean not in extracted:
-                            extracted.append(p_clean)
+                        if p_clean not in raw_genre_list:
+                            raw_genre_list.append(p_clean)
             elif isinstance(source_data, (list, tuple)):
                 for g in source_data:
                     if isinstance(g, dict):
                         name = g.get("name") or g.get("genre")
                         if name:
-                            nm = re.sub(r'[\'"`“”‘’\\{}\[\]()<>]', '', str(name)).strip().title()
-                            if nm and nm not in extracted:
-                                extracted.append(nm)
+                            nm = str(name).strip().title()
+                            if nm and nm not in raw_genre_list:
+                                raw_genre_list.append(nm)
                     elif isinstance(g, str):
-                        g_clean = re.sub(r'[\'"`“”‘’\\{}\[\]()<>]', '', g).strip().title()
-                        if g_clean and g_clean != "N/A" and g_clean not in extracted and len(g_clean) >= 2:
-                            extracted.append(g_clean)
-            return extracted
+                        g_clean = g.strip().title()
+                        if g_clean and g_clean != "N/A" and g_clean not in raw_genre_list and len(g_clean) >= 2:
+                            raw_genre_list.append(g_clean)
 
-        final_genre_list = []
-        if blogger_target:
-            if imdb_details and isinstance(imdb_details, dict):
-                final_genre_list = parse_genre_string_or_list(imdb_details.get("genres"))
-            if not final_genre_list and tmdb_details and isinstance(tmdb_details, dict):
-                final_genre_list = parse_genre_string_or_list(tmdb_details.get("genres"))
-        else:
-            if hdhub_genres and hdhub_genres != "N/A":
-                final_genre_list = parse_genre_string_or_list(hdhub_genres)
-            if not final_genre_list and imdb_details and isinstance(imdb_details, dict):
-                final_genre_list = parse_genre_string_or_list(imdb_details.get("genres"))
-            if not final_genre_list and tmdb_details and isinstance(tmdb_details, dict):
-                final_genre_list = parse_genre_string_or_list(tmdb_details.get("genres"))
+        # HDHub4u genres first, then fallback to API
+        if hdhub_genres and hdhub_genres != "N/A":
+            extract_clean(hdhub_genres)
+        if imdb_details and isinstance(imdb_details, dict):
+            extract_clean(imdb_details.get("genres"))
+        if tmdb_details and isinstance(tmdb_details, dict):
+            extract_clean(tmdb_details.get("genres"))
 
-        genres = ", ".join(final_genre_list) if final_genre_list else "N/A"
+        cleaned_genres = []
+        sorted_candidates = sorted(list(set(raw_genre_list)), key=len, reverse=True)
+        for g in sorted_candidates:
+            if not any(g.lower() in existing.lower() and g.lower() != existing.lower() for existing in cleaned_genres):
+                cleaned_genres.append(g)
+
+        genres = ", ".join(sorted(cleaned_genres)) if cleaned_genres else "N/A"
 
         movie_year = (
             media_info.get("year")
+            or (str(target_year) if target_year else None)
             or imdb_details.get("year")
             or tmdb_details.get("year")
         )
@@ -1488,12 +1581,23 @@ async def _process_with_lock(
 
         current_db_rating = movie_doc.get("rating")
         current_db_imdb_url = movie_doc.get("imdb_url")
+        current_db_genres = movie_doc.get("genres")
 
-        if not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10") or not current_db_imdb_url:
-            imdb_details = await fetch_imdb_safely(base_name, is_series=is_series, year=media_info.get("year")) or {}
-            final_imdb_id = imdb_details.get("imdb_id")
-            if final_imdb_id and str(final_imdb_id).startswith("tt"):
-                update_fields.setdefault("$set", {})["imdb_url"] = f"https://www.imdb.com/title/{final_imdb_id}/"
+        # Auto repair missing details in existing documents
+        if (
+            not current_db_rating
+            or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10")
+            or not current_db_imdb_url
+            or not current_db_genres
+            or current_db_genres == "N/A"
+        ):
+            hdhub_genres, hdhub_rating, hdhub_info_url, _ = await get_hdhub4u_data(base_name, target_year=target_year)
+            if hdhub_rating and hdhub_rating not in ("N/A", "x/10"):
+                update_fields.setdefault("$set", {})["rating"] = hdhub_rating
+            if hdhub_genres and hdhub_genres != "N/A":
+                update_fields.setdefault("$set", {})["genres"] = hdhub_genres
+            if hdhub_info_url:
+                update_fields.setdefault("$set", {})["imdb_url"] = hdhub_info_url
 
         await db.movie_updates.update_one(
             {"_id": base_name},
@@ -1770,14 +1874,21 @@ def generate_movie_message(movie_doc, base_name):
     is_series = (primary_tag == "#SERIES")
 
     epi_block = ""
+
     if episodes_by_season:
         episode_lines = []
-        for season, episodes in sorted(episodes_by_season.items(), key=lambda x: int(x[0])):
+
+        for season, episodes in sorted(
+            episodes_by_season.items(),
+            key=lambda x: int(x[0])
+        ):
             regular_eps = set()
+
             for ep in episodes:
                 ep_str = str(ep).strip()
                 if not ep_str or ep_str.lower() in ("episodes", "episode"):
                     continue
+
                 if ep_str.lower().startswith("bonus") or ep_str.lower().startswith("special"):
                     ep_str = re.sub(r'(?i)(?:bonus|special)\s*', '', ep_str).strip()
 
@@ -1818,15 +1929,12 @@ def generate_movie_message(movie_doc, base_name):
             epi_block = f"\n📺 ᴇᴘɪsᴏᴅᴇs : <b>{epi_str}</b>"
 
     genres = movie_doc.get("genres", "N/A")
-    if genres and genres != "N/A":
-        genres = re.sub(r'[\'"`“”‘’\\]', '', str(genres)).strip().rstrip(" ,-")
-
     quality_str = format_movie_qualities(all_raw_qualities)
     language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
     ott_str = " | ".join(sorted(all_ott_platforms)) if all_ott_platforms else "N/A"
 
     raw_rating = str(movie_doc.get("rating", "x/10")).strip()
-    imdb_url = movie_doc.get("imdb_url", "").strip()
+    imdb_url = movie_doc.get("imdb_url", "")
 
     if raw_rating.lower() in ("x/10", "x", "n/a", "-", "none", "", "0", "0.0", "null"):
         rating_display = "<small>x/10</small>"
@@ -1837,10 +1945,7 @@ def generate_movie_message(movie_doc, base_name):
     if imdb_url:
         rating_text = f'<a href="{imdb_url}">{rating_display}</a>'
     else:
-        search_target = movie_doc.get("title") or base_name
-        search_target = re.sub(r'[^a-zA-Z0-9\s]', '', search_target).strip()
-        fallback_url = f"https://www.imdb.com/find/?q={quote_plus(search_target)}"
-        rating_text = f'<a href="{fallback_url}">{rating_display}</a>'
+        rating_text = rating_display
 
     raw_runtime = movie_doc.get("runtime", "N/A")
     runtime = format_runtime(raw_runtime, is_series=is_series)
@@ -1848,13 +1953,15 @@ def generate_movie_message(movie_doc, base_name):
 
     stored_title = movie_doc.get("title", base_name)
     stored_title = re.sub(r'[:,]?\s*(?:Episode|Ep)\s*\d+.*', '', stored_title, flags=re.IGNORECASE).strip()
-    stored_title = re.sub(r'[\'"`“”‘’]', '', stored_title).strip()
-
+    stored_title = re.sub(r'["\']', '', stored_title).strip()
+    
     display_title = re.sub(r'\s+Season\s*\d+', '', stored_title, flags=re.IGNORECASE).strip()
     display_title = re.sub(r'\s+S\d+', '', display_title, flags=re.IGNORECASE).strip()
     display_title = display_title.strip(" :,-\"'")
 
     movie_year = movie_doc.get("year")
+    
+    # Old movies ke caption me clean Year hamesha include hoga
     if movie_year and str(movie_year) not in str(display_title) and primary_tag != "#SERIES":
         filename_display = f"{display_title} {movie_year}"
     else:
