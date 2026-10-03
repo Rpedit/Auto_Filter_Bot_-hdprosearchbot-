@@ -466,9 +466,10 @@ def parse_clean_rating(val) -> Optional[str]:
 async def resolve_live_hdhub_domain() -> str:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9"
     }
-    timeout = aiohttp.ClientTimeout(total=6)
+    timeout = aiohttp.ClientTimeout(total=8)
 
     current_stored = None
     try:
@@ -490,19 +491,37 @@ async def resolve_live_hdhub_domain() -> str:
                 continue
             try:
                 async with session.get(candidate, headers=headers, allow_redirects=True) as resp:
-                    if resp.status in (200, 301, 302, 307, 308):
-                        final_url = str(resp.url).rstrip("/")
-                        match = re.match(r'(https?://[^/]+)', final_url)
-                        if match:
-                            live_domain = match.group(1)
-                            if hasattr(db, 'db') and live_domain != current_stored:
-                                await db.db.settings.update_one(
-                                    {"_id": "hdhub_base_url"},
-                                    {"$set": {"url": live_domain}},
-                                    upsert=True
-                                )
-                                logger.info(f"🔄 [HDHub4u Permanent Gateway] Active Domain Set To: {live_domain}")
-                            return live_domain
+                    if resp.status != 200:
+                        continue
+                    html = await resp.text()
+                    final_url = str(resp.url).rstrip("/")
+
+                soup = BeautifulSoup(html, "html.parser")
+
+                # SCREENSHOT FIX: Extract 'View Full Site' button href
+                view_button = soup.find("a", string=re.compile(r"view\s*full\s*site", re.I))
+                if not view_button:
+                    view_button = soup.select_one("a.btn, a[href*='hdhub4u'], a[href*='http']")
+
+                if view_button and view_button.get("href"):
+                    target_url = view_button["href"].strip()
+                    m = re.match(r'(https?://[^/]+)', target_url)
+                    if m:
+                        live_domain = m.group(1).rstrip("/")
+                        if hasattr(db, 'db') and live_domain != current_stored:
+                            await db.db.settings.update_one(
+                                {"_id": "hdhub_base_url"},
+                                {"$set": {"url": live_domain}},
+                                upsert=True
+                            )
+                            logger.info(f"🎯 [HDHub4u Live Domain Resolved via Button]: {live_domain}")
+                        return live_domain
+
+                match = re.match(r'(https?://[^/]+)', final_url)
+                if match:
+                    live_domain = match.group(1).rstrip("/")
+                    return live_domain
+
             except Exception as e:
                 logger.debug(f"Gateway check failed for {candidate}: {e}")
                 continue
@@ -772,6 +791,28 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
                             continue
                         return "N/A", "N/A", "", False
                     html = await resp.text()
+
+            # SCREENSHOT FIX: Check if intermediate landing page was returned
+            landing_soup = BeautifulSoup(html, "html.parser")
+            landing_btn = landing_soup.find("a", string=re.compile(r"view\s*full\s*site", re.I))
+            if landing_btn and landing_btn.get("href"):
+                target_href = landing_btn["href"].strip()
+                match = re.match(r'(https?://[^/]+)', target_href)
+                if match:
+                    new_base = match.group(1).rstrip("/")
+                    logger.info(f"Bypassing landing page -> Re-searching on: {new_base}")
+                    if hasattr(db, 'db'):
+                        await db.db.settings.update_one(
+                            {"_id": "hdhub_base_url"},
+                            {"$set": {"url": new_base}},
+                            upsert=True
+                        )
+                    search_url = f"{new_base}/?s={effective_query}"
+                    async with aiohttp.ClientSession(timeout=timeout) as session:
+                        async with session.get(search_url, headers=headers, allow_redirects=True) as resp:
+                            if resp.status == 200:
+                                html = await resp.text()
+
             break
         except Exception as e:
             if attempt == 0:
