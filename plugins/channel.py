@@ -21,7 +21,7 @@ from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# ----------------- HDHUB4U PERMANENT GATEWAYS (OFFICIAL) -----------------
+# ----------------- HDHUB4U PERMANENT GATEWAYS (OFFICIAL ONLY) -----------------
 HDHUB_PERMANENT_GATEWAYS = [
     "https://hdhub4u.ms",
     "https://hdhub4u.ag",
@@ -465,9 +465,8 @@ def parse_clean_rating(val) -> Optional[str]:
 
 # ----------------- DIRECT OFFICIAL LIVE IMDB ENGINE -----------------
 async def fetch_imdb_live_data(title: str, year: Optional[int] = None, direct_tt: Optional[str] = None) -> dict:
-    """Official IMDb page se exact live rating, genres aur link fetch karta hai."""
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9"
     }
     timeout = aiohttp.ClientTimeout(total=7)
@@ -510,7 +509,6 @@ async def fetch_imdb_live_data(title: str, year: Optional[int] = None, direct_tt
                     html = await resp.text()
                     soup = BeautifulSoup(html, "html.parser")
 
-                    # Live score match (e.g., 8.2)
                     rate_tag = (
                         soup.select_one('[data-testid="hero-rating-bar__aggregate-rating__score"] span')
                         or soup.select_one('.ratingValue span')
@@ -521,7 +519,6 @@ async def fetch_imdb_live_data(title: str, year: Optional[int] = None, direct_tt
                         if val:
                             res["rating"] = val
 
-                    # Live genres
                     genre_tags = soup.select('[data-testid="genres"] a, .ipc-chip__text')
                     found_genres = []
                     for g in genre_tags:
@@ -536,9 +533,22 @@ async def fetch_imdb_live_data(title: str, year: Optional[int] = None, direct_tt
     return res
 
 
+# ----------------- HDHUB4U LIVE DOMAIN RESOLVER (STRICT NO 4K) -----------------
+def is_valid_hdhub_domain(url: str) -> bool:
+    """Strictly ensures domain is pure HDHub4u and NOT any 4k mirror."""
+    if not url:
+        return False
+    u = url.lower()
+    if "4k" in u:
+        return False
+    if "hdhub4u" in u:
+        return True
+    return False
+
+
 async def resolve_live_hdhub_domain() -> str:
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9"
     }
@@ -548,14 +558,14 @@ async def resolve_live_hdhub_domain() -> str:
     try:
         if hasattr(db, 'db'):
             setting = await db.db.settings.find_one({"_id": "hdhub_base_url"})
-            if setting and setting.get("url"):
+            if setting and setting.get("url") and is_valid_hdhub_domain(setting["url"]):
                 current_stored = setting["url"].rstrip("/")
     except Exception:
         pass
 
     candidates = [current_stored] if current_stored else []
     for gw in HDHUB_PERMANENT_GATEWAYS:
-        if gw not in candidates:
+        if gw not in candidates and is_valid_hdhub_domain(gw):
             candidates.append(gw)
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -571,29 +581,28 @@ async def resolve_live_hdhub_domain() -> str:
 
                 soup = BeautifulSoup(html, "html.parser")
 
-                # SCREENSHOT FIX: Extract 'View Full Site' button href
-                view_button = soup.find("a", string=re.compile(r"view\s*full\s*site", re.I))
-                if not view_button:
-                    view_button = soup.select_one("a.btn, a[href*='hdhub4u'], a[href*='http']")
-
+                # Parse official button link (Strictly block 4k domains)
+                view_button = soup.find("a", string=re.compile(r"view\s*full\s*site", re.I)) or soup.select_one("a.btn, a[href*='hdhub4u']")
                 if view_button and view_button.get("href"):
                     target_url = view_button["href"].strip()
                     m = re.match(r'(https?://[^/]+)', target_url)
                     if m:
                         live_domain = m.group(1).rstrip("/")
-                        if hasattr(db, 'db') and live_domain != current_stored:
-                            await db.db.settings.update_one(
-                                {"_id": "hdhub_base_url"},
-                                {"$set": {"url": live_domain}},
-                                upsert=True
-                            )
-                            logger.info(f"🎯 [HDHub4u Live Domain Resolved via Button]: {live_domain}")
-                        return live_domain
+                        if is_valid_hdhub_domain(live_domain):
+                            if hasattr(db, 'db') and live_domain != current_stored:
+                                await db.db.settings.update_one(
+                                    {"_id": "hdhub_base_url"},
+                                    {"$set": {"url": live_domain}},
+                                    upsert=True
+                                )
+                                logger.info(f"🎯 [HDHub4u Domain Resolved]: {live_domain}")
+                            return live_domain
 
                 match = re.match(r'(https?://[^/]+)', final_url)
                 if match:
                     live_domain = match.group(1).rstrip("/")
-                    return live_domain
+                    if is_valid_hdhub_domain(live_domain):
+                        return live_domain
 
             except Exception as e:
                 logger.debug(f"Gateway check failed for {candidate}: {e}")
@@ -606,7 +615,7 @@ async def get_hdhub_base_url(force_refresh: bool = False) -> str:
     global _CACHED_HDHUB_DOMAIN, _DOMAIN_CACHE_EXPIRY
     current_time = asyncio.get_event_loop().time()
 
-    if not force_refresh and _CACHED_HDHUB_DOMAIN and current_time < _DOMAIN_CACHE_EXPIRY:
+    if not force_refresh and _CACHED_HDHUB_DOMAIN and is_valid_hdhub_domain(_CACHED_HDHUB_DOMAIN) and current_time < _DOMAIN_CACHE_EXPIRY:
         return _CACHED_HDHUB_DOMAIN
 
     detected_domain = await resolve_live_hdhub_domain()
@@ -813,6 +822,9 @@ async def set_domain_handler(bot, message):
             f"💡 **Usage:** <code>/setdomain https://new-domain.com</code>"
         )
     new_url = message.command[1].strip().split("?")[0].rstrip("/")
+    if not is_valid_hdhub_domain(new_url):
+        return await message.reply_text("❌ Sirf pure HDHub4u domain allow hai (4K domains are blocked)!")
+
     try:
         await db.db.settings.update_one(
             {"_id": "hdhub_base_url"},
@@ -824,6 +836,7 @@ async def set_domain_handler(bot, message):
         await message.reply_text(f"❌ Failed to update domain: {e}")
 
 
+# ----------------- HDHUB4U EXCLUSIVE SCRAPER (STRICT NO 4K) -----------------
 async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) -> Tuple[str, str, str, bool]:
     genres = "N/A"
     rating = "N/A"
@@ -841,57 +854,60 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
     effective_query = "+".join(search_words) if search_words else clean_query.replace(" ", "+")
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9,hi;q=0.8"
+        "Accept-Language": "en-US,en;q=0.9,hi;q=0.8",
+        "Sec-Ch-Ua": '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Upgrade-Insecure-Requests": "1"
     }
 
     html = ""
     movie_page_url = None
     matched_title = ""
 
-    for attempt in range(2):
-        base_url = await get_hdhub_base_url(force_refresh=(attempt == 1))
-        search_url = f"{base_url.rstrip('/')}/?s={effective_query}"
+    test_domains = []
+    base_cached = await get_hdhub_base_url()
+    if base_cached and is_valid_hdhub_domain(base_cached):
+        test_domains.append(base_cached)
+    for gw in HDHUB_PERMANENT_GATEWAYS:
+        if gw not in test_domains and is_valid_hdhub_domain(gw):
+            test_domains.append(gw)
 
-        try:
-            timeout = aiohttp.ClientTimeout(total=8)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+    timeout = aiohttp.ClientTimeout(total=8)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for domain in test_domains:
+            search_url = f"{domain.rstrip('/')}/?s={effective_query}"
+            try:
                 async with session.get(search_url, headers=headers, allow_redirects=True) as resp:
-                    if resp.status != 200:
-                        if attempt == 0:
-                            logger.warning(f"HDHub4u {base_url} returned status {resp.status}. Refreshing via Permanent Gateways...")
-                            continue
-                        return "N/A", "N/A", "", False
-                    html = await resp.text()
+                    if resp.status == 200:
+                        html = await resp.text()
 
-            landing_soup = BeautifulSoup(html, "html.parser")
-            landing_btn = landing_soup.find("a", string=re.compile(r"view\s*full\s*site", re.I))
-            if landing_btn and landing_btn.get("href"):
-                target_href = landing_btn["href"].strip()
-                match = re.match(r'(https?://[^/]+)', target_href)
-                if match:
-                    new_base = match.group(1).rstrip("/")
-                    logger.info(f"Bypassing landing page -> Re-searching on: {new_base}")
-                    if hasattr(db, 'db'):
-                        await db.db.settings.update_one(
-                            {"_id": "hdhub_base_url"},
-                            {"$set": {"url": new_base}},
-                            upsert=True
-                        )
-                    search_url = f"{new_base}/?s={effective_query}"
-                    async with aiohttp.ClientSession(timeout=timeout) as session:
-                        async with session.get(search_url, headers=headers, allow_redirects=True) as resp:
-                            if resp.status == 200:
-                                html = await resp.text()
+                        landing_soup = BeautifulSoup(html, "html.parser")
+                        landing_btn = landing_soup.find("a", string=re.compile(r"view\s*full\s*site", re.I)) or landing_soup.select_one("a.btn, a[href*='hdhub4u']")
+                        if landing_btn and landing_btn.get("href"):
+                            target_href = landing_btn["href"].strip()
+                            match = re.match(r'(https?://[^/]+)', target_href)
+                            if match:
+                                new_base = match.group(1).rstrip("/")
+                                if is_valid_hdhub_domain(new_base):
+                                    async with session.get(f"{new_base}/?s={effective_query}", headers=headers, allow_redirects=True) as r2:
+                                        if r2.status == 200:
+                                            html = await r2.text()
+                                            domain = new_base
 
-            break
-        except Exception as e:
-            if attempt == 0:
-                logger.warning(f"Connection failed for {base_url} ({e}). Retrying with fresh gateways...")
+                        if hasattr(db, 'db') and is_valid_hdhub_domain(domain):
+                            await db.db.settings.update_one({"_id": "hdhub_base_url"}, {"$set": {"url": domain}}, upsert=True)
+                        break
+                    else:
+                        logger.warning(f"HDHub4u {domain} returned {resp.status}, trying next mirror...")
+            except Exception as e:
+                logger.debug(f"Search failed on {domain}: {e}")
                 continue
-            logger.error(f"Failed scraping HDHub4u after retry: {e}")
-            return "N/A", "N/A", "", False
 
     if not html:
         return "N/A", "N/A", "", False
@@ -901,32 +917,20 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
         tag.decompose()
 
     candidate_items = []
-    for art in soup.select("article, .post-item, .recent-movies li, .entry-title, .thumb"):
-        a_tag = art.find("a", href=True)
+    for art in soup.select("article, .post-item, .recent-movies li, .entry-title, .thumb, h2 a, h3 a"):
+        a_tag = art if art.name == "a" else art.find("a", href=True)
         if not a_tag:
             continue
-        href = a_tag["href"].strip()
-        if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/", "/wp-content/"]):
+        href = a_tag.get("href", "").strip()
+        if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
             continue
-        img_alt = art.find("img").get("alt", "") if art.find("img") else ""
-        title_text = f"{a_tag.get('title', '')} {a_tag.get_text()} {img_alt}".strip()
-
-        if re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', title_text, re.IGNORECASE):
-            continue
-        candidate_items.append((title_text, href))
-
-    if not candidate_items:
-        for a in soup.select("h2 a, h3 a, .entry-title a, .recent-movies a, a[rel='bookmark']"):
-            href = a.get("href", "")
-            title_text = a.get_text().strip()
-            if href and not any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
-                if not re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', title_text, re.IGNORECASE):
-                    candidate_items.append((title_text, href))
+        title_text = f"{a_tag.get('title', '')} {a_tag.get_text()}".strip()
+        if not re.search(r'\b(?:review|trailer|teaser|reaction)\b', title_text, re.IGNORECASE):
+            candidate_items.append((title_text, href))
 
     target_sequel = extract_sequel_num(base_name) or extract_sequel_num(clean_query)
     target_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', base_name, re.IGNORECASE)
     target_season = int(target_s_match.group(1)) if target_s_match else None
-    target_has_ott = bool(re.search(r'\bott\b', base_name, re.IGNORECASE))
 
     for title_text, href in candidate_items:
         cand_year = extract_year_from_text(title_text)
@@ -935,10 +939,6 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
 
         cand_sequel = extract_sequel_num(title_text)
         if target_sequel != cand_sequel:
-            continue
-
-        cand_has_ott = bool(re.search(r'\bott\b', title_text, re.IGNORECASE))
-        if target_has_ott != cand_has_ott:
             continue
 
         if target_season is not None:
@@ -958,7 +958,6 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
         is_series = True
 
     try:
-        timeout = aiohttp.ClientTimeout(total=8)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(movie_page_url, headers=headers, allow_redirects=True) as resp:
                 if resp.status != 200:
@@ -966,12 +965,9 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
                 movie_html = await resp.text()
 
         movie_soup = BeautifulSoup(movie_html, "html.parser")
-        search_area = (
-            movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
-            or movie_soup.body
-            or movie_soup
-        )
+        search_area = movie_soup.select_one(".entry-content, .post-content, article, .k-post-content") or movie_soup.body or movie_soup
 
+        # Extract IMDb/TMDb link
         for a_tag in search_area.find_all("a", href=True):
             href = a_tag["href"].strip()
             m_imdb = re.search(r'(?:imdb\.com/(?:title/)?|title/)(tt\d+)', href, re.IGNORECASE)
@@ -983,73 +979,32 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
                 info_url = f"https://www.themoviedb.org/{m_tmdb.group(1)}/{m_tmdb.group(2)}"
                 break
 
-        raw_content_str = str(search_area)
-        if not info_url:
-            m_imdb = re.search(r'https?://(?:www\.)?(?:m\.)?imdb\.com/title/(tt\d+)/?', raw_content_str, re.IGNORECASE)
-            if m_imdb:
-                info_url = f"https://www.imdb.com/title/{m_imdb.group(1)}/"
-            else:
-                m_tmdb = re.search(r'https?://(?:www\.)?themoviedb\.org/(movie|tv)/(\d+)', raw_content_str, re.IGNORECASE)
-                if m_tmdb:
-                    info_url = f"https://www.themoviedb.org/{m_tmdb.group(1)}/{m_tmdb.group(2)}"
-
         for br in movie_soup.find_all(["br", "hr"]):
             br.replace_with("\n")
         for block_elem in movie_soup.find_all(["p", "div", "h1", "h2", "h3", "h4", "li", "tr"]):
             block_elem.append("\n")
-        for tag in movie_soup(["header", "nav", "footer", "aside", "script", "style", "iframe"]):
-            tag.decompose()
 
         full_page_text = search_area.get_text()
 
-        rating_patterns = [
-            r'(?:IMDb|IMDB)\s*(?:Rating|Ratings)?\s*[:\-•.\s]*\s*([0-9](?:\.[0-9])?)\s*(?:/\s*10)?',
-            r'(?:Rating|Ratings|Score)\s*[:\-•.\s]*\s*([0-9](?:\.[0-9])?)\s*(?:/\s*10)?',
-            r'(?:⭐|★)\s*([0-9](?:\.[0-9])?)\s*(?:/\s*10)?',
-            r'\b([1-9](?:\.[0-9])?)\s*/\s*10\b'
-        ]
+        # 1. Exact HDHub4u Rating Capture
+        r_match = re.search(r'(?:IMDb|IMDB|Rating|Ratings|Score)\s*(?:Rating|Ratings)?\s*[:\-•.\s]*\s*([0-9](?:\.[0-9])?)\s*(?:/\s*10)?', full_page_text, re.IGNORECASE)
+        if r_match:
+            val = parse_clean_rating(r_match.group(1))
+            if val:
+                rating = val
 
-        for pat in rating_patterns:
-            matches = re.finditer(pat, full_page_text, re.IGNORECASE)
-            for m in matches:
-                clean_num = parse_clean_rating(m.group(1).strip())
-                if clean_num:
-                    rating = clean_num
-                    break
-            if rating != "N/A":
-                break
-
+        # 2. Exact HDHub4u Genres Capture
         g_match = re.search(r'\b(?:Genre|Genres)\s*[:\-–]\s*([^\n\r]+)', full_page_text, re.IGNORECASE)
         if g_match:
-            candidate = g_match.group(1).strip()
-            candidate = re.split(
-                r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline|Info|Trailer|Screenshots?|Plot)\b',
-                candidate,
-                flags=re.IGNORECASE
-            )[0]
-            candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
-            parts = re.split(r'[,|/•&]', candidate)
-            cleaned_genres = []
-            for p in parts:
-                p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip().title()
-                if p_clean and 2 <= len(p_clean) <= 25 and not any(
-                    bad in p_clean.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download", "n/a"]
-                ):
-                    cleaned_genres.append(p_clean)
-            if cleaned_genres:
-                genres = ", ".join(cleaned_genres)
-
-        if genres == "N/A":
-            cat_links = search_area.select(".cat-links a, a[rel='category tag'], .entry-category a, .genres a")
-            extracted_categories = [
-                c.get_text().strip().title() for c in cat_links 
-                if len(c.get_text().strip()) >= 3 and not any(bad in c.get_text().lower() for bad in ["movies", "bollywood", "hollywood", "dual", "hindi", "720p", "480p", "1080p", "hevc"])
-            ]
-            if extracted_categories:
-                genres = ", ".join(extracted_categories[:4])
+            raw_g = g_match.group(1).strip()
+            raw_g = re.split(r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline|Screenshots?)\b', raw_g, flags=re.IGNORECASE)[0]
+            parts = re.split(r'[,|/•&]', raw_g)
+            clean_g = [p.strip().title() for p in parts if len(p.strip()) >= 2 and not any(bad in p.lower() for bad in ["dropdown", "download", "select", "click", "n/a"])]
+            if clean_g:
+                genres = ", ".join(clean_g)
 
     except Exception as e:
-        logger.error(f"Error scraping movie page: {e}")
+        logger.error(f"Error scraping details from HDHub4u: {e}")
 
     return genres, rating, info_url, is_series
 
@@ -1488,7 +1443,7 @@ async def _process_with_lock(
 
     if not movie_doc or is_mismatched:
         blogger_poster_url = await get_blogger_poster_url(base_name, media_info.get("year"))
-        
+
         hdhub_genres, hdhub_rating, hdhub_info_url, hdhub_is_series = await get_hdhub4u_data(base_name, target_year=target_year)
 
         if not is_series and hdhub_is_series:
@@ -1503,7 +1458,6 @@ async def _process_with_lock(
         hdhub_tmdb_id = tmdb_url_match.group(2) if tmdb_url_match else None
         hdhub_tmdb_type = tmdb_url_match.group(1) if tmdb_url_match else None
 
-        # 1. LIVE OFFICIAL IMDB SCRAPING (Priority 1)
         live_imdb = await fetch_imdb_live_data(base_name, target_year, direct_tt=hdhub_imdb_id)
 
         imdb_details = {}
@@ -1559,19 +1513,21 @@ async def _process_with_lock(
                 or imdb_details.get("backdrop_url", "")
             )
 
-        # STRICT RATING HIERARCHY: Real Live IMDb Page -> HDHub4u Text -> API Fallback
-        rating = (
-            parse_clean_rating(live_imdb.get("rating"))
-            or parse_clean_rating(hdhub_rating)
-            or parse_clean_rating(imdb_details.get("rating"))
-            or parse_clean_rating(tmdb_details.get("rating"))
-            or "x/10"
-        )
+        # ----------------- STRICT RATING PRIORITY: HDHUB4U FIRST -----------------
+        if hdhub_rating and hdhub_rating not in ("N/A", "x/10"):
+            rating = hdhub_rating
+        else:
+            rating = (
+                parse_clean_rating(live_imdb.get("rating"))
+                or parse_clean_rating(imdb_details.get("rating"))
+                or parse_clean_rating(tmdb_details.get("rating"))
+                or "x/10"
+            )
 
         imdb_url = ""
         final_imdb_id = (
-            live_imdb.get("imdb_id")
-            or hdhub_imdb_id
+            hdhub_imdb_id
+            or live_imdb.get("imdb_id")
             or imdb_details.get("imdb_id")
             or (tmdb_details.get("imdb_id") if isinstance(tmdb_details, dict) else None)
         )
@@ -1646,22 +1602,23 @@ async def _process_with_lock(
                         if g_clean and g_clean != "N/A" and g_clean not in raw_genre_list and len(g_clean) >= 2:
                             raw_genre_list.append(g_clean)
 
-        if live_imdb.get("genres") and live_imdb["genres"] != "N/A":
-            extract_clean(live_imdb["genres"])
         if hdhub_genres and hdhub_genres != "N/A":
-            extract_clean(hdhub_genres)
-        if imdb_details and isinstance(imdb_details, dict):
-            extract_clean(imdb_details.get("genres"))
-        if tmdb_details and isinstance(tmdb_details, dict):
-            extract_clean(tmdb_details.get("genres"))
+            genres = hdhub_genres
+        else:
+            if live_imdb.get("genres") and live_imdb["genres"] != "N/A":
+                extract_clean(live_imdb["genres"])
+            if imdb_details and isinstance(imdb_details, dict):
+                extract_clean(imdb_details.get("genres"))
+            if tmdb_details and isinstance(tmdb_details, dict):
+                extract_clean(tmdb_details.get("genres"))
 
-        cleaned_genres = []
-        sorted_candidates = sorted(list(set(raw_genre_list)), key=len, reverse=True)
-        for g in sorted_candidates:
-            if not any(g.lower() in existing.lower() and g.lower() != existing.lower() for existing in cleaned_genres):
-                cleaned_genres.append(g)
+            cleaned_genres = []
+            sorted_candidates = sorted(list(set(raw_genre_list)), key=len, reverse=True)
+            for g in sorted_candidates:
+                if not any(g.lower() in existing.lower() and g.lower() != existing.lower() for existing in cleaned_genres):
+                    cleaned_genres.append(g)
 
-        genres = ", ".join(sorted(cleaned_genres)) if cleaned_genres else "N/A"
+            genres = ", ".join(sorted(cleaned_genres)) if cleaned_genres else "N/A"
 
         movie_year = (
             media_info.get("year")
@@ -1747,32 +1704,28 @@ async def _process_with_lock(
         if (not current_db_runtime or str(current_db_runtime).strip().upper() in ("N/A", "NONE", "0", "")) and final_file_runtime != "N/A":
             update_fields.setdefault("$set", {})["runtime"] = final_file_runtime
 
-        # AUTO-REFRESH LIVE RATING & GENRES ON NEW FILE UPLOAD
+        # ----------------- REAL-TIME LIVE UPDATE ON NEW FILES -----------------
         current_db_rating = movie_doc.get("rating")
         current_db_imdb_url = movie_doc.get("imdb_url")
         current_db_genres = movie_doc.get("genres")
 
-        direct_tt_match = re.search(r'tt\d+', str(current_db_imdb_url)) if current_db_imdb_url else None
+        hdhub_genres, hdhub_rating, hdhub_info_url, _ = await get_hdhub4u_data(base_name, target_year=target_year)
+        direct_tt_match = re.search(r'tt\d+', str(current_db_imdb_url or hdhub_info_url))
         live_refresh = await fetch_imdb_live_data(base_name, target_year, direct_tt=direct_tt_match.group(0) if direct_tt_match else None)
 
-        if live_refresh.get("rating") and live_refresh["rating"] != "N/A":
-            if parse_clean_rating(live_refresh["rating"]) != parse_clean_rating(current_db_rating):
-                update_fields.setdefault("$set", {})["rating"] = parse_clean_rating(live_refresh["rating"])
-        elif not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10"):
-            hdhub_genres, hdhub_rating, hdhub_info_url, _ = await get_hdhub4u_data(base_name, target_year=target_year)
-            repaired_rate = parse_clean_rating(hdhub_rating)
-            if repaired_rate:
-                update_fields.setdefault("$set", {})["rating"] = repaired_rate
+        fresh_rating = parse_clean_rating(hdhub_rating) or parse_clean_rating(live_refresh.get("rating"))
+        if fresh_rating and fresh_rating != parse_clean_rating(current_db_rating):
+            update_fields.setdefault("$set", {})["rating"] = fresh_rating
 
-        if live_refresh.get("genres") and live_refresh["genres"] != "N/A":
+        if hdhub_genres and hdhub_genres != "N/A":
+            update_fields.setdefault("$set", {})["genres"] = hdhub_genres
+        elif live_refresh.get("genres") and live_refresh["genres"] != "N/A":
             update_fields.setdefault("$set", {})["genres"] = live_refresh["genres"]
-        elif not current_db_genres or current_db_genres == "N/A":
-            hdhub_genres, _, _, _ = await get_hdhub4u_data(base_name, target_year=target_year)
-            if hdhub_genres and hdhub_genres != "N/A":
-                update_fields.setdefault("$set", {})["genres"] = hdhub_genres
 
-        if live_refresh.get("imdb_url") and not current_db_imdb_url:
-            update_fields.setdefault("$set", {})["imdb_url"] = live_refresh["imdb_url"]
+        if not current_db_imdb_url:
+            fresh_url = live_refresh.get("imdb_url") or hdhub_info_url
+            if fresh_url:
+                update_fields.setdefault("$set", {})["imdb_url"] = fresh_url
 
         await db.movie_updates.update_one(
             {"_id": base_name},
@@ -1984,17 +1937,8 @@ async def update_movie_message(bot, base_name):
 
             logger.info(f"Movie update edited successfully: {base_name}")
 
-        except MessageNotModified:
-            logger.info(f"Movie message unchanged: {base_name}")
-
-        except MessageIdInvalid:
-            logger.warning(f"Invalid movie message ID: {base_name}")
-            await db.movie_updates.update_one(
-                {"_id": base_name},
-                {"$set": {"message_id": None}}
-            )
-            await send_movie_update(bot, base_name)
-
+        except (MessageNotModified, MessageIdInvalid):
+            pass
         except Exception as e:
             logger.error(f"Error updating movie message: {e}")
 
@@ -2163,31 +2107,39 @@ def generate_movie_message(movie_doc, base_name):
     )
 
 
-# ----------------- BACKGROUND RATING UPDATER (OPTIONAL TASK) -----------------
+# ----------------- BACKGROUND RATING UPDATER (MOVIES & SERIES) -----------------
 async def update_all_movie_ratings(bot: Client):
-    """Database ke sabhi records ki rating background me check karke update karta hai."""
     try:
         if not hasattr(db, "movie_updates"):
             db.movie_updates = db.db.movie_updates
 
-        cursor = db.movie_updates.find({"imdb_url": {"$regex": r"tt\d+"}})
+        cursor = db.movie_updates.find({})
         async for doc in cursor:
             base_name = doc["_id"]
             current_rating = doc.get("rating")
-            imdb_url = doc.get("imdb_url")
-            tt_match = re.search(r'tt\d+', imdb_url)
-            if not tt_match:
-                continue
+            imdb_url = doc.get("imdb_url", "")
+            target_year = extract_year_from_text(base_name)
 
-            live_res = await fetch_imdb_live_data(base_name, direct_tt=tt_match.group(0))
-            new_rating = parse_clean_rating(live_res.get("rating"))
+            hdhub_genres, hdhub_rating, hdhub_url, _ = await get_hdhub4u_data(base_name, target_year=target_year)
+
+            tt_match = re.search(r'tt\d+', f"{imdb_url} {hdhub_url}")
+            live_res = await fetch_imdb_live_data(base_name, year=target_year, direct_tt=tt_match.group(0) if tt_match else None)
+
+            new_rating = parse_clean_rating(hdhub_rating) or parse_clean_rating(live_res.get("rating"))
+
             if new_rating and new_rating != parse_clean_rating(current_rating):
-                logger.info(f"⚡ Rating updated on IMDb for {base_name}: {current_rating} -> {new_rating}")
+                update_payload = {"rating": new_rating}
+                if hdhub_genres and hdhub_genres != "N/A":
+                    update_payload["genres"] = hdhub_genres
+                elif live_res.get("genres") and live_res["genres"] != "N/A":
+                    update_payload["genres"] = live_res["genres"]
+
+                logger.info(f"⚡ Rating updated for {base_name}: {current_rating} -> {new_rating}")
                 await db.movie_updates.update_one(
                     {"_id": base_name},
-                    {"$set": {"rating": new_rating}}
+                    {"$set": update_payload}
                 )
                 await update_movie_message(bot, base_name)
-                await asyncio.sleep(2)  # FloodWait protection
+                await asyncio.sleep(2)
     except Exception as e:
         logger.error(f"Error in background rating updater: {e}")
