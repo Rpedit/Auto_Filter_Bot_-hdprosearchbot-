@@ -23,7 +23,7 @@ from typing import Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # ----------------- KOYEB ENVIRONMENT DOMAIN -----------------
-HDHUB_BASE_URL = os.environ.get("HDHUB_DOMAIN", "https://new1.hdhub4u.free").rstrip("/")
+HDHUB_BASE_URL = os.environ.get("HDHUB_DOMAIN", "https://new1.hdhub4u.free").strip().rstrip("/")
 
 _BASE_IGNORE_WORDS = {
     "rarbg", "dub", "sub", "sample", "mkv", "mp4", "avi", "aac", "ac3", "eac3", "ddp", "ddp5", "atmos", "dts",
@@ -602,7 +602,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> dict:
 # ----------------- DIRECT OFFICIAL LIVE IMDB ENGINE -----------------
 async def fetch_imdb_live_data(title: str, year: Optional[int] = None, direct_tt: Optional[str] = None) -> dict:
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9"
     }
     timeout = aiohttp.ClientTimeout(total=7)
@@ -773,7 +773,7 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool, ye
     return {}
 
 
-# ----------------- HDHUB4U EXCLUSIVE SCRAPER (KOYEB DOMAIN DIRECT) -----------------
+# ----------------- HDHUB4U EXCLUSIVE SCRAPER (SOLID KOYEB DIRECT) -----------------
 async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) -> Tuple[str, str, str, bool]:
     genres = "N/A"
     rating = "N/A"
@@ -781,54 +781,84 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
     is_series = False
 
     clean_search = re.sub(r'\b(19|20)\d{2}\b', '', base_name).strip()
-    clean_search = re.sub(r'\(?\b(?:full\s*movie|full|movie|punjabi|hindi|dubbed|dual\s*audio|season\s*\d+|s\d+)\b\)?', '', clean_search, flags=re.IGNORECASE).strip()
+    clean_search = re.sub(r'\(?\b(?:full\s*movie|full|movie|punjabi|hindi|dubbed|dual\s*audio|season\s*\d+|s\d+|proper|repack|hdrip|webrip)\b\)?', '', clean_search, flags=re.IGNORECASE).strip()
     clean_search = normalize(clean_search).strip()
 
     search_words = [w for w in clean_search.split() if len(w) >= 2][:3]
     effective_query = "+".join(search_words) if search_words else quote_plus(clean_search)
+    slug_query = "-".join([w.lower() for w in search_words]) if search_words else clean_search.lower().replace(" ", "-")
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": HDHUB_BASE_URL
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9,hi;q=0.8",
+        "Referer": f"{HDHUB_BASE_URL}/",
+        "Sec-Ch-Ua": '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1"
     }
 
     movie_page_url = None
-    timeout = aiohttp.ClientTimeout(total=8)
+    timeout = aiohttp.ClientTimeout(total=10)
+    cookie_jar = aiohttp.CookieJar(unsafe=True)
 
     try:
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with aiohttp.ClientSession(timeout=timeout, cookie_jar=cookie_jar) as session:
+            try:
+                async with session.get(HDHUB_BASE_URL, headers=headers, allow_redirects=True) as home_resp:
+                    pass
+            except Exception:
+                pass
+
             search_url = f"{HDHUB_BASE_URL}/?s={effective_query}"
             async with session.get(search_url, headers=headers, allow_redirects=True) as resp:
-                if resp.status != 200:
-                    return "N/A", "N/A", "", False
-                html = await resp.text()
+                logger.info(f"🔍 HDHub4u Search URL: {search_url} | HTTP Status: {resp.status}")
+                if resp.status == 200:
+                    html = await resp.text()
+                    soup = BeautifulSoup(html, "html.parser")
 
-            soup = BeautifulSoup(html, "html.parser")
-            for item in soup.select("article, .post-item, .recent-movies li, .entry-title, h2 a, h3 a"):
-                a_tag = item if item.name == "a" else item.find("a", href=True)
-                if not a_tag:
-                    continue
-                href = a_tag.get("href", "").strip()
-                title_text = f"{a_tag.get('title', '')} {a_tag.get_text()}".strip()
+                    for item in soup.select("article, .post-item, .recent-movies li, .entry-title, h2 a, h3 a, .thumb a, a[rel='bookmark']"):
+                        a_tag = item if item.name == "a" else item.find("a", href=True)
+                        if not a_tag:
+                            continue
+                        href = a_tag.get("href", "").strip()
+                        title_text = f"{a_tag.get('title', '')} {a_tag.get_text()}".strip()
 
-                if any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
-                    continue
+                        if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
+                            continue
 
-                clean_cand = re.sub(r'\(?\b(?:full\s*movie|punjabi|hindi|dubbed)\b\)?', '', title_text, flags=re.IGNORECASE).strip()
+                        clean_cand = re.sub(r'\(?\b(?:full\s*movie|punjabi|hindi|dubbed)\b\)?', '', title_text, flags=re.IGNORECASE).strip()
 
-                if clean_search.lower() in clean_cand.lower() or is_good_title_match(clean_search, clean_cand, query_year=target_year):
-                    movie_page_url = href
-                    break
+                        if clean_search.lower() in clean_cand.lower() or is_good_title_match(clean_search, clean_cand, query_year=target_year):
+                            movie_page_url = href
+                            logger.info(f"🎯 HDHub4u Match Found: {title_text} -> {href}")
+                            break
+
+            if not movie_page_url:
+                async with session.get(HDHUB_BASE_URL, headers=headers, allow_redirects=True) as feed_resp:
+                    if feed_resp.status == 200:
+                        feed_html = await feed_resp.text()
+                        feed_soup = BeautifulSoup(feed_html, "html.parser")
+                        for a_tag in feed_soup.select("h2 a, h3 a, article a, .recent-movies a"):
+                            href = a_tag.get("href", "")
+                            t_text = a_tag.get_text().strip()
+                            if slug_query in href.lower() or clean_search.lower() in t_text.lower():
+                                movie_page_url = href
+                                logger.info(f"🎯 HDHub4u Direct Match: {t_text} -> {href}")
+                                break
 
             if not movie_page_url:
                 return "N/A", "N/A", "", False
 
-            async with session.get(movie_page_url, headers=headers, allow_redirects=True) as resp:
-                if resp.status != 200:
+            async with session.get(movie_page_url, headers=headers, allow_redirects=True) as post_resp:
+                if post_resp.status != 200:
                     return "N/A", "N/A", "", False
-                post_html = await resp.text()
+                post_html = await post_resp.text()
 
             post_soup = BeautifulSoup(post_html, "html.parser")
 
@@ -847,14 +877,16 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
                 if clean_r:
                     rating = clean_r
 
-            # Genres (e.g. Crime | Thriller)
-            g_match = re.search(r'\b(?:Genre|Genres)\s*[:\-–]\s*([^\n\r<]+)', raw_text, re.IGNORECASE)
+            # Genres (Crime | Thriller)
+            g_match = re.search(r'\b(?:Genre|Genres)\s*[:\-–|•]\s*([^\n\r<]+)', raw_text, re.IGNORECASE)
             if g_match:
                 g_str = g_match.group(1).strip()
-                g_str = re.split(r'\b(?:Release|Language|Stars|Quality|Director|Story|Size)\b', g_str, flags=re.IGNORECASE)[0]
+                g_str = re.split(r'\b(?:Release|Language|Audio|Stars|Cast|Director|Quality|Size|Story|Screenshots?)\b', g_str, flags=re.IGNORECASE)[0]
                 parts = [p.strip().title() for p in re.split(r'[,|/•&]', g_str) if len(p.strip()) >= 2]
-                if parts:
-                    genres = ", ".join(parts)
+                valid_genres = [p for p in parts if not any(bad in p.lower() for bad in ["download", "select", "dropdown", "menu", "n/a", "none"])]
+                if valid_genres:
+                    genres = ", ".join(valid_genres)
+                    logger.info(f"✅ Extracted HDHub4u Genres: {genres}")
 
     except Exception as e:
         logger.error(f"Error fetching HDHub4u data: {e}")
@@ -1374,7 +1406,7 @@ async def _process_with_lock(
             or "x/10"
         )
 
-        # ----------------- ACCURATE GENRES (TMDB FIRST & NO FAKE BIOGRAPHY) -----------------
+        # ----------------- ACCURATE GENRES (HDHUB FIRST, TMDB SECOND, NO FAKE BIOGRAPHY) -----------------
         if blogger_data.get("genres"):
             genres = blogger_data["genres"]
         elif hdhub_genres and hdhub_genres != "N/A":
