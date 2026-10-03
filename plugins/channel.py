@@ -463,6 +463,79 @@ def parse_clean_rating(val) -> Optional[str]:
     return None
 
 
+# ----------------- DIRECT OFFICIAL LIVE IMDB ENGINE -----------------
+async def fetch_imdb_live_data(title: str, year: Optional[int] = None, direct_tt: Optional[str] = None) -> dict:
+    """Official IMDb page se exact live rating, genres aur link fetch karta hai."""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9"
+    }
+    timeout = aiohttp.ClientTimeout(total=7)
+    imdb_id = direct_tt if (direct_tt and direct_tt.startswith("tt")) else None
+
+    if not imdb_id:
+        clean_q = re.sub(r'\b(19|20)\d{2}\b', '', title).strip()
+        clean_q = re.sub(r'\b(?:season|s)\s*\d+\b', '', clean_q, flags=re.IGNORECASE).strip()
+        search_query = f"{clean_q} {year}" if year else clean_q
+        search_url = f"https://v3.sg.media-imdb.com/suggestion/x/{quote_plus(search_query.lower())}.json"
+
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(search_url, headers=headers) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        for item in data.get("d", []):
+                            cand_id = item.get("id", "")
+                            if not cand_id.startswith("tt"):
+                                continue
+                            cand_title = item.get("l", "")
+                            cand_year = item.get("y")
+                            if year and cand_year and abs(int(year) - int(cand_year)) > 1:
+                                continue
+                            if is_good_title_match(clean_q, cand_title, query_year=year):
+                                imdb_id = cand_id
+                                break
+        except Exception as e:
+            logger.debug(f"IMDb suggestion error: {e}")
+
+    if not imdb_id:
+        return {}
+
+    page_url = f"https://www.imdb.com/title/{imdb_id}/"
+    res = {"imdb_id": imdb_id, "imdb_url": page_url, "rating": "N/A", "genres": "N/A"}
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(page_url, headers=headers) as resp:
+                if resp.status == 200:
+                    html = await resp.text()
+                    soup = BeautifulSoup(html, "html.parser")
+
+                    # Live score match (e.g., 8.2)
+                    rate_tag = (
+                        soup.select_one('[data-testid="hero-rating-bar__aggregate-rating__score"] span')
+                        or soup.select_one('.ratingValue span')
+                        or soup.select_one('[itemprop="ratingValue"]')
+                    )
+                    if rate_tag:
+                        val = parse_clean_rating(rate_tag.get_text())
+                        if val:
+                            res["rating"] = val
+
+                    # Live genres
+                    genre_tags = soup.select('[data-testid="genres"] a, .ipc-chip__text')
+                    found_genres = []
+                    for g in genre_tags:
+                        gt = g.get_text().strip().title()
+                        if 2 <= len(gt) <= 25 and gt not in found_genres and not any(bad in gt.lower() for bad in ["back to top", "view", "edit", "ratings", "reviews"]):
+                            found_genres.append(gt)
+                    if found_genres:
+                        res["genres"] = ", ".join(found_genres[:4])
+    except Exception as e:
+        logger.debug(f"Error fetching live IMDb page: {e}")
+
+    return res
+
+
 async def resolve_live_hdhub_domain() -> str:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
@@ -792,7 +865,6 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
                         return "N/A", "N/A", "", False
                     html = await resp.text()
 
-            # SCREENSHOT FIX: Check if intermediate landing page was returned
             landing_soup = BeautifulSoup(html, "html.parser")
             landing_btn = landing_soup.find("a", string=re.compile(r"view\s*full\s*site", re.I))
             if landing_btn and landing_btn.get("href"):
@@ -1431,11 +1503,15 @@ async def _process_with_lock(
         hdhub_tmdb_id = tmdb_url_match.group(2) if tmdb_url_match else None
         hdhub_tmdb_type = tmdb_url_match.group(1) if tmdb_url_match else None
 
+        # 1. LIVE OFFICIAL IMDB SCRAPING (Priority 1)
+        live_imdb = await fetch_imdb_live_data(base_name, target_year, direct_tt=hdhub_imdb_id)
+
         imdb_details = {}
         tmdb_details = {}
 
-        if hdhub_imdb_id:
-            imdb_details = await fetch_imdb_safely(hdhub_imdb_id, is_series=is_series, year=media_info.get("year"))
+        if hdhub_imdb_id or live_imdb.get("imdb_id"):
+            lookup_id = live_imdb.get("imdb_id") or hdhub_imdb_id
+            imdb_details = await fetch_imdb_safely(lookup_id, is_series=is_series, year=media_info.get("year"))
             if not is_good_title_match(base_name, imdb_details.get("title", ""), query_year=target_year):
                 imdb_details = {}
 
@@ -1447,7 +1523,7 @@ async def _process_with_lock(
         if not imdb_details:
             imdb_details = await fetch_imdb_safely(base_name, is_series=is_series, year=media_info.get("year")) or {}
 
-        final_lookup = imdb_details.get("imdb_id") or base_name
+        final_lookup = live_imdb.get("imdb_id") or imdb_details.get("imdb_id") or base_name
         if not tmdb_details or tmdb_details.get("error"):
             tmdb_details = await fetch_tmdb_safely(final_lookup, base_name, is_series=is_series, year=media_info.get("year")) or {}
 
@@ -1483,21 +1559,26 @@ async def _process_with_lock(
                 or imdb_details.get("backdrop_url", "")
             )
 
+        # STRICT RATING HIERARCHY: Real Live IMDb Page -> HDHub4u Text -> API Fallback
         rating = (
-            parse_clean_rating(hdhub_rating)
-            or parse_clean_rating(tmdb_details.get("rating"))
+            parse_clean_rating(live_imdb.get("rating"))
+            or parse_clean_rating(hdhub_rating)
             or parse_clean_rating(imdb_details.get("rating"))
+            or parse_clean_rating(tmdb_details.get("rating"))
             or "x/10"
         )
 
         imdb_url = ""
         final_imdb_id = (
-            hdhub_imdb_id
+            live_imdb.get("imdb_id")
+            or hdhub_imdb_id
             or imdb_details.get("imdb_id")
             or (tmdb_details.get("imdb_id") if isinstance(tmdb_details, dict) else None)
         )
         if final_imdb_id and str(final_imdb_id).startswith("tt"):
             imdb_url = f"https://www.imdb.com/title/{final_imdb_id}/"
+        elif live_imdb.get("imdb_url"):
+            imdb_url = live_imdb["imdb_url"]
         elif hdhub_info_url and ("imdb.com" in hdhub_info_url or "themoviedb.org" in hdhub_info_url):
             imdb_url = hdhub_info_url
         elif is_series and tmdb_details.get("id"):
@@ -1565,6 +1646,8 @@ async def _process_with_lock(
                         if g_clean and g_clean != "N/A" and g_clean not in raw_genre_list and len(g_clean) >= 2:
                             raw_genre_list.append(g_clean)
 
+        if live_imdb.get("genres") and live_imdb["genres"] != "N/A":
+            extract_clean(live_imdb["genres"])
         if hdhub_genres and hdhub_genres != "N/A":
             extract_clean(hdhub_genres)
         if imdb_details and isinstance(imdb_details, dict):
@@ -1664,25 +1747,32 @@ async def _process_with_lock(
         if (not current_db_runtime or str(current_db_runtime).strip().upper() in ("N/A", "NONE", "0", "")) and final_file_runtime != "N/A":
             update_fields.setdefault("$set", {})["runtime"] = final_file_runtime
 
+        # AUTO-REFRESH LIVE RATING & GENRES ON NEW FILE UPLOAD
         current_db_rating = movie_doc.get("rating")
         current_db_imdb_url = movie_doc.get("imdb_url")
         current_db_genres = movie_doc.get("genres")
 
-        if (
-            not current_db_rating
-            or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10")
-            or not current_db_imdb_url
-            or not current_db_genres
-            or current_db_genres == "N/A"
-        ):
+        direct_tt_match = re.search(r'tt\d+', str(current_db_imdb_url)) if current_db_imdb_url else None
+        live_refresh = await fetch_imdb_live_data(base_name, target_year, direct_tt=direct_tt_match.group(0) if direct_tt_match else None)
+
+        if live_refresh.get("rating") and live_refresh["rating"] != "N/A":
+            if parse_clean_rating(live_refresh["rating"]) != parse_clean_rating(current_db_rating):
+                update_fields.setdefault("$set", {})["rating"] = parse_clean_rating(live_refresh["rating"])
+        elif not current_db_rating or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10"):
             hdhub_genres, hdhub_rating, hdhub_info_url, _ = await get_hdhub4u_data(base_name, target_year=target_year)
             repaired_rate = parse_clean_rating(hdhub_rating)
             if repaired_rate:
                 update_fields.setdefault("$set", {})["rating"] = repaired_rate
+
+        if live_refresh.get("genres") and live_refresh["genres"] != "N/A":
+            update_fields.setdefault("$set", {})["genres"] = live_refresh["genres"]
+        elif not current_db_genres or current_db_genres == "N/A":
+            hdhub_genres, _, _, _ = await get_hdhub4u_data(base_name, target_year=target_year)
             if hdhub_genres and hdhub_genres != "N/A":
                 update_fields.setdefault("$set", {})["genres"] = hdhub_genres
-            if hdhub_info_url:
-                update_fields.setdefault("$set", {})["imdb_url"] = hdhub_info_url
+
+        if live_refresh.get("imdb_url") and not current_db_imdb_url:
+            update_fields.setdefault("$set", {})["imdb_url"] = live_refresh["imdb_url"]
 
         await db.movie_updates.update_one(
             {"_id": base_name},
@@ -2071,3 +2161,33 @@ def generate_movie_message(movie_doc, base_name):
         line.strip()
         for line in raw_text.splitlines()
     )
+
+
+# ----------------- BACKGROUND RATING UPDATER (OPTIONAL TASK) -----------------
+async def update_all_movie_ratings(bot: Client):
+    """Database ke sabhi records ki rating background me check karke update karta hai."""
+    try:
+        if not hasattr(db, "movie_updates"):
+            db.movie_updates = db.db.movie_updates
+
+        cursor = db.movie_updates.find({"imdb_url": {"$regex": r"tt\d+"}})
+        async for doc in cursor:
+            base_name = doc["_id"]
+            current_rating = doc.get("rating")
+            imdb_url = doc.get("imdb_url")
+            tt_match = re.search(r'tt\d+', imdb_url)
+            if not tt_match:
+                continue
+
+            live_res = await fetch_imdb_live_data(base_name, direct_tt=tt_match.group(0))
+            new_rating = parse_clean_rating(live_res.get("rating"))
+            if new_rating and new_rating != parse_clean_rating(current_rating):
+                logger.info(f"⚡ Rating updated on IMDb for {base_name}: {current_rating} -> {new_rating}")
+                await db.movie_updates.update_one(
+                    {"_id": base_name},
+                    {"$set": {"rating": new_rating}}
+                )
+                await update_movie_message(bot, base_name)
+                await asyncio.sleep(2)  # FloodWait protection
+    except Exception as e:
+        logger.error(f"Error in background rating updater: {e}")
