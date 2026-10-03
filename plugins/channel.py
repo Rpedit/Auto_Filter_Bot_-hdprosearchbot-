@@ -21,7 +21,7 @@ from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# ----------------- HDHUB4U PERMANENT GATEWAYS (OFFICIAL & ACTIVE MIRRORS) -----------------
+# ----------------- HDHUB4U PERMANENT GATEWAYS (OFFICIAL ONLY) -----------------
 HDHUB_PERMANENT_GATEWAYS = [
     "https://new1.hdhub4u.free",
     "https://hdhub4u.bi",
@@ -463,7 +463,7 @@ def parse_clean_rating(val) -> Optional[str]:
 
 
 def clean_and_format_genres(genre_sources: list) -> str:
-    """Combines genre lists from all sources, cleans them and removes junk/incomplete tokens."""
+    """TMDb first, filters out solo wrong tags like 'Biography' if better genres exist."""
     cleaned = []
     seen = set()
 
@@ -489,10 +489,14 @@ def clean_and_format_genres(genre_sources: list) -> str:
                 seen.add(p_clean.lower())
                 cleaned.append(p_clean)
 
+    # Agar 'Biography' ke alawa Crime, Thriller, Drama, Action kuch bhi mila to Biography ko hata do
+    if len(cleaned) > 1 and "Biography" in cleaned:
+        cleaned.remove("Biography")
+
     return ", ".join(cleaned) if cleaned else "N/A"
 
 
-# ----------------- BLOGGER DATA FETCHER (POSTER, RATING, GENRES, IMDB) -----------------
+# ----------------- BLOGGER DATA FETCHER -----------------
 async def get_blogger_data(base_name: str, year: Optional[str] = None) -> dict:
     res = {"poster_url": None, "rating": None, "genres": None, "imdb_url": None}
     try:
@@ -896,166 +900,107 @@ async def set_domain_handler(bot, message):
         await message.reply_text(f"❌ Failed to update domain: {e}")
 
 
-# ----------------- HDHUB4U EXCLUSIVE SCRAPER (SMART CLEAN TITLE) -----------------
+# ----------------- HDHUB4U EXCLUSIVE SCRAPER -----------------
 async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) -> Tuple[str, str, str, bool]:
     genres = "N/A"
     rating = "N/A"
     info_url = ""
     is_series = False
 
-    clean_search_query = re.sub(r'\b(?:season|s)\s*\d+\b', '', base_name, flags=re.IGNORECASE)
-    clean_search_query = re.sub(r'\b(?:19|20)\d{2}\b', '', clean_search_query).strip()
-    clean_search_query = re.sub(r'\(?\b(?:full\s*movie|hindi|punjabi|dubbed|dual\s*audio)\b\)?', '', clean_search_query, flags=re.IGNORECASE).strip()
-    clean_query = normalize(clean_search_query).strip()
+    # Title ko clean karo taaki query me se (Full Movie), Punjabi, saal sab hat jaye
+    clean_search = re.sub(r'\b(19|20)\d{2}\b', '', base_name).strip()
+    clean_search = re.sub(r'\(?\b(?:full\s*movie|full|movie|punjabi|hindi|dubbed|dual\s*audio|season\s*\d+|s\d+)\b\)?', '', clean_search, flags=re.IGNORECASE).strip()
+    clean_search = normalize(clean_search).strip()
 
-    search_words = [w for w in clean_query.split() if len(w) >= 2][:3]
-    effective_query = "+".join(search_words) if search_words else clean_query.replace(" ", "+")
+    search_words = [w for w in clean_search.split() if len(w) >= 2][:3]
+    effective_query = "+".join(search_words) if search_words else quote_plus(clean_search)
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
         "Upgrade-Insecure-Requests": "1"
     }
 
-    html = ""
-    movie_page_url = None
-    matched_title = ""
-
-    test_domains = ["https://new1.hdhub4u.free", "https://hdhub4u.bi"]
+    test_domains = ["https://new1.hdhub4u.free", "https://hdhub4u.bi", "https://hdhub4u.ms"]
     base_cached = await get_hdhub_base_url()
-    if base_cached and is_valid_hdhub_domain(base_cached) and base_cached not in test_domains:
+    if base_cached and base_cached not in test_domains:
         test_domains.insert(0, base_cached)
-    for gw in HDHUB_PERMANENT_GATEWAYS:
-        if gw not in test_domains and is_valid_hdhub_domain(gw):
-            test_domains.append(gw)
 
-    cookie_jar = aiohttp.CookieJar(unsafe=True)
+    movie_page_url = None
     timeout = aiohttp.ClientTimeout(total=9)
 
-    async with aiohttp.ClientSession(timeout=timeout, cookie_jar=cookie_jar) as session:
+    async with aiohttp.ClientSession(timeout=timeout) as session:
         for domain in test_domains:
             try:
-                headers["Referer"] = domain
-                async with session.get(domain, headers=headers, allow_redirects=True) as home_resp:
-                    if home_resp.status != 200:
-                        continue
-                    home_html = await home_resp.text()
-
-                    landing_soup = BeautifulSoup(home_html, "html.parser")
-                    btn = (
-                        landing_soup.find("a", string=re.compile(r"view\s*full\s*site", re.I))
-                        or landing_soup.select_one("a.btn, a[href*='hdhub4u']")
-                    )
-                    if btn and btn.get("href"):
-                        target_href = btn["href"].strip()
-                        m = re.match(r'(https?://[^/]+)', target_href)
-                        if m and is_valid_hdhub_domain(m.group(1)):
-                            domain = m.group(1).rstrip("/")
-
                 search_url = f"{domain}/?s={effective_query}"
                 headers["Referer"] = domain
-
                 async with session.get(search_url, headers=headers, allow_redirects=True) as resp:
-                    if resp.status == 200:
-                        html = await resp.text()
-                        if hasattr(db, 'db') and is_valid_hdhub_domain(domain):
-                            await db.db.settings.update_one({"_id": "hdhub_base_url"}, {"$set": {"url": domain}}, upsert=True)
+                    if resp.status != 200:
+                        continue
+                    html = await resp.text()
+
+                soup = BeautifulSoup(html, "html.parser")
+                for item in soup.select("article, .post-item, .recent-movies li, .entry-title, h2 a, h3 a"):
+                    a_tag = item if item.name == "a" else item.find("a", href=True)
+                    if not a_tag:
+                        continue
+                    href = a_tag.get("href", "").strip()
+                    title_text = f"{a_tag.get('title', '')} {a_tag.get_text()}".strip()
+
+                    if any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
+                        continue
+
+                    clean_cand = re.sub(r'\(?\b(?:full\s*movie|punjabi|hindi|dubbed)\b\)?', '', title_text, flags=re.IGNORECASE).strip()
+
+                    # Relaxed title match
+                    if clean_search.lower() in clean_cand.lower() or is_good_title_match(clean_search, clean_cand, query_year=target_year):
+                        movie_page_url = href
                         break
+
+                if movie_page_url:
+                    break
             except Exception as e:
-                logger.debug(f"Search failed on {domain}: {e}")
+                logger.debug(f"Search mirror error: {e}")
                 continue
 
-    if not html:
-        return "N/A", "N/A", "", False
+        if not movie_page_url:
+            return "N/A", "N/A", "", False
 
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["header", "nav", "footer", "aside", "script", "style", "form"]):
-        tag.decompose()
-
-    candidate_items = []
-    for art in soup.select("article, .post-item, .recent-movies li, .entry-title, .thumb, h2 a, h3 a"):
-        a_tag = art if art.name == "a" else art.find("a", href=True)
-        if not a_tag:
-            continue
-        href = a_tag.get("href", "").strip()
-        if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
-            continue
-        title_text = f"{a_tag.get('title', '')} {a_tag.get_text()}".strip()
-        if not re.search(r'\b(?:review|trailer|teaser|reaction)\b', title_text, re.IGNORECASE):
-            candidate_items.append((title_text, href))
-
-    target_sequel = extract_sequel_num(base_name) or extract_sequel_num(clean_query)
-    target_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', base_name, re.IGNORECASE)
-    target_season = int(target_s_match.group(1)) if target_s_match else None
-
-    for title_text, href in candidate_items:
-        clean_cand_title = re.sub(r'\(?\b(?:full\s*movie|hindi\s*dubbed|punjabi|dual\s*audio)\b\)?', '', title_text, flags=re.IGNORECASE).strip()
-
-        cand_year = extract_year_from_text(title_text)
-        if target_year and cand_year and abs(target_year - cand_year) > 1:
-            continue
-
-        cand_sequel = extract_sequel_num(clean_cand_title)
-        if target_sequel != cand_sequel:
-            continue
-
-        if target_season is not None:
-            cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', title_text, re.IGNORECASE)
-            if cand_s_match and int(cand_s_match.group(1)) != target_season:
-                continue
-
-        if is_good_title_match(clean_query, clean_cand_title, query_year=target_year) or is_good_title_match(base_name, clean_cand_title, query_year=target_year):
-            movie_page_url = href
-            matched_title = title_text
-            break
-
-    if not movie_page_url:
-        return "N/A", "N/A", "", False
-
-    if re.search(r'\b(?:Season\s*\d+|S\d{1,2}|Series|Episodes?|Complete)\b', matched_title, re.IGNORECASE):
-        is_series = True
-
-    try:
-        async with aiohttp.ClientSession(timeout=timeout, cookie_jar=cookie_jar) as session:
+        try:
             async with session.get(movie_page_url, headers=headers, allow_redirects=True) as resp:
                 if resp.status != 200:
-                    return "N/A", "N/A", "", is_series
-                movie_html = await resp.text()
+                    return "N/A", "N/A", "", False
+                post_html = await resp.text()
 
-        movie_soup = BeautifulSoup(movie_html, "html.parser")
-        search_area = movie_soup.select_one(".entry-content, .post-content, article, .k-post-content") or movie_soup.body or movie_soup
+            post_soup = BeautifulSoup(post_html, "html.parser")
 
-        for a_tag in search_area.find_all("a", href=True):
-            href = a_tag["href"].strip()
-            m_imdb = re.search(r'(?:imdb\.com/(?:title/)?|title/)(tt\d+)', href, re.IGNORECASE)
-            if m_imdb:
-                info_url = f"https://www.imdb.com/title/{m_imdb.group(1)}/"
-                break
-            m_tmdb = re.search(r'themoviedb\.org/(movie|tv)/(\d+)', href, re.IGNORECASE)
-            if m_tmdb:
-                info_url = f"https://www.themoviedb.org/{m_tmdb.group(1)}/{m_tmdb.group(2)}"
-                break
+            for a in post_soup.find_all("a", href=True):
+                m_imdb = re.search(r'title/(tt\d+)', a["href"])
+                if m_imdb:
+                    info_url = f"https://www.imdb.com/title/{m_imdb.group(1)}/"
+                    break
 
-        full_page_text = search_area.get_text()
+            raw_text = post_soup.get_text()
 
-        r_match = re.search(r'(?:IMDb|IMDB|Rating|Ratings|Score)\s*(?:Rating|Ratings)?\s*[:\-•.\s]*\s*([0-9](?:\.[0-9])?)\s*(?:/\s*10)?', full_page_text, re.IGNORECASE)
-        if r_match:
-            val = parse_clean_rating(r_match.group(1))
-            if val:
-                rating = val
+            # Rating Extract
+            r_match = re.search(r'(?:IMDb|Rating|Score)\s*[:\-•.\s]*\s*([0-9](?:\.[0-9])?)\s*(?:/\s*10)?', raw_text, re.IGNORECASE)
+            if r_match:
+                clean_r = parse_clean_rating(r_match.group(1))
+                if clean_r:
+                    rating = clean_r
 
-        g_match = re.search(r'\b(?:Genre|Genres)\s*[:\-–]\s*([^\n\r]+)', full_page_text, re.IGNORECASE)
-        if g_match:
-            raw_g = g_match.group(1).strip()
-            raw_g = re.split(r'\b(?:Release|IMDb|Rating|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline|Screenshots?)\b', raw_g, flags=re.IGNORECASE)[0]
-            parts = re.split(r'[,|/•&]', raw_g)
-            clean_g = [p.strip().title() for p in parts if len(p.strip()) >= 2 and not any(bad in p.lower() for bad in ["dropdown", "download", "select", "click", "n/a"])]
-            if clean_g:
-                genres = ", ".join(clean_g)
+            # Genres Extract (Crime | Thriller)
+            g_match = re.search(r'\b(?:Genre|Genres)\s*[:\-–]\s*([^\n\r<]+)', raw_text, re.IGNORECASE)
+            if g_match:
+                g_str = g_match.group(1).strip()
+                g_str = re.split(r'\b(?:Release|Language|Stars|Quality|Director|Story|Size)\b', g_str, flags=re.IGNORECASE)[0]
+                parts = [p.strip().title() for p in re.split(r'[,|/•&]', g_str) if len(p.strip()) >= 2]
+                if parts:
+                    genres = ", ".join(parts)
 
-    except Exception as e:
-        logger.error(f"Error scraping details from HDHub4u: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching HDHub4u post details: {e}")
 
     return genres, rating, info_url, is_series
 
@@ -1573,18 +1518,17 @@ async def _process_with_lock(
         )
 
         # ----------------- 100% ACCURATE & FULL GENRES MERGE -----------------
-        # Step 1: Blogger Check
         if blogger_data.get("genres"):
             genres = blogger_data["genres"]
-        # Step 2: HDHub4u Page Genres (Primary Accuracy e.g. Crime, Thriller)[span_4](start_span)[span_4](end_span)
         elif hdhub_genres and hdhub_genres != "N/A":
             genres = hdhub_genres
-        # Step 3: Combine IMDb Live + Official IMDb + TMDb (No Incomplete Genres)
         else:
+            # TMDb First, anti-biography merge
             merged_genre_sources = [
+                tmdb_details.get("genres"),
+                hdhub_genres,
                 live_imdb.get("genres"),
-                imdb_details.get("genres"),
-                tmdb_details.get("genres")
+                imdb_details.get("genres")
             ]
             genres = clean_and_format_genres(merged_genre_sources)
 
