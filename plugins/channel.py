@@ -21,7 +21,17 @@ from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_HDHUB_DOMAIN = "https://new1.hdhub4u.free"
+# ----------------- HDHUB4U PERMANENT GATEWAYS (OFFICIAL) -----------------
+HDHUB_PERMANENT_GATEWAYS = [
+    "https://hdhub4u.ms",
+    "https://hdhub4u.ag",
+    "https://hdhub4u.tv",
+    "https://hdhub4u.download"
+]
+DEFAULT_HDHUB_DOMAIN = "https://hdhub4u.ms"
+
+_CACHED_HDHUB_DOMAIN = None
+_DOMAIN_CACHE_EXPIRY = 0
 
 _BASE_IGNORE_WORDS = {
     "rarbg", "dub", "sub", "sample", "mkv", "mp4", "avi", "aac", "ac3", "eac3", "ddp", "ddp5", "atmos", "dts",
@@ -130,7 +140,6 @@ RES_ORDER = {
 
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
 NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
-
 RESOLUTION_PATTERN = re.compile(r"\b(?:2160p|4K|1440p|1080p|720p|540p|480p|360p|240p|140p)\b", re.IGNORECASE)
 SOURCE_PATTERN = re.compile(
     r"\b(?:HDCam|HD-Cam|HQ-HDCam|HDTC|HD-TC|HQ-HDTC|CamRip|CAM|HQ-CAM|TS|HDTS|HQ-TS|TC|TeleSync|DVDScr|DVDRip|PreDVD|HQ-PreDVD|"
@@ -145,26 +154,11 @@ AUDIO_CHANNELS_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-BONUS_RANGE_REGEX = re.compile(
-    r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b',
-    re.IGNORECASE
-)
-BONUS_REGEX = re.compile(
-    r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b',
-    re.IGNORECASE
-)
-RANGE_REGEX = re.compile(
-    r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?[\s._-]*0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})',
-    re.IGNORECASE
-)
-SINGLE_REGEX = re.compile(
-    r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?[\s._-]*0*(\d{1,3})\b',
-    re.IGNORECASE
-)
-NAMED_REGEX = re.compile(
-    r'Season\s*0*(\d{1,2})[\s\-,:._]*(?:Part)?[\s\-,:._]*Ep(?:isode)?[\s._-]*0*(\d{1,3})\b',
-    re.IGNORECASE
-)
+BONUS_RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b', re.IGNORECASE)
+BONUS_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Bonus|Special)[\s._-]*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})\b', re.IGNORECASE)
+RANGE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?[\s._-]*0*(\d{1,3})\s*(?:to|-)\s*(?:E(?:p(?:isode)?)?[\s._-]*)?0*(\d{1,3})', re.IGNORECASE)
+SINGLE_REGEX = re.compile(r'\bS(\d{1,2})[\s._-]*(?:Part)?[\s._-]*E(?:p(?:isode)?)?[\s._-]*0*(\d{1,3})\b', re.IGNORECASE)
+NAMED_REGEX = re.compile(r'Season\s*0*(\d{1,2})[\s\-,:._]*(?:Part)?[\s\-,:._]*Ep(?:isode)?[\s._-]*0*(\d{1,3})\b', re.IGNORECASE)
 X_REGEX = re.compile(r'(?<!\d)\b0*([1-9]\d?)\s*[xX]\s*0*([1-9]\d?)\b(?!\d)', re.IGNORECASE)
 DAY_REGEX = re.compile(r'\b(?:S(?:eason)?\s*0*(\d{1,2})[\s._-]*)?(?:Day\s*0*(\d{1,3})|D0*([1-9]\d{0,2}))\b', re.IGNORECASE)
 NO_S_REGEX = re.compile(r'\b(?:Season|S)\s*0*(\d{1,2})[\s._-]+E(?:p(?:isode)?)?[\s._-]*0*(\d{1,3})\b', re.IGNORECASE)
@@ -391,7 +385,6 @@ def extract_ott_platform(text: str) -> str:
 
 
 def get_clean_title(name: str) -> str:
-    """Retains series season tag and release year to avoid cross-doc contamination"""
     y = extract_year_from_text(name)
     s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', name, re.IGNORECASE)
     t = re.sub(r'\b(19|20)\d{2}\b', '', name)
@@ -453,7 +446,6 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
 
 
 def parse_clean_rating(val) -> Optional[str]:
-    """Extracts pure float number 1.0 - 10.0 from any string format"""
     if not val:
         return None
     val_str = str(val).strip()
@@ -469,6 +461,66 @@ def parse_clean_rating(val) -> Optional[str]:
     except Exception:
         pass
     return None
+
+
+async def resolve_live_hdhub_domain() -> str:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    }
+    timeout = aiohttp.ClientTimeout(total=6)
+
+    current_stored = None
+    try:
+        if hasattr(db, 'db'):
+            setting = await db.db.settings.find_one({"_id": "hdhub_base_url"})
+            if setting and setting.get("url"):
+                current_stored = setting["url"].rstrip("/")
+    except Exception:
+        pass
+
+    candidates = [current_stored] if current_stored else []
+    for gw in HDHUB_PERMANENT_GATEWAYS:
+        if gw not in candidates:
+            candidates.append(gw)
+
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for candidate in candidates:
+            if not candidate:
+                continue
+            try:
+                async with session.get(candidate, headers=headers, allow_redirects=True) as resp:
+                    if resp.status in (200, 301, 302, 307, 308):
+                        final_url = str(resp.url).rstrip("/")
+                        match = re.match(r'(https?://[^/]+)', final_url)
+                        if match:
+                            live_domain = match.group(1)
+                            if hasattr(db, 'db') and live_domain != current_stored:
+                                await db.db.settings.update_one(
+                                    {"_id": "hdhub_base_url"},
+                                    {"$set": {"url": live_domain}},
+                                    upsert=True
+                                )
+                                logger.info(f"🔄 [HDHub4u Permanent Gateway] Active Domain Set To: {live_domain}")
+                            return live_domain
+            except Exception as e:
+                logger.debug(f"Gateway check failed for {candidate}: {e}")
+                continue
+
+    return current_stored or HDHUB_PERMANENT_GATEWAYS[0]
+
+
+async def get_hdhub_base_url(force_refresh: bool = False) -> str:
+    global _CACHED_HDHUB_DOMAIN, _DOMAIN_CACHE_EXPIRY
+    current_time = asyncio.get_event_loop().time()
+
+    if not force_refresh and _CACHED_HDHUB_DOMAIN and current_time < _DOMAIN_CACHE_EXPIRY:
+        return _CACHED_HDHUB_DOMAIN
+
+    detected_domain = await resolve_live_hdhub_domain()
+    _CACHED_HDHUB_DOMAIN = detected_domain
+    _DOMAIN_CACHE_EXPIRY = current_time + 43200
+    return _CACHED_HDHUB_DOMAIN
 
 
 async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str] = None) -> dict:
@@ -572,17 +624,6 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool, ye
     return {}
 
 
-async def get_hdhub_base_url() -> str:
-    try:
-        if hasattr(db, 'db'):
-            setting = await db.db.settings.find_one({"_id": "hdhub_base_url"})
-            if setting and setting.get("url"):
-                return setting["url"].rstrip("/")
-    except Exception:
-        pass
-    return DEFAULT_HDHUB_DOMAIN
-
-
 async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> Optional[str]:
     try:
         blog_url = "https://tmdbimdbhdhub4u.blogspot.com"
@@ -625,9 +666,8 @@ async def get_blogger_poster_url(base_name: str, year: Optional[str] = None) -> 
                         continue
 
                     cand_year = extract_year_from_text(post_title)
-                    if target_year and cand_year:
-                        if abs(target_year - cand_year) > 1:
-                            continue
+                    if target_year and cand_year and abs(target_year - cand_year) > 1:
+                        continue
 
                     matched = False
                     if is_good_title_match(base_name, post_title, query_year=target_year) or is_good_title_match(clean_series, post_title, query_year=target_year):
@@ -677,6 +717,7 @@ async def set_domain_handler(bot, message):
         current_url = await get_hdhub_base_url()
         return await message.reply_text(
             f"🌐 **Current HDHub4u URL:** <code>{current_url}</code>\n\n"
+            f"💡 **Gateways:** <code>{', '.join(HDHUB_PERMANENT_GATEWAYS)}</code>\n\n"
             f"💡 **Usage:** <code>/setdomain https://new-domain.com</code>"
         )
     new_url = message.command[1].strip().split("?")[0].rstrip("/")
@@ -692,114 +733,119 @@ async def set_domain_handler(bot, message):
 
 
 async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) -> Tuple[str, str, str, bool]:
-    """Ultra-resilient scraper for HDHub4u: Extracts genres, exact float rating, IMDb/TMDb link, and series status"""
     genres = "N/A"
     rating = "N/A"
     info_url = ""
     is_series = False
 
-    try:
-        base_url = await get_hdhub_base_url()
-        if not base_url:
-            base_url = DEFAULT_HDHUB_DOMAIN
+    clean_search_query = re.sub(r'\b(?:season|s)\s*\d+\b', '', base_name, flags=re.IGNORECASE)
+    clean_search_query = re.sub(r'\b(?:19|20)\d{2}\b', '', clean_search_query).strip()
+    clean_query = normalize(clean_search_query).strip()
 
-        clean_search_query = re.sub(r'\b(?:season|s)\s*\d+\b', '', base_name, flags=re.IGNORECASE)
-        clean_search_query = re.sub(r'\b(?:19|20)\d{2}\b', '', clean_search_query).strip()
-        clean_query = normalize(clean_search_query).strip()
+    search_words = [w for w in clean_query.split() if len(w) >= 2][:3]
+    if target_year:
+        search_words.append(str(target_year))
 
-        search_words = [w for w in clean_query.split() if len(w) >= 2][:3]
-        if target_year:
-            search_words.append(str(target_year))
+    effective_query = "+".join(search_words) if search_words else clean_query.replace(" ", "+")
 
-        effective_query = "+".join(search_words) if search_words else clean_query.replace(" ", "+")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9,hi;q=0.8"
+    }
+
+    html = ""
+    movie_page_url = None
+    matched_title = ""
+
+    for attempt in range(2):
+        base_url = await get_hdhub_base_url(force_refresh=(attempt == 1))
         search_url = f"{base_url.rstrip('/')}/?s={effective_query}"
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9,hi;q=0.8",
-            "Sec-Ch-Ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "Sec-Ch-Ua-Platform": '"Windows"',
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "same-origin",
-            "Referer": base_url
-        }
-
-        timeout = aiohttp.ClientTimeout(total=10)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(search_url, headers=headers, allow_redirects=True) as resp:
-                if resp.status != 200:
-                    return "N/A", "N/A", "", False
-                html = await resp.text()
-
-        soup = BeautifulSoup(html, "html.parser")
-
-        for tag in soup(["header", "nav", "footer", "aside", "script", "style", "form"]):
-            tag.decompose()
-
-        candidate_items = []
-        for art in soup.select("article, .post-item, .recent-movies li, .entry-title, .thumb"):
-            a_tag = art.find("a", href=True)
-            if not a_tag:
+        try:
+            timeout = aiohttp.ClientTimeout(total=8)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(search_url, headers=headers, allow_redirects=True) as resp:
+                    if resp.status != 200:
+                        if attempt == 0:
+                            logger.warning(f"HDHub4u {base_url} returned status {resp.status}. Refreshing via Permanent Gateways...")
+                            continue
+                        return "N/A", "N/A", "", False
+                    html = await resp.text()
+            break
+        except Exception as e:
+            if attempt == 0:
+                logger.warning(f"Connection failed for {base_url} ({e}). Retrying with fresh gateways...")
                 continue
-            href = a_tag["href"].strip()
-            if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/", "/wp-content/"]):
-                continue
-            img_alt = art.find("img").get("alt", "") if art.find("img") else ""
-            title_text = f"{a_tag.get('title', '')} {a_tag.get_text()} {img_alt}".strip()
-            
-            if re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', title_text, re.IGNORECASE):
-                continue
-
-            candidate_items.append((title_text, href))
-
-        if not candidate_items:
-            for a in soup.select("h2 a, h3 a, .entry-title a, .recent-movies a, a[rel='bookmark']"):
-                href = a.get("href", "")
-                title_text = a.get_text().strip()
-                if href and not any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
-                    if not re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', title_text, re.IGNORECASE):
-                        candidate_items.append((title_text, href))
-
-        movie_page_url = None
-        matched_title = ""
-        target_sequel = extract_sequel_num(base_name) or extract_sequel_num(clean_query)
-
-        target_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', base_name, re.IGNORECASE)
-        target_season = int(target_s_match.group(1)) if target_s_match else None
-        target_has_ott = bool(re.search(r'\bott\b', base_name, re.IGNORECASE))
-
-        for title_text, href in candidate_items:
-            cand_year = extract_year_from_text(title_text)
-            if target_year and cand_year and abs(target_year - cand_year) > 1:
-                continue
-
-            cand_sequel = extract_sequel_num(title_text)
-            if target_sequel != cand_sequel:
-                continue
-
-            cand_has_ott = bool(re.search(r'\bott\b', title_text, re.IGNORECASE))
-            if target_has_ott != cand_has_ott:
-                continue
-
-            if target_season is not None:
-                cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', title_text, re.IGNORECASE)
-                if cand_s_match and int(cand_s_match.group(1)) != target_season:
-                    continue
-
-            if is_good_title_match(clean_query, title_text, query_year=target_year) or is_good_title_match(base_name, title_text, query_year=target_year):
-                movie_page_url = href
-                matched_title = title_text
-                break
-
-        if not movie_page_url:
+            logger.error(f"Failed scraping HDHub4u after retry: {e}")
             return "N/A", "N/A", "", False
 
-        if re.search(r'\b(?:Season\s*\d+|S\d{1,2}|Series|Episodes?|Complete)\b', matched_title, re.IGNORECASE):
-            is_series = True
+    if not html:
+        return "N/A", "N/A", "", False
 
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["header", "nav", "footer", "aside", "script", "style", "form"]):
+        tag.decompose()
+
+    candidate_items = []
+    for art in soup.select("article, .post-item, .recent-movies li, .entry-title, .thumb"):
+        a_tag = art.find("a", href=True)
+        if not a_tag:
+            continue
+        href = a_tag["href"].strip()
+        if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/", "/wp-content/"]):
+            continue
+        img_alt = art.find("img").get("alt", "") if art.find("img") else ""
+        title_text = f"{a_tag.get('title', '')} {a_tag.get_text()} {img_alt}".strip()
+
+        if re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', title_text, re.IGNORECASE):
+            continue
+        candidate_items.append((title_text, href))
+
+    if not candidate_items:
+        for a in soup.select("h2 a, h3 a, .entry-title a, .recent-movies a, a[rel='bookmark']"):
+            href = a.get("href", "")
+            title_text = a.get_text().strip()
+            if href and not any(x in href for x in ["/category/", "/tag/", "/author/", "/page/"]):
+                if not re.search(r'\b(?:review|trailer|teaser|interview|reaction)\b', title_text, re.IGNORECASE):
+                    candidate_items.append((title_text, href))
+
+    target_sequel = extract_sequel_num(base_name) or extract_sequel_num(clean_query)
+    target_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', base_name, re.IGNORECASE)
+    target_season = int(target_s_match.group(1)) if target_s_match else None
+    target_has_ott = bool(re.search(r'\bott\b', base_name, re.IGNORECASE))
+
+    for title_text, href in candidate_items:
+        cand_year = extract_year_from_text(title_text)
+        if target_year and cand_year and abs(target_year - cand_year) > 1:
+            continue
+
+        cand_sequel = extract_sequel_num(title_text)
+        if target_sequel != cand_sequel:
+            continue
+
+        cand_has_ott = bool(re.search(r'\bott\b', title_text, re.IGNORECASE))
+        if target_has_ott != cand_has_ott:
+            continue
+
+        if target_season is not None:
+            cand_s_match = re.search(r'\b(?:season|s)\s*0*(\d+)\b', title_text, re.IGNORECASE)
+            if cand_s_match and int(cand_s_match.group(1)) != target_season:
+                continue
+
+        if is_good_title_match(clean_query, title_text, query_year=target_year) or is_good_title_match(base_name, title_text, query_year=target_year):
+            movie_page_url = href
+            matched_title = title_text
+            break
+
+    if not movie_page_url:
+        return "N/A", "N/A", "", False
+
+    if re.search(r'\b(?:Season\s*\d+|S\d{1,2}|Series|Episodes?|Complete)\b', matched_title, re.IGNORECASE):
+        is_series = True
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=8)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(movie_page_url, headers=headers, allow_redirects=True) as resp:
                 if resp.status != 200:
@@ -807,21 +853,18 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
                 movie_html = await resp.text()
 
         movie_soup = BeautifulSoup(movie_html, "html.parser")
-
         search_area = (
             movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
             or movie_soup.body
             or movie_soup
         )
 
-        # 1. URL Extraction
         for a_tag in search_area.find_all("a", href=True):
             href = a_tag["href"].strip()
             m_imdb = re.search(r'(?:imdb\.com/(?:title/)?|title/)(tt\d+)', href, re.IGNORECASE)
             if m_imdb:
                 info_url = f"https://www.imdb.com/title/{m_imdb.group(1)}/"
                 break
-
             m_tmdb = re.search(r'themoviedb\.org/(movie|tv)/(\d+)', href, re.IGNORECASE)
             if m_tmdb:
                 info_url = f"https://www.themoviedb.org/{m_tmdb.group(1)}/{m_tmdb.group(2)}"
@@ -841,13 +884,11 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
             br.replace_with("\n")
         for block_elem in movie_soup.find_all(["p", "div", "h1", "h2", "h3", "h4", "li", "tr"]):
             block_elem.append("\n")
-
         for tag in movie_soup(["header", "nav", "footer", "aside", "script", "style", "iframe"]):
             tag.decompose()
 
         full_page_text = search_area.get_text()
 
-        # 2. Resilient Rating Engine (Regex Multi-Pass)
         rating_patterns = [
             r'(?:IMDb|IMDB)\s*(?:Rating|Ratings)?\s*[:\-•.\s]*\s*([0-9](?:\.[0-9])?)\s*(?:/\s*10)?',
             r'(?:Rating|Ratings|Score)\s*[:\-•.\s]*\s*([0-9](?:\.[0-9])?)\s*(?:/\s*10)?',
@@ -865,7 +906,6 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
             if rating != "N/A":
                 break
 
-        # 3. Resilient Genres Engine
         g_match = re.search(r'\b(?:Genre|Genres)\s*[:\-–]\s*([^\n\r]+)', full_page_text, re.IGNORECASE)
         if g_match:
             candidate = g_match.group(1).strip()
@@ -896,7 +936,7 @@ async def get_hdhub4u_data(base_name: str, target_year: Optional[int] = None) ->
                 genres = ", ".join(extracted_categories[:4])
 
     except Exception as e:
-        logger.error(f"Error scraping HDHub4u data: {e}")
+        logger.error(f"Error scraping movie page: {e}")
 
     return genres, rating, info_url, is_series
 
@@ -1336,7 +1376,6 @@ async def _process_with_lock(
     if not movie_doc or is_mismatched:
         blogger_poster_url = await get_blogger_poster_url(base_name, media_info.get("year"))
         
-        # Scrape HDHub4u with resilient multi-pass engine
         hdhub_genres, hdhub_rating, hdhub_info_url, hdhub_is_series = await get_hdhub4u_data(base_name, target_year=target_year)
 
         if not is_series and hdhub_is_series:
@@ -1403,7 +1442,6 @@ async def _process_with_lock(
                 or imdb_details.get("backdrop_url", "")
             )
 
-        # Multi-Tier Rating Selector: HDHub4u -> TMDb -> IMDb -> Fallback
         rating = (
             parse_clean_rating(hdhub_rating)
             or parse_clean_rating(tmdb_details.get("rating"))
@@ -1411,7 +1449,6 @@ async def _process_with_lock(
             or "x/10"
         )
 
-        # Clickable URL Builder
         imdb_url = ""
         final_imdb_id = (
             hdhub_imdb_id
@@ -1590,7 +1627,6 @@ async def _process_with_lock(
         current_db_imdb_url = movie_doc.get("imdb_url")
         current_db_genres = movie_doc.get("genres")
 
-        # Auto-Repair metadata if rating/url/genres were missing or x/10
         if (
             not current_db_rating
             or str(current_db_rating).strip().upper() in ("N/A", "NONE", "0", "0.0", "-", "X/10")
@@ -1962,13 +1998,13 @@ def generate_movie_message(movie_doc, base_name):
     stored_title = movie_doc.get("title", base_name)
     stored_title = re.sub(r'[:,]?\s*(?:Episode|Ep)\s*\d+.*', '', stored_title, flags=re.IGNORECASE).strip()
     stored_title = re.sub(r'["\']', '', stored_title).strip()
-    
+
     display_title = re.sub(r'\s+Season\s*\d+', '', stored_title, flags=re.IGNORECASE).strip()
     display_title = re.sub(r'\s+S\d+', '', display_title, flags=re.IGNORECASE).strip()
     display_title = display_title.strip(" :,-\"'")
 
     movie_year = movie_doc.get("year")
-    
+
     if movie_year and str(movie_year) not in str(display_title) and primary_tag != "#SERIES":
         filename_display = f"{display_title} {movie_year}"
     else:
