@@ -475,18 +475,10 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
             if setting and setting.get("url"):
                 blog_url = setting["url"].rstrip("/")
 
-        feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
-
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        }
         timeout = aiohttp.ClientTimeout(total=8)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(feed_url) as resp:
-                if resp.status != 200:
-                    return None, None
-                data = await resp.json()
-
-        entries = data.get("feed", {}).get("entry", [])
-        if not entries:
-            return None, None
 
         def clean_core(s):
             s = re.sub(r'[\(\)\[\]#]', ' ', s)
@@ -496,46 +488,75 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
 
         target_core = clean_core(base_name)
 
-        for entry in entries:
-            post_title = entry.get("title", {}).get("$t", "").strip()
-            entry_core = clean_core(post_title)
+        feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            async with session.get(feed_url) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    entries = data.get("feed", {}).get("entry", [])
 
-            if target_core and (target_core == entry_core or target_core in entry_core or entry_core in target_core):
-                content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
-                soup = BeautifulSoup(content_html, "html.parser")
+                    for entry in entries:
+                        post_title = entry.get("title", {}).get("$t", "").strip()
+                        entry_core = clean_core(post_title)
 
-                img_url = None
-                for im in soup.find_all("img"):
-                    src = im.get("src") or im.get("data-src")
-                    if src and not any(x in src.lower() for x in ["icon", "blank.gif", "avatar"]):
-                        img_url = src.strip()
-                        break
+                        if target_core and (target_core == entry_core or target_core in entry_core or entry_core in target_core):
+                            content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
+                            soup = BeautifulSoup(content_html, "html.parser")
 
-                if not img_url:
-                    for a_tag in soup.find_all("a", href=True):
-                        href = a_tag["href"].strip()
-                        if any(href.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]):
-                            img_url = href
-                            break
+                            img_url = None
+                            target_url = None
 
-                if not img_url and "media$thumbnail" in entry:
-                    img_url = entry["media$thumbnail"].get("url", "").strip()
+                            # Check 1: Target Link inside <a> that wraps <img> tag (Direct image click hyperlink)
+                            for a_tag in soup.find_all("a", href=True):
+                                href = a_tag["href"].strip()
+                                has_movie_link = (
+                                    re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or 
+                                    re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE)
+                                )
+                                if has_movie_link:
+                                    target_url = href
+                                    inner_img = a_tag.find("img")
+                                    if inner_img and (inner_img.get("src") or inner_img.get("data-src")):
+                                        img_url = (inner_img.get("src") or inner_img.get("data-src")).strip()
+                                        break
 
-                if img_url:
-                    img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
-                    img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s1600/', img_url)
-                    img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
-                    img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
+                            # Check 2: Normal <img> search agar wrap nahi ho
+                            if not img_url:
+                                for im in soup.find_all("img"):
+                                    src = im.get("src") or im.get("data-src")
+                                    if src and not any(x in src.lower() for x in ["icon", "blank.gif", "avatar"]):
+                                        img_url = src.strip()
+                                        break
 
-                target_url = None
-                for a_tag in soup.find_all("a", href=True):
-                    href = a_tag["href"].strip()
-                    if re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE):
-                        target_url = href
-                        break
+                            # Check 3: <a> tag pointing to an image file directly
+                            if not img_url:
+                                for a_tag in soup.find_all("a", href=True):
+                                    href = a_tag["href"].strip()
+                                    if any(href.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]):
+                                        img_url = href
+                                        break
 
-                logger.info(f"Blogger Post Match SUCCESS: '{post_title}' | Poster: {bool(img_url)} | Target URL: {target_url}")
-                return img_url, target_url
+                            # Check 4: media$thumbnail feed tag
+                            if not img_url and "media$thumbnail" in entry:
+                                img_url = entry["media$thumbnail"].get("url", "").strip()
+
+                            # Check 5: General target link agar alag se laga ho
+                            if not target_url:
+                                for a_tag in soup.find_all("a", href=True):
+                                    href = a_tag["href"].strip()
+                                    if re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE):
+                                        target_url = href
+                                        break
+
+                            # Google CDN Resolution to HD
+                            if img_url:
+                                img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
+                                img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s1600/', img_url)
+                                img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
+                                img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
+
+                            logger.info(f"Blogger Matched! Title: '{post_title}' | Poster: {bool(img_url)} | Target URL: {target_url}")
+                            return img_url, target_url
 
     except Exception as e:
         logger.error(f"Error fetching Blogger data: {e}")
@@ -961,6 +982,7 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
+        # STEP 1: SABSE PEHLE BLOGGER SE IMAGE & LINK UTHAO
         blogger_poster_url, blogger_info_url = await get_blogger_data(base_name, media_info.get("year"))
 
         blogger_is_imdb = False
@@ -982,6 +1004,7 @@ async def _process_with_lock(
         imdb_details = {}
         tmdb_details = {}
 
+        # STRICT SOURCE PRIORITY: Image me jo link tha usi se data lo
         if blogger_is_imdb and blogger_imdb_id:
             try:
                 imdb_details = await get_movie_details(blogger_imdb_id) or {}
