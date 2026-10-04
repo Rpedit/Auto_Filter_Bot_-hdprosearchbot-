@@ -20,7 +20,7 @@ from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_HDHUB_DOMAIN = "https://new6.hdhub4u.cl"
+DEFAULT_HDHUB_DOMAIN = "https://new1.hdhub4u.free"
 
 _BASE_IGNORE_WORDS = {
     "rarbg", "dub", "sub", "sample", "mkv", "mp4", "avi", "aac", "ac3", "eac3", "ddp", "ddp5", "atmos", "dts",
