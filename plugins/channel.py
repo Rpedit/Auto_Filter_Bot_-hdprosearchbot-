@@ -20,8 +20,6 @@ from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_HDHUB_DOMAIN = "https://new1.hdhub4u.free"
-
 _BASE_IGNORE_WORDS = {
     "rarbg", "dub", "sub", "sample", "mkv", "mp4", "avi", "aac", "ac3", "eac3", "ddp", "ddp5", "atmos", "dts",
     "combined", "esub", "msub", "proper", "repack", "unrated", "extended", "imax", "remux", "10bit", "10-bit",
@@ -469,17 +467,6 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
     return best_fallback
 
 
-async def get_hdhub_base_url() -> str:
-    try:
-        if hasattr(db, 'db'):
-            setting = await db.db.settings.find_one({"_id": "hdhub_base_url"})
-            if setting and setting.get("url"):
-                return setting["url"].rstrip("/")
-    except Exception:
-        pass
-    return DEFAULT_HDHUB_DOMAIN
-
-
 async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
     try:
         blog_url = "https://tmdbimdbhdhub4u.blogspot.com"
@@ -501,7 +488,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
         if not entries:
             return None, None
 
-        # Clean base search token to pure alphanumeric to avoid template or season bracket mismatch
         def clean_core(s):
             s = re.sub(r'[\(\)\[\]#]', ' ', s)
             s = re.sub(r'\b(?:Season\s*\d+|S\d{1,2}|Complete)\b', ' ', s, flags=re.IGNORECASE)
@@ -514,20 +500,17 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
             post_title = entry.get("title", {}).get("$t", "").strip()
             entry_core = clean_core(post_title)
 
-            # Match check: Exact token or substring match
             if target_core and (target_core == entry_core or target_core in entry_core or entry_core in target_core):
                 content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
                 soup = BeautifulSoup(content_html, "html.parser")
 
                 img_url = None
-                # Check 1: Standard <img> tags & data-src
                 for im in soup.find_all("img"):
                     src = im.get("src") or im.get("data-src")
                     if src and not any(x in src.lower() for x in ["icon", "blank.gif", "avatar"]):
                         img_url = src.strip()
                         break
 
-                # Check 2: Direct image link in <a> tag (BingePosters layout)
                 if not img_url:
                     for a_tag in soup.find_all("a", href=True):
                         href = a_tag["href"].strip()
@@ -535,7 +518,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                             img_url = href
                             break
 
-                # Check 3: Blogger media$thumbnail
                 if not img_url and "media$thumbnail" in entry:
                     img_url = entry["media$thumbnail"].get("url", "").strip()
 
@@ -545,7 +527,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                     img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
                     img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
 
-                # Extract Hyperlink inside Blogger Post
                 target_url = None
                 for a_tag in soup.find_all("a", href=True):
                     href = a_tag["href"].strip()
@@ -559,197 +540,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
     except Exception as e:
         logger.error(f"Error fetching Blogger data: {e}")
     return None, None
-
-
-@Client.on_message(filters.command("setdomain"))
-async def set_domain_handler(bot, message):
-    if len(message.command) < 2:
-        current_url = await get_hdhub_base_url()
-        return await message.reply_text(
-            f"🌐 **Current HDHub4u URL:** <code>{current_url}</code>\n\n"
-            f"💡 **Usage:** <code>/setdomain https://new-domain.com</code>"
-        )
-    new_url = message.command[1].strip().split("?")[0].rstrip("/")
-    try:
-        await db.db.settings.update_one(
-            {"_id": "hdhub_base_url"},
-            {"$set": {"url": new_url}},
-            upsert=True
-        )
-        await message.reply_text(f"✅ **HDHub4u base URL successfully updated to:**\n<code>{new_url}</code>")
-    except Exception as e:
-        await message.reply_text(f"❌ Failed to update domain: {e}")
-
-
-async def get_hdhub4u_data(base_name: str) -> Tuple[str, str, str, bool]:
-    genres = "N/A"
-    rating = "N/A"
-    info_url = ""
-    is_series = False
-    try:
-        base_url = await get_hdhub_base_url()
-        if not base_url:
-            base_url = DEFAULT_HDHUB_DOMAIN
-
-        clean_search_query = re.sub(r'\b(?:season|s)\s*\d+\b', '', base_name, flags=re.IGNORECASE)
-        clean_search_query = re.sub(r'\b(?:19|20)\d{2}\b', '', clean_search_query).strip()
-        clean_query = normalize(clean_search_query).strip()
-
-        search_words = [w for w in clean_query.split() if len(w) >= 2][:3]
-        effective_query = "+".join(search_words) if search_words else clean_query.replace(" ", "+")
-        search_url = f"{base_url.rstrip('/')}/?s={effective_query}"
-
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Referer": base_url
-        }
-
-        timeout = aiohttp.ClientTimeout(total=8)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(search_url, headers=headers, allow_redirects=True) as resp:
-                if resp.status != 200:
-                    return "N/A", "N/A", "", False
-                html = await resp.text()
-
-        soup = BeautifulSoup(html, "html.parser")
-        for tag in soup(["header", "nav", "footer", "aside", "script", "style", "form"]):
-            tag.decompose()
-
-        candidate_items = []
-        for art in soup.select("article, .post-item, .recent-movies li, .entry-title, .thumb"):
-            a_tag = art.find("a", href=True)
-            if not a_tag:
-                continue
-            href = a_tag["href"].strip()
-            if not href or href == "#" or any(x in href for x in ["/category/", "/tag/", "/author/", "/page/", "/wp-content/"]):
-                continue
-            img_alt = art.find("img").get("alt", "") if art.find("img") else ""
-            title_text = f"{a_tag.get('title', '')} {a_tag.get_text()} {img_alt}".strip()
-            candidate_items.append((title_text, href))
-
-        movie_page_url = None
-        matched_title = ""
-        core_tokens = [re.sub(r'[^a-zA-Z0-9]', '', w).lower() for w in clean_query.split() if len(w) >= 2]
-
-        for title_text, href in candidate_items:
-            clean_cand = normalize(title_text).lower()
-            if is_good_title_match(clean_query, title_text) or is_good_title_match(base_name, title_text):
-                movie_page_url = href
-                matched_title = title_text
-                break
-            if core_tokens and all(tok in clean_cand for tok in core_tokens):
-                movie_page_url = href
-                matched_title = title_text
-                break
-
-        if not movie_page_url:
-            return "N/A", "N/A", "", False
-
-        if re.search(r'\b(?:Season\s*\d+|S\d{1,2}|Series|Episodes?|Complete)\b', matched_title, re.IGNORECASE):
-            is_series = True
-
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(movie_page_url, headers=headers, allow_redirects=True) as resp:
-                if resp.status != 200:
-                    return "N/A", "N/A", "", is_series
-                movie_html = await resp.text()
-
-        movie_soup = BeautifulSoup(movie_html, "html.parser")
-        search_area = (
-            movie_soup.select_one(".entry-content, .post-content, article, .k-post-content")
-            or movie_soup.body
-            or movie_soup
-        )
-
-        for a_tag in search_area.find_all("a", href=True):
-            href = a_tag["href"].strip()
-            m_imdb = re.search(r'https?://(?:www\.)?(?:m\.)?imdb\.com/title/(tt\d+)/?', href, re.IGNORECASE)
-            if not m_imdb:
-                m_imdb = re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE)
-            if m_imdb:
-                info_url = f"https://www.imdb.com/title/{m_imdb.group(1)}/"
-                break
-
-            m_tmdb = re.search(r'https?://(?:www\.)?themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE)
-            if not m_tmdb:
-                m_tmdb = re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE)
-            if m_tmdb:
-                info_url = m_tmdb.group(0)
-                if not info_url.startswith("http"):
-                    info_url = f"https://{info_url}"
-                break
-
-        raw_content_str = str(search_area)
-        if not info_url:
-            m_imdb = re.search(r'https?://(?:www\.)?(?:m\.)?imdb\.com/title/(tt\d+)/?', raw_content_str, re.IGNORECASE)
-            if m_imdb:
-                info_url = f"https://www.imdb.com/title/{m_imdb.group(1)}/"
-            else:
-                m_tmdb = re.search(r'https?://(?:www\.)?themoviedb\.org/(?:movie|tv)/\d+', raw_content_str, re.IGNORECASE)
-                if m_tmdb:
-                    info_url = m_tmdb.group(0)
-
-        for br in movie_soup.find_all(["br", "hr"]):
-            br.replace_with("\n")
-        for block_elem in movie_soup.find_all(["p", "div", "h1", "h2", "h3", "h4", "li", "tr"]):
-            block_elem.append("\n")
-
-        for tag in movie_soup(["header", "nav", "footer", "aside", "script", "style", "iframe"]):
-            tag.decompose()
-
-        lines = [re.sub(r'\s+', ' ', line).strip() for line in search_area.get_text().splitlines() if line.strip()]
-
-        for line in lines:
-            if not is_series and re.search(r'\b(?:Season|Episodes?|Complete Pack)\b\s*[:\-–]', line, re.IGNORECASE):
-                is_series = True
-
-            if rating == "N/A" and re.search(r'\b(?:IMDb|IMDB|Rating|Ratings)\b', line, re.IGNORECASE):
-                r_match = re.search(
-                    r'(?:IMDb|IMDB|Rating|Ratings)\s*(?:Rating|Ratings)?\s*[:\-•.\s]*\s*([0-9]+(?:\.[0-9]+)?|[xX]|N/?A)',
-                    line,
-                    re.IGNORECASE
-                )
-                if r_match:
-                    raw_val = r_match.group(1).strip()
-                    if raw_val.lower() in ("x", "n/a", "na"):
-                        rating = "x/10"
-                    else:
-                        try:
-                            val = float(raw_val)
-                            if 0.0 < val <= 10.0:
-                                rating = f"{val:.1f}"
-                        except ValueError:
-                            rating = "x/10"
-
-            if genres == "N/A" and re.search(r'\b(?:Genre|Genres)\b', line, re.IGNORECASE):
-                g_match = re.search(r'\b(?:Genre|Genres)\s*[:\-–]?\s*([^\n\r]+)', line, re.IGNORECASE)
-                if g_match:
-                    candidate = g_match.group(1).strip()
-                    candidate = re.split(
-                        r'\b(?:Release|IMDb|Rating|Ratings|Language|Audio|Stars|Cast|Director|Quality|Size|Source|Format|Storyline|Info|Trailer|Screenshots?|Plot|Runtime|Country|Creator)\b',
-                        candidate,
-                        flags=re.IGNORECASE
-                    )[0]
-                    candidate = re.sub(r'["\'<>{}[\]\\]', '', candidate)
-                    parts = re.split(r'[,|/•]', candidate)
-                    cleaned_genres = []
-                    for p in parts:
-                        p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip().title()
-                        if p_clean and 2 <= len(p_clean) <= 25 and not any(
-                            bad in p_clean.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download", "genre", "genres"]
-                        ):
-                            cleaned_genres.append(p_clean)
-                    if cleaned_genres:
-                        genres = ", ".join(cleaned_genres)
-
-    except Exception as e:
-        logger.error(f"Error scraping HDHub4u data: {e}")
-
-    return genres, rating, info_url, is_series
 
 
 def extract_season_episode(filename: str) -> Tuple[Optional[int], Optional[str]]:
@@ -1171,7 +961,6 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
-        # 1. Blogger Poster & Exact URL fetch
         blogger_poster_url, blogger_info_url = await get_blogger_data(base_name, media_info.get("year"))
 
         blogger_is_imdb = False
@@ -1193,8 +982,6 @@ async def _process_with_lock(
         imdb_details = {}
         tmdb_details = {}
 
-        # STRICT SOURCE PRIORITY:
-        # Agar Blogger post me IMDb link hai, seedha usi ID se lo
         if blogger_is_imdb and blogger_imdb_id:
             try:
                 imdb_details = await get_movie_details(blogger_imdb_id) or {}
@@ -1203,13 +990,11 @@ async def _process_with_lock(
             official_search_title = imdb_details.get("title", base_name)
             imdb_id = blogger_imdb_id
 
-        # Agar Blogger post me TMDb link hai, seedha usi ID se lo
         elif blogger_is_tmdb and blogger_tmdb_id:
             tmdb_details = await fetch_tmdb_safely(blogger_tmdb_id, base_name, is_series) or {}
             official_search_title = tmdb_details.get("title") or tmdb_details.get("name") or base_name
             imdb_id = tmdb_details.get("imdb_id")
 
-        # Fallback tabhi karein jab Blogger par koi link na ho
         else:
             imdb_details = await fetch_imdb_safely(
                 base_name,
@@ -1226,13 +1011,6 @@ async def _process_with_lock(
         if not tmdb_details or tmdb_details.get("error"):
             error_tmdb = True
 
-        hdhub_genres, hdhub_rating, hdhub_info_url, hdhub_is_series = await get_hdhub4u_data(base_name)
-        if not is_series and hdhub_is_series:
-            is_series = True
-            media_info["tag"] = "#SERIES"
-            file_data["tag"] = "#SERIES"
-
-        # POSTER PRIORITY: Blogger ALWAYS Landscape
         poster_url = ""
         is_backdrop = False
 
@@ -1257,7 +1035,6 @@ async def _process_with_lock(
             )
             is_backdrop = bool(imdb_details.get("backdrop_url"))
 
-        # STRICT Rating Logic
         rating = "x/10"
         if blogger_is_imdb and imdb_details.get("rating"):
             rating = str(imdb_details.get("rating")).strip()
@@ -1270,10 +1047,7 @@ async def _process_with_lock(
                 rating = str(imdb_rate).strip()
             elif tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
                 rating = str(tmdb_rate).strip()
-            elif hdhub_rating and hdhub_rating != "N/A" and hdhub_rating != "x/10":
-                rating = hdhub_rating
 
-        # STRICT Rating Link Logic
         imdb_url = ""
         if blogger_info_url:
             imdb_url = blogger_info_url.strip()
@@ -1285,10 +1059,7 @@ async def _process_with_lock(
                 imdb_url = f"https://www.themoviedb.org/tv/{tmdb_details.get('id')}"
             elif tmdb_details.get("id"):
                 imdb_url = f"https://www.themoviedb.org/movie/{tmdb_details.get('id')}"
-            elif hdhub_info_url:
-                imdb_url = hdhub_info_url.strip()
 
-        # STRICT Genres Logic
         genre_list = []
         raw_genres = None
 
@@ -1308,16 +1079,8 @@ async def _process_with_lock(
         elif isinstance(raw_genres, str) and raw_genres != "N/A":
             genre_list = [g.strip().title() for g in raw_genres.split(",") if g.strip()]
 
-        if not genre_list and hdhub_genres and hdhub_genres != "N/A":
-            for p in re.split(r'[,|/•]', hdhub_genres):
-                p_clean = re.sub(r'\b(?:info|trailer)\b', '', p, flags=re.IGNORECASE).strip().title()
-                if p_clean and 2 <= len(p_clean) <= 25 and not any(bad in p_clean.lower() for bad in ["dropdown", "menu", "select", "category", "home", "search", "click", "download"]):
-                    if p_clean not in genre_list:
-                        genre_list.append(p_clean)
-
         genres = ", ".join(genre_list) if genre_list else "N/A"
 
-        # Runtime
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
             tmdb_details.get("episode_run_time")
@@ -1510,7 +1273,6 @@ async def send_movie_update(bot, base_name):
                     ]]
                 )
 
-                # FIX: Agar Blogger se image aayi ho toh hamesha 2560x1440 Landscape force karein
                 if movie_doc.get("from_blogger") or (LANDSCAPE_POSTER and movie_doc.get("is_backdrop")):
                     size = (2560, 1440)
                 else:
