@@ -64,7 +64,7 @@ CAPTION_LANGUAGES = {
     "jpn": "Japanese", "japanese": "Japanese",
     "bho": "Bhojpuri", "bhojpuri": "Bhojpuri",
     "ori": "Odia", "odia": "Odia", "oriya": "Odia",
-    "asm": "Assamese", "asm": "Assamese",
+    "asm": "Assamese", "assamese": "Assamese",
     "spa": "Spanish", "spanish": "Spanish",
     "fre": "French", "french": "French", "fra": "French",
     "ger": "German", "german": "German", "deu": "German",
@@ -202,8 +202,9 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if q_words == f_words:
         return True
 
+    # 1 word match ke liye partial allowance band
     if len(q_words) == 1:
-        return False
+        return q_words == f_words
 
     if all(qw in f_words for qw in q_words):
         return True
@@ -438,7 +439,7 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
         kwargs["media_type"] = "tv" if is_series else "movie"
 
     if tmdb_query:
-        if tmdb_query.startswith("tt") or tmdb_query.isdigit():
+        if str(tmdb_query).startswith("tt") or str(tmdb_query).isdigit():
             try:
                 res = await get_movie_detailsx(tmdb_query, **kwargs) if kwargs else await get_movie_detailsx(tmdb_query)
                 if res and not res.get("error"):
@@ -501,15 +502,20 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
         if not entries:
             return None, None
 
-        clean_query = f"{base_name} {year}".strip() if year else base_name
+        clean_season_title = re.sub(r'\b(?:Season\s*\d+|S\d{1,2})\b', '', base_name, flags=re.IGNORECASE).strip()
+        queries_to_match = [base_name, clean_season_title]
+        if year:
+            queries_to_match.insert(0, f"{clean_season_title} {year}")
 
         for entry in entries:
-            post_title = entry.get("title", {}).get("$t", "")
-            if is_good_title_match(clean_query, post_title) or is_good_title_match(base_name, post_title):
+            post_title = entry.get("title", {}).get("$t", "").strip()
+            
+            matched = any(is_good_title_match(q, post_title) for q in queries_to_match)
+            if matched:
                 content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
                 soup = BeautifulSoup(content_html, "html.parser")
 
-                # 1. Image Extract (Priority: Content <img> -> media$thumbnail)
+                # 1. Image Extract (HD Level)
                 img_url = None
                 img_tag = soup.find("img")
                 if img_tag and img_tag.get("src"):
@@ -517,14 +523,13 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                 elif "media$thumbnail" in entry and entry["media$thumbnail"].get("url"):
                     img_url = entry["media$thumbnail"]["url"].strip()
 
-                # Clean and convert to Full HD Resolution
                 if img_url:
                     img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
                     img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s1600/', img_url)
                     img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
                     img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
 
-                # 2. Extract IMDb / TMDb URL from hyperlinks inside post
+                # 2. Extract IMDb / TMDb target link
                 target_url = None
                 for a in soup.find_all("a", href=True):
                     href = a["href"].strip()
@@ -532,8 +537,9 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                         target_url = href
                         break
 
-                logger.info(f"Blogger Match: '{post_title}' | Poster: {bool(img_url)} | Target URL: {target_url}")
+                logger.info(f"Blogger Post Match SUCCESS: '{post_title}' | Poster: {bool(img_url)} | Target URL: {target_url}")
                 return img_url, target_url
+
     except Exception as e:
         logger.error(f"Error fetching Blogger data: {e}")
     return None, None
@@ -1149,7 +1155,7 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
-        # 1. Blogger Poster & Direct URL fetch
+        # 1. Blogger Poster & Exact URL fetch
         blogger_poster_url, blogger_info_url = await get_blogger_data(base_name, media_info.get("year"))
 
         blogger_is_imdb = False
@@ -1171,8 +1177,6 @@ async def _process_with_lock(
         imdb_details = {}
         tmdb_details = {}
 
-        # STRICT SOURCE ROUTING:
-        # Agar user ne Blogger me IMDb link dala hai to IMDb se hi uthao
         if blogger_is_imdb and blogger_imdb_id:
             try:
                 imdb_details = await get_movie_details(blogger_imdb_id) or {}
@@ -1181,13 +1185,11 @@ async def _process_with_lock(
             official_search_title = imdb_details.get("title", base_name)
             imdb_id = blogger_imdb_id
 
-        # Agar user ne Blogger me TMDb link dala hai to TMDb se hi uthao
         elif blogger_is_tmdb and blogger_tmdb_id:
             tmdb_details = await fetch_tmdb_safely(blogger_tmdb_id, base_name, is_series) or {}
             official_search_title = tmdb_details.get("title") or tmdb_details.get("name") or base_name
             imdb_id = tmdb_details.get("imdb_id")
 
-        # Agar koi direct link nahi hai, tabhi general fallback karein
         else:
             imdb_details = await fetch_imdb_safely(
                 base_name,
@@ -1204,14 +1206,13 @@ async def _process_with_lock(
         if not tmdb_details or tmdb_details.get("error"):
             error_tmdb = True
 
-        # HDHub4u Backup Check
         hdhub_genres, hdhub_rating, hdhub_info_url, hdhub_is_series = await get_hdhub4u_data(base_name)
         if not is_series and hdhub_is_series:
             is_series = True
             media_info["tag"] = "#SERIES"
             file_data["tag"] = "#SERIES"
 
-        # Poster Selection
+        # POSTER PRIORITY: Blogger ALWAYS Landscape
         poster_url = ""
         is_backdrop = False
 
@@ -1228,11 +1229,13 @@ async def _process_with_lock(
             is_backdrop = True
         elif tmdb_details.get("poster_url") and not error_tmdb:
             poster_url = tmdb_details.get("poster_url")
+            is_backdrop = False
         else:
             poster_url = (
                 imdb_details.get("poster_url")
                 or imdb_details.get("backdrop_url", "")
             )
+            is_backdrop = bool(imdb_details.get("backdrop_url"))
 
         # STRICT Rating Logic
         rating = "x/10"
@@ -1265,7 +1268,7 @@ async def _process_with_lock(
             elif hdhub_info_url:
                 imdb_url = hdhub_info_url.strip()
 
-        # STRICT Genres Logic (Agar user ne IMDb link diya to sirf IMDb genres uthao!)
+        # STRICT Genres Logic
         genre_list = []
         raw_genres = None
 
@@ -1343,7 +1346,8 @@ async def _process_with_lock(
                 "tag": media_info["tag"],
                 "ott_platform": media_info["ott_platform"],
                 "error_tmdb": error_tmdb,
-                "is_backdrop": is_backdrop
+                "is_backdrop": is_backdrop,
+                "from_blogger": bool(blogger_poster_url)
             }
             await db.movie_updates.update_one(
                 {"_id": base_name},
@@ -1372,7 +1376,8 @@ async def _process_with_lock(
             "message_id": None,
             "is_photo": False,
             "error_tmdb": error_tmdb,
-            "is_backdrop": is_backdrop
+            "is_backdrop": is_backdrop,
+            "from_blogger": bool(blogger_poster_url)
         }
 
         try:
@@ -1485,16 +1490,11 @@ async def send_movie_update(bot, base_name):
                     ]]
                 )
 
-                size = (
-                    (2560, 1440)
-                    if (
-                        LANDSCAPE_POSTER
-                        and TMDB_POSTER
-                        and movie_doc.get("is_backdrop")
-                        and not movie_doc.get("error_tmdb")
-                    )
-                    else (853, 1280)
-                )
+                # FIX: Agar Blogger se hai to hamesha 2560x1440 Landscape poster force karo!
+                if movie_doc.get("from_blogger") or (LANDSCAPE_POSTER and movie_doc.get("is_backdrop")):
+                    size = (2560, 1440)
+                else:
+                    size = (853, 1280)
 
                 poster_url = movie_doc.get("poster_url")
                 is_photo = False
