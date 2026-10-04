@@ -202,7 +202,6 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if q_words == f_words:
         return True
 
-    # 1 word match ke liye partial allowance band taaki generic words confuse na hon
     if len(q_words) == 1:
         return False
 
@@ -438,7 +437,6 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
     elif "media_type" in sig.parameters:
         kwargs["media_type"] = "tv" if is_series else "movie"
 
-    # Agar direct ID/link mila ho (e.g. tt1234567 ya tmdb id)
     if tmdb_query:
         if tmdb_query.startswith("tt") or tmdb_query.isdigit():
             try:
@@ -1141,46 +1139,62 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
-        # 1. Blogger Poster & Exact URL fetch
+        # 1. Blogger Poster & Direct URL fetch
         blogger_poster_url, blogger_info_url = await get_blogger_data(base_name, media_info.get("year"))
 
+        blogger_is_imdb = False
+        blogger_is_tmdb = False
         blogger_imdb_id = None
-        blogger_tmdb_query = None
+        blogger_tmdb_id = None
+
         if blogger_info_url:
             m_imdb = re.search(r'tt\d+', blogger_info_url)
             if m_imdb:
+                blogger_is_imdb = True
                 blogger_imdb_id = m_imdb.group(0)
-                blogger_tmdb_query = blogger_imdb_id
             else:
                 m_tmdb = re.search(r'themoviedb\.org/(?:movie|tv)/(\d+)', blogger_info_url)
                 if m_tmdb:
-                    blogger_tmdb_query = m_tmdb.group(1)
+                    blogger_is_tmdb = True
+                    blogger_tmdb_id = m_tmdb.group(1)
 
-        # 2. Metadata fetch: Blogger override > API search
         imdb_details = {}
-        if blogger_imdb_id:
+        tmdb_details = {}
+
+        # STRICT SOURCE ROUTING:
+        # Agar user ne Blogger me IMDb link dala hai to IMDb se hi uthao
+        if blogger_is_imdb and blogger_imdb_id:
             try:
                 imdb_details = await get_movie_details(blogger_imdb_id) or {}
             except Exception:
                 pass
+            official_search_title = imdb_details.get("title", base_name)
+            imdb_id = blogger_imdb_id
 
-        if not imdb_details:
+        # Agar user ne Blogger me TMDb link dala hai to TMDb se hi uthao
+        elif blogger_is_tmdb and blogger_tmdb_id:
+            tmdb_details = await fetch_tmdb_safely(blogger_tmdb_id, base_name, is_series) or {}
+            official_search_title = tmdb_details.get("title") or tmdb_details.get("name") or base_name
+            imdb_id = tmdb_details.get("imdb_id")
+
+        # Agar koi direct link nahi hai, tabhi general fallback karein
+        else:
             imdb_details = await fetch_imdb_safely(
                 base_name,
                 is_series=is_series,
                 year=media_info.get("year")
             ) or {}
 
-        official_search_title = imdb_details.get("title", base_name)
-        imdb_id = blogger_imdb_id or imdb_details.get("imdb_id")
+            official_search_title = imdb_details.get("title", base_name)
+            imdb_id = imdb_details.get("imdb_id")
 
-        tmdb_query = blogger_tmdb_query or (imdb_id if (imdb_id and imdb_id.startswith("tt")) else official_search_title)
-        tmdb_details = await fetch_tmdb_safely(tmdb_query, base_name, is_series)
+            tmdb_query = imdb_id if (imdb_id and imdb_id.startswith("tt")) else official_search_title
+            tmdb_details = await fetch_tmdb_safely(tmdb_query, base_name, is_series)
 
         if not tmdb_details or tmdb_details.get("error"):
             error_tmdb = True
 
-        # 3. HDHub4u Backup Check (agar movie/series API par na mile)
+        # HDHub4u Backup Check
         hdhub_genres, hdhub_rating, hdhub_info_url, hdhub_is_series = await get_hdhub4u_data(base_name)
         if not is_series and hdhub_is_series:
             is_series = True
@@ -1210,20 +1224,23 @@ async def _process_with_lock(
                 or imdb_details.get("backdrop_url", "")
             )
 
-        # Rating Logic
-        imdb_rate = imdb_details.get("rating")
-        tmdb_rate = tmdb_details.get("rating")
-
-        if imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-            rating = str(imdb_rate).strip()
-        elif tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-            rating = str(tmdb_rate).strip()
-        elif hdhub_rating and hdhub_rating != "N/A" and hdhub_rating != "x/10":
-            rating = hdhub_rating
+        # STRICT Rating Logic
+        rating = "x/10"
+        if blogger_is_imdb and imdb_details.get("rating"):
+            rating = str(imdb_details.get("rating")).strip()
+        elif blogger_is_tmdb and tmdb_details.get("rating"):
+            rating = str(tmdb_details.get("rating")).strip()
         else:
-            rating = "x/10"
+            imdb_rate = imdb_details.get("rating")
+            tmdb_rate = tmdb_details.get("rating")
+            if imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+                rating = str(imdb_rate).strip()
+            elif tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+                rating = str(tmdb_rate).strip()
+            elif hdhub_rating and hdhub_rating != "N/A" and hdhub_rating != "x/10":
+                rating = hdhub_rating
 
-        # Rating Link Logic: Blogger link > Official API Link > Fallback to HDHub4u Link
+        # STRICT Rating Link Logic
         imdb_url = ""
         if blogger_info_url:
             imdb_url = blogger_info_url.strip()
@@ -1238,32 +1255,17 @@ async def _process_with_lock(
             elif hdhub_info_url:
                 imdb_url = hdhub_info_url.strip()
 
-        # Runtime
-        imdb_r = imdb_details.get("runtime")
-        tmdb_r = (
-            tmdb_details.get("episode_run_time")
-            if is_series and tmdb_details.get("episode_run_time")
-            else tmdb_details.get("runtime")
-        )
-        if isinstance(imdb_r, (list, tuple)) and imdb_r:
-            imdb_r = imdb_r[0]
-        if isinstance(tmdb_r, (list, tuple)) and tmdb_r:
-            tmdb_r = tmdb_r[0]
-
-        if is_series:
-            runtime = str(tmdb_r).strip() if (tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else final_file_runtime
-        else:
-            runtime = str(imdb_r).strip() if (imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else (str(tmdb_r).strip() if (tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else final_file_runtime)
-
-        certificates = (
-            tmdb_details.get("certificates")
-            if tmdb_details.get("certificates") and tmdb_details.get("certificates") != "N/A"
-            else imdb_details.get("certificates", "N/A")
-        )
-
-        # Genres Selection
+        # STRICT Genres Logic (Agar user ne IMDb link diya to sirf IMDb genres uthao!)
         genre_list = []
-        raw_genres = tmdb_details.get("genres") or imdb_details.get("genres")
+        raw_genres = None
+
+        if blogger_is_imdb:
+            raw_genres = imdb_details.get("genres")
+        elif blogger_is_tmdb:
+            raw_genres = tmdb_details.get("genres")
+        else:
+            raw_genres = imdb_details.get("genres") or tmdb_details.get("genres")
+
         if isinstance(raw_genres, list):
             for g in raw_genres:
                 if isinstance(g, dict) and g.get("name"):
@@ -1282,10 +1284,39 @@ async def _process_with_lock(
 
         genres = ", ".join(genre_list) if genre_list else "N/A"
 
+        # Runtime
+        imdb_r = imdb_details.get("runtime")
+        tmdb_r = (
+            tmdb_details.get("episode_run_time")
+            if is_series and tmdb_details.get("episode_run_time")
+            else tmdb_details.get("runtime")
+        )
+        if isinstance(imdb_r, (list, tuple)) and imdb_r:
+            imdb_r = imdb_r[0]
+        if isinstance(tmdb_r, (list, tuple)) and tmdb_r:
+            tmdb_r = tmdb_r[0]
+
+        if blogger_is_imdb:
+            runtime = str(imdb_r).strip() if (imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else final_file_runtime
+        elif is_series:
+            runtime = str(tmdb_r).strip() if (tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else final_file_runtime
+        else:
+            runtime = str(imdb_r).strip() if (imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else (str(tmdb_r).strip() if (tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else final_file_runtime)
+
+        certificates = (
+            imdb_details.get("certificates")
+            if blogger_is_imdb and imdb_details.get("certificates") and imdb_details.get("certificates") != "N/A"
+            else (
+                tmdb_details.get("certificates")
+                if tmdb_details.get("certificates") and tmdb_details.get("certificates") != "N/A"
+                else imdb_details.get("certificates", "N/A")
+            )
+        )
+
         movie_year = (
             media_info.get("year")
-            or tmdb_details.get("year")
             or imdb_details.get("year")
+            or tmdb_details.get("year")
         )
 
         if is_mismatched:
