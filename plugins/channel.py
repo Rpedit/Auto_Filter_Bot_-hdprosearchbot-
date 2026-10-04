@@ -202,7 +202,6 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if q_words == f_words:
         return True
 
-    # 1 word match ke liye partial allowance band
     if len(q_words) == 1:
         return q_words == f_words
 
@@ -502,26 +501,43 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
         if not entries:
             return None, None
 
-        clean_season_title = re.sub(r'\b(?:Season\s*\d+|S\d{1,2})\b', '', base_name, flags=re.IGNORECASE).strip()
-        queries_to_match = [base_name, clean_season_title]
-        if year:
-            queries_to_match.insert(0, f"{clean_season_title} {year}")
+        # Clean base search token to pure alphanumeric to avoid template or season bracket mismatch
+        def clean_core(s):
+            s = re.sub(r'[\(\)\[\]#]', ' ', s)
+            s = re.sub(r'\b(?:Season\s*\d+|S\d{1,2}|Complete)\b', ' ', s, flags=re.IGNORECASE)
+            s = re.sub(r'\b(19|20)\d{2}\b', ' ', s)
+            return re.sub(r'[^a-zA-Z0-9]', '', s).lower().strip()
+
+        target_core = clean_core(base_name)
 
         for entry in entries:
             post_title = entry.get("title", {}).get("$t", "").strip()
-            
-            matched = any(is_good_title_match(q, post_title) for q in queries_to_match)
-            if matched:
+            entry_core = clean_core(post_title)
+
+            # Match check: Exact token or substring match
+            if target_core and (target_core == entry_core or target_core in entry_core or entry_core in target_core):
                 content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
                 soup = BeautifulSoup(content_html, "html.parser")
 
-                # 1. Image Extract (HD Level)
                 img_url = None
-                img_tag = soup.find("img")
-                if img_tag and img_tag.get("src"):
-                    img_url = img_tag["src"].strip()
-                elif "media$thumbnail" in entry and entry["media$thumbnail"].get("url"):
-                    img_url = entry["media$thumbnail"]["url"].strip()
+                # Check 1: Standard <img> tags & data-src
+                for im in soup.find_all("img"):
+                    src = im.get("src") or im.get("data-src")
+                    if src and not any(x in src.lower() for x in ["icon", "blank.gif", "avatar"]):
+                        img_url = src.strip()
+                        break
+
+                # Check 2: Direct image link in <a> tag (BingePosters layout)
+                if not img_url:
+                    for a_tag in soup.find_all("a", href=True):
+                        href = a_tag["href"].strip()
+                        if any(href.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]):
+                            img_url = href
+                            break
+
+                # Check 3: Blogger media$thumbnail
+                if not img_url and "media$thumbnail" in entry:
+                    img_url = entry["media$thumbnail"].get("url", "").strip()
 
                 if img_url:
                     img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
@@ -529,10 +545,10 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                     img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
                     img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
 
-                # 2. Extract IMDb / TMDb target link
+                # Extract Hyperlink inside Blogger Post
                 target_url = None
-                for a in soup.find_all("a", href=True):
-                    href = a["href"].strip()
+                for a_tag in soup.find_all("a", href=True):
+                    href = a_tag["href"].strip()
                     if re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE):
                         target_url = href
                         break
@@ -1177,6 +1193,8 @@ async def _process_with_lock(
         imdb_details = {}
         tmdb_details = {}
 
+        # STRICT SOURCE PRIORITY:
+        # Agar Blogger post me IMDb link hai, seedha usi ID se lo
         if blogger_is_imdb and blogger_imdb_id:
             try:
                 imdb_details = await get_movie_details(blogger_imdb_id) or {}
@@ -1185,11 +1203,13 @@ async def _process_with_lock(
             official_search_title = imdb_details.get("title", base_name)
             imdb_id = blogger_imdb_id
 
+        # Agar Blogger post me TMDb link hai, seedha usi ID se lo
         elif blogger_is_tmdb and blogger_tmdb_id:
             tmdb_details = await fetch_tmdb_safely(blogger_tmdb_id, base_name, is_series) or {}
             official_search_title = tmdb_details.get("title") or tmdb_details.get("name") or base_name
             imdb_id = tmdb_details.get("imdb_id")
 
+        # Fallback tabhi karein jab Blogger par koi link na ho
         else:
             imdb_details = await fetch_imdb_safely(
                 base_name,
@@ -1490,7 +1510,7 @@ async def send_movie_update(bot, base_name):
                     ]]
                 )
 
-                # FIX: Agar Blogger se hai to hamesha 2560x1440 Landscape poster force karo!
+                # FIX: Agar Blogger se image aayi ho toh hamesha 2560x1440 Landscape force karein
                 if movie_doc.get("from_blogger") or (LANDSCAPE_POSTER and movie_doc.get("is_backdrop")):
                     size = (2560, 1440)
                 else:
