@@ -64,7 +64,7 @@ CAPTION_LANGUAGES = {
     "jpn": "Japanese", "japanese": "Japanese",
     "bho": "Bhojpuri", "bhojpuri": "Bhojpuri",
     "ori": "Odia", "odia": "Odia", "oriya": "Odia",
-    "asm": "Assamese", "assamese": "Assamese",
+    "asm": "Assamese", "asm": "Assamese",
     "spa": "Spanish", "spanish": "Spanish",
     "fre": "French", "french": "French", "fra": "French",
     "ger": "German", "german": "German", "deu": "German",
@@ -506,16 +506,25 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
         for entry in entries:
             post_title = entry.get("title", {}).get("$t", "")
             if is_good_title_match(clean_query, post_title) or is_good_title_match(base_name, post_title):
-                content_html = entry.get("content", {}).get("$t", "")
+                content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
                 soup = BeautifulSoup(content_html, "html.parser")
 
+                # 1. Image Extract (Priority: Content <img> -> media$thumbnail)
                 img_url = None
                 img_tag = soup.find("img")
                 if img_tag and img_tag.get("src"):
-                    img_url = img_tag["src"]
-                    img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
-                    img_url = re.sub(r'/w\d+-[h\d]+/', '/', img_url)
+                    img_url = img_tag["src"].strip()
+                elif "media$thumbnail" in entry and entry["media$thumbnail"].get("url"):
+                    img_url = entry["media$thumbnail"]["url"].strip()
 
+                # Clean and convert to Full HD Resolution
+                if img_url:
+                    img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
+                    img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s1600/', img_url)
+                    img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
+                    img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
+
+                # 2. Extract IMDb / TMDb URL from hyperlinks inside post
                 target_url = None
                 for a in soup.find_all("a", href=True):
                     href = a["href"].strip()
@@ -523,6 +532,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                         target_url = href
                         break
 
+                logger.info(f"Blogger Match: '{post_title}' | Poster: {bool(img_url)} | Target URL: {target_url}")
                 return img_url, target_url
     except Exception as e:
         logger.error(f"Error fetching Blogger data: {e}")
