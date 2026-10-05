@@ -493,95 +493,103 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
         if not target_core:
             return None, None
 
-        feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
+        clean_search = re.sub(r'\b(?:Season\s*\d+|S\d{1,2}|Complete)\b', '', base_name, flags=re.IGNORECASE)
+        clean_search = re.sub(r'\b(19|20)\d{2}\b', '', clean_search).strip()
+        search_query = "+".join([w for w in clean_search.split() if w])
+
+        candidate_urls = []
+
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            async with session.get(feed_url) as resp:
-                if resp.status != 200:
-                    logger.warning(f"Blogger feed returned HTTP {resp.status}")
-                    return None, None
-                text_data = await resp.text()
-                data = json.loads(text_data)
+            # Step A: Direct Blogger search page parse (BingePosters layout bypass)
+            search_page_url = f"{blog_url}/search?q={search_query}"
+            try:
+                async with session.get(search_page_url) as s_resp:
+                    if s_resp.status == 200:
+                        s_html = await s_resp.text()
+                        s_soup = BeautifulSoup(s_html, "html.parser")
+                        for a_elem in s_soup.find_all("a", href=True):
+                            h = a_elem["href"].split("?")[0]
+                            title_attr = (a_elem.get("title") or a_elem.get_text() or "").strip()
+                            if h.startswith(blog_url) and h.endswith(".html"):
+                                if target_core in clean_core(h) or (title_attr and target_core in clean_core(title_attr)):
+                                    if h not in candidate_urls:
+                                        candidate_urls.append(h)
+            except Exception as se:
+                logger.warning(f"Error fetching Blogger search page: {se}")
 
-            entries = data.get("feed", {}).get("entry", [])
-            for entry in entries:
-                post_title = entry.get("title", {}).get("$t", "").strip()
-                entry_core = clean_core(post_title)
+            # Step B: Feed fallback if search page did not catch links
+            if not candidate_urls:
+                feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
+                try:
+                    async with session.get(feed_url) as f_resp:
+                        if f_resp.status == 200:
+                            f_text = await f_resp.text()
+                            f_data = json.loads(f_text)
+                            for entry in f_data.get("feed", {}).get("entry", []):
+                                p_title = entry.get("title", {}).get("$t", "")
+                                if target_core in clean_core(p_title):
+                                    for l in entry.get("link", []):
+                                        if l.get("rel") == "alternate":
+                                            candidate_urls.append(l.get("href"))
+                                            break
+                except Exception as fe:
+                    logger.warning(f"Error fetching Blogger feed: {fe}")
 
-                if target_core and (target_core == entry_core or target_core in entry_core or entry_core in target_core):
-                    content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
+            if not candidate_urls:
+                logger.warning(f"Blogger me koi post nahi mili target: '{base_name}' ke liye")
+                return None, None
 
-                    # Direct Webpage fallback agar feed me HTML truncate ho gaya ho
-                    post_url = None
-                    for l in entry.get("link", []):
-                        if l.get("rel") == "alternate":
-                            post_url = l.get("href")
-                            break
+            # Step C: Open post and extract Poster + Hyperlink
+            for post_url in candidate_urls:
+                try:
+                    async with session.get(post_url) as p_resp:
+                        if p_resp.status != 200:
+                            continue
+                        post_html = await p_resp.text()
+                        post_soup = BeautifulSoup(post_html, "html.parser")
 
-                    if post_url and (not content_html or "<img" not in content_html):
-                        try:
-                            async with session.get(post_url) as p_resp:
-                                if p_resp.status == 200:
-                                    content_html = await p_resp.text()
-                        except Exception as pe:
-                            logger.warning(f"Error fetching direct post URL: {pe}")
+                        img_url = None
+                        target_url = None
 
-                    soup = BeautifulSoup(content_html, "html.parser")
-                    img_url = None
-                    target_url = None
-
-                    # Check 1: <a> tag with IMDb/TMDb link wrapping <img> tag
-                    for a_tag in soup.find_all("a", href=True):
-                        href = a_tag["href"].strip()
-                        has_link = (
-                            re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or 
-                            re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE)
-                        )
-                        if has_link:
-                            target_url = href
+                        # Check 1: Image ke upar wrap hua hyperlink <a href="IMDB_TMDB"><img src="POSTER"></a>
+                        for a_tag in post_soup.find_all("a", href=True):
+                            href = a_tag["href"].strip()
                             inner_img = a_tag.find("img")
                             if inner_img:
                                 src = inner_img.get("src") or inner_img.get("data-src")
-                                if src and not any(x in src.lower() for x in ["icon", "blank.gif", "avatar"]):
+                                if src and not any(x in src.lower() for x in ["icon", "avatar", "blank.gif"]):
+                                    img_url = src.strip()
+                                    if re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE):
+                                        target_url = href
+                                        break
+
+                        # Check 2: Standalone <img> agar <a> ke bahar ho
+                        if not img_url:
+                            for im in post_soup.find_all("img"):
+                                src = im.get("src") or im.get("data-src")
+                                if src and not any(x in src.lower() for x in ["icon", "avatar", "blank.gif"]):
                                     img_url = src.strip()
                                     break
 
-                    # Check 2: Standalone <img> tag
-                    if not img_url:
-                        for im in soup.find_all("img"):
-                            src = im.get("src") or im.get("data-src")
-                            if src and not any(x in src.lower() for x in ["icon", "blank.gif", "avatar"]):
-                                img_url = src.strip()
-                                break
+                        # Check 3: Post body me kahin bhi target movie URL dhoondo
+                        if not target_url:
+                            for a_tag in post_soup.find_all("a", href=True):
+                                href = a_tag["href"].strip()
+                                if re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE):
+                                    target_url = href
+                                    break
 
-                    # Check 3: <a> tag pointing directly to image file
-                    if not img_url:
-                        for a_tag in soup.find_all("a", href=True):
-                            href = a_tag["href"].strip()
-                            if any(href.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]):
-                                img_url = href
-                                break
+                        # Google CDN original resolution
+                        if img_url:
+                            img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
+                            img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s1600/', img_url)
+                            img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
+                            img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
 
-                    # Check 4: media$thumbnail feed tag
-                    if not img_url and "media$thumbnail" in entry:
-                        img_url = entry["media$thumbnail"].get("url", "").strip()
-
-                    # Check 5: Standalone target URL agar <a> ke andar image wrap na ho
-                    if not target_url:
-                        for a_tag in soup.find_all("a", href=True):
-                            href = a_tag["href"].strip()
-                            if re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE):
-                                target_url = href
-                                break
-
-                    # Full HD original resolution
-                    if img_url:
-                        img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
-                        img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s1600/', img_url)
-                        img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
-                        img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
-
-                    logger.info(f"Blogger Post Matched! Title: '{post_title}' | Poster: {bool(img_url)} | Target URL: {target_url}")
-                    return img_url, target_url
+                            logger.info(f"Blogger Extraction SUCCESS: '{post_url}' | Poster: {bool(img_url)} | Target URL: {target_url}")
+                            return img_url, target_url
+                except Exception as err:
+                    logger.warning(f"Error parsing post {post_url}: {err}")
 
     except Exception as e:
         logger.error(f"Error fetching Blogger data: {e}")
@@ -985,7 +993,7 @@ async def _process_with_lock(
             logger.warning(f"Title mismatch detected: '{stored_title}' for '{base_name}'. Re-fetching!")
             is_mismatched = True
 
-        # IMPORTANT: Agar pehle Blogger se nahi aaya tha, toh dobara Blogger check karo
+        # Agar purana message Blogger se nahi tha, dobara Blogger check karein
         if not movie_doc.get("from_blogger"):
             is_mismatched = True
 
@@ -1033,7 +1041,7 @@ async def _process_with_lock(
         imdb_details = {}
         tmdb_details = {}
 
-        # STRICT SOURCE PRIORITY: Image me jo link tha usi se data lo
+        # STRICT SOURCE PRIORITY: Image ke hyperlink se details lo
         if blogger_is_imdb and blogger_imdb_id:
             try:
                 imdb_details = await get_movie_details(blogger_imdb_id) or {}
@@ -1446,7 +1454,6 @@ async def update_movie_message(bot, base_name):
 
         try:
             if is_photo:
-                # Agar Blogger poster update hua hai toh media update try karein
                 poster_url = movie_doc.get("poster_url")
                 size = (2560, 1440) if (movie_doc.get("from_blogger") or (LANDSCAPE_POSTER and movie_doc.get("is_backdrop"))) else (853, 1280)
                 try:
