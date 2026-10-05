@@ -37,20 +37,31 @@ async def fetch_image(url, size=(860, 1200)):
         logger.info("Image fetching is disabled.")
         return url
 
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+    }
+
     try:
         session = await get_session()
 
-        async with session.get(url) as response:
+        async with session.get(url, headers=headers) as response:
             if response.status != 200:
                 logger.error(f"Failed to fetch image: {response.status} for {url}")
                 return None
 
             data = await response.read()
             img = Image.open(BytesIO(data))
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
             img = img.resize(size, Image.LANCZOS)
 
             out = BytesIO()
-            img.save(out, format="JPEG")
+            out.name = "poster.jpg"
+            img.save(out, format="JPEG", quality=95)
             out.seek(0)
             return out
 
@@ -92,7 +103,7 @@ def extract_sequel_num(text: str):
     return None
 
 def _extract_title_year_and_season(query: str):
-    q = query.strip()
+    q = str(query).strip()
     if re.match(r'^tt\d+$', q, re.IGNORECASE):
         return q, None, None
 
@@ -151,10 +162,22 @@ async def _fetch_season_poster(tv_id: int, season_number: int, api_key=None):
     return None
 
 async def _search_media_id(query: str, api_key=None, is_series: bool = None):
+    q_str = str(query).strip()
+
+    # Direct Numeric TMDB ID Support
+    if q_str.isdigit():
+        for mtype in ('tv', 'movie'):
+            try:
+                res = await _tmdb_get(f"{mtype}/{q_str}", api_key=api_key)
+                if res and res.get('id'):
+                    return mtype, int(q_str)
+            except Exception:
+                pass
+
     # Direct IMDb ID universal lookup
-    if re.match(r'^tt\d+$', query.strip(), re.IGNORECASE):
+    if re.match(r'^tt\d+$', q_str, re.IGNORECASE):
         try:
-            find_res = await _tmdb_get(f"find/{query.strip()}", params={'external_source': 'imdb_id'}, api_key=api_key)
+            find_res = await _tmdb_get(f"find/{q_str}", params={'external_source': 'imdb_id'}, api_key=api_key)
             order = ('tv', 'movie') if is_series else ('movie', 'tv')
             for mtype in order:
                 res_list = find_res.get(f"{mtype}_results", [])
@@ -163,7 +186,7 @@ async def _search_media_id(query: str, api_key=None, is_series: bool = None):
         except Exception:
             pass
 
-    title, season, year = _extract_title_year_and_season(query)
+    title, season, year = _extract_title_year_and_season(q_str)
     clean_title_for_match = title
 
     multi_results = []
@@ -218,9 +241,8 @@ async def _search_media_id(query: str, api_key=None, is_series: bool = None):
         
         m_sequel = extract_sequel_num(media_name) or extract_sequel_num(orig_name)
 
-        # Sequel Validation
         if q_sequel != m_sequel:
-            type_bonus -= 1.0  # Heavy penalty so Part 1 and Part 2 never cross-match
+            type_bonus -= 1.0
         else:
             type_bonus += 0.30
 
@@ -393,7 +415,6 @@ async def get_movie_details(query, bulk=False, id=False, file=None, is_series: b
             
         movie_list = search_result.titles[:MAX_LIST_ELM] if hasattr(search_result, 'titles') else search_result[:MAX_LIST_ELM]
 
-        # Episode pages ko filter karein
         movie_list = [m for m in movie_list if getattr(m, 'kind', None) != 'episode']
 
         if is_series is True:
@@ -407,7 +428,6 @@ async def get_movie_details(query, bulk=False, id=False, file=None, is_series: b
         if valid_kinds:
             movie_list = valid_kinds
 
-        # IMDb Sequel & Year Ranking Engine
         q_seq = extract_sequel_num(title)
 
         def match_score(m):
@@ -443,7 +463,7 @@ async def get_movie_details(query, bulk=False, id=False, file=None, is_series: b
         movie_brief = movie_list[0]
         movieid_str = getattr(movie_brief, 'imdb_id', getattr(movie_brief, 'movieID', None))
     else:
-        movieid_str = query
+        movieid_str = q_str
 
     if not movieid_str:
         return None
