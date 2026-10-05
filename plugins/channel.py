@@ -477,14 +477,17 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                 blog_url = setting["url"].rstrip("/")
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            )
         }
         timeout = aiohttp.ClientTimeout(total=10)
 
         def clean_core(s):
             if not s:
                 return ""
-            s = re.sub(r'[\(\)\[\]#]', ' ', s)
+            s = re.sub(r'[\(\)\[\]#\-:_.]', ' ', s)
             s = re.sub(r'\b(?:Season\s*\d+|S\d{1,2}|Complete|Part\s*\d+)\b', ' ', s, flags=re.IGNORECASE)
             s = re.sub(r'\b(19|20)\d{2}\b', ' ', s)
             return re.sub(r'[^a-zA-Z0-9]', '', s).lower().strip()
@@ -493,53 +496,59 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
         if not target_core:
             return None, None
 
-        clean_search = re.sub(r'\b(?:Season\s*\d+|S\d{1,2}|Complete)\b', '', base_name, flags=re.IGNORECASE)
-        clean_search = re.sub(r'\b(19|20)\d{2}\b', '', clean_search).strip()
-        search_query = "+".join([w for w in clean_search.split() if w])
+        # Main keywords extract karo (e.g. 'doraemon', 'castle', 'undersea')
+        words = [w.lower() for w in re.split(r'[\s\-:_.()]+', base_name) if len(w) >= 3 and not w.isdigit()]
+        simple_search = "+".join(words[:2]) if words else target_core
 
         candidate_urls = []
 
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            # Step A: Direct Blogger search page parse (BingePosters layout bypass)
-            search_page_url = f"{blog_url}/search?q={search_query}"
+            # Step A: Direct Feed Fetch (Recent 50 Posts)
+            feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
             try:
-                async with session.get(search_page_url) as s_resp:
-                    if s_resp.status == 200:
-                        s_html = await s_resp.text()
-                        s_soup = BeautifulSoup(s_html, "html.parser")
-                        for a_elem in s_soup.find_all("a", href=True):
-                            h = a_elem["href"].split("?")[0]
-                            title_attr = (a_elem.get("title") or a_elem.get_text() or "").strip()
-                            if h.startswith(blog_url) and h.endswith(".html"):
-                                if target_core in clean_core(h) or (title_attr and target_core in clean_core(title_attr)):
-                                    if h not in candidate_urls:
-                                        candidate_urls.append(h)
-            except Exception as se:
-                logger.warning(f"Error fetching Blogger search page: {se}")
+                async with session.get(feed_url) as f_resp:
+                    if f_resp.status == 200:
+                        f_text = await f_resp.text()
+                        f_data = json.loads(f_text)
+                        for entry in f_data.get("feed", {}).get("entry", []):
+                            p_title = entry.get("title", {}).get("$t", "")
+                            p_core = clean_core(p_title)
+                            
+                            # Token match check taaki New/No-New confuse na kare
+                            p_words = [w.lower() for w in re.split(r'[\s\-:_.()]+', p_title) if len(w) >= 3 and not w.isdigit()]
+                            match_count = sum(1 for w in words if w in p_words or w in p_core)
+                            
+                            if (p_core in target_core) or (target_core in p_core) or (match_count >= 2):
+                                for l in entry.get("link", []):
+                                    if l.get("rel") == "alternate":
+                                        candidate_urls.append(l.get("href"))
+                                        break
+            except Exception as fe:
+                logger.warning(f"Error fetching Blogger feed: {fe}")
 
-            # Step B: Feed fallback if search page did not catch links
-            if not candidate_urls:
-                feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
+            # Step B: Direct Blogger search page parse agar feed me match na ho
+            if not candidate_urls and simple_search:
+                search_page_url = f"{blog_url}/search?q={simple_search}"
                 try:
-                    async with session.get(feed_url) as f_resp:
-                        if f_resp.status == 200:
-                            f_text = await f_resp.text()
-                            f_data = json.loads(f_text)
-                            for entry in f_data.get("feed", {}).get("entry", []):
-                                p_title = entry.get("title", {}).get("$t", "")
-                                if target_core in clean_core(p_title):
-                                    for l in entry.get("link", []):
-                                        if l.get("rel") == "alternate":
-                                            candidate_urls.append(l.get("href"))
-                                            break
-                except Exception as fe:
-                    logger.warning(f"Error fetching Blogger feed: {fe}")
+                    async with session.get(search_page_url) as s_resp:
+                        if s_resp.status == 200:
+                            s_html = await s_resp.text()
+                            s_soup = BeautifulSoup(s_html, "html.parser")
+                            for a_elem in s_soup.find_all("a", href=True):
+                                h = a_elem["href"].split("?")[0]
+                                title_attr = (a_elem.get("title") or a_elem.get_text() or "").strip()
+                                if h.startswith(blog_url) and h.endswith(".html"):
+                                    if target_core in clean_core(h) or (title_attr and target_core in clean_core(title_attr)):
+                                        if h not in candidate_urls:
+                                            candidate_urls.append(h)
+                except Exception as se:
+                    logger.warning(f"Error fetching Blogger search page: {se}")
 
             if not candidate_urls:
                 logger.warning(f"Blogger me koi post nahi mili target: '{base_name}' ke liye")
                 return None, None
 
-            # Step C: Open post and extract Poster + Hyperlink
+            # Step C: Post Open karke Poster + Hyperlink Extract Karo
             for post_url in candidate_urls:
                 try:
                     async with session.get(post_url) as p_resp:
@@ -579,14 +588,14 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                                     target_url = href
                                     break
 
-                        # Google CDN original resolution
+                        # Google CDN original high-res formatting
                         if img_url:
                             img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
                             img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s1600/', img_url)
                             img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
                             img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
 
-                            logger.info(f"Blogger Extraction SUCCESS: '{post_url}' | Poster: {bool(img_url)} | Target URL: {target_url}")
+                            logger.info(f"Blogger Post Matched! URL: '{post_url}' | Poster: {bool(img_url)} | Target URL: {target_url}")
                             return img_url, target_url
                 except Exception as err:
                     logger.warning(f"Error parsing post {post_url}: {err}")
@@ -976,9 +985,7 @@ async def _process_with_lock(
         db.movie_updates = db.db.movie_updates
 
     clean_title = get_clean_title(base_name)
-    movie_doc = await db.movie_updates.find_one(
-        {"_id": base_name}
-    )
+    movie_doc = await db.movie_updates.find_one({"_id": base_name})
     if not movie_doc:
         movie_doc = await db.movie_updates.find_one({"clean_title": clean_title})
         if movie_doc:
@@ -1019,7 +1026,7 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
-        # STEP 1: SABSE PEHLE BLOGGER SE IMAGE & LINK UTHAO
+        # STEP 1: SABSE PEHLE BLOGGER CHECK KARO
         blogger_poster_url, blogger_info_url = await get_blogger_data(base_name, media_info.get("year"))
 
         blogger_is_imdb = False
@@ -1029,19 +1036,18 @@ async def _process_with_lock(
 
         if blogger_info_url:
             m_imdb = re.search(r'tt\d+', blogger_info_url)
+            m_tmdb = re.search(r'themoviedb\.org/(?:movie|tv)/(\d+)', blogger_info_url)
             if m_imdb:
                 blogger_is_imdb = True
                 blogger_imdb_id = m_imdb.group(0)
-            else:
-                m_tmdb = re.search(r'themoviedb\.org/(?:movie|tv)/(\d+)', blogger_info_url)
-                if m_tmdb:
-                    blogger_is_tmdb = True
-                    blogger_tmdb_id = m_tmdb.group(1)
+            elif m_tmdb:
+                blogger_is_tmdb = True
+                blogger_tmdb_id = m_tmdb.group(1)
 
         imdb_details = {}
         tmdb_details = {}
 
-        # STRICT SOURCE PRIORITY: Image ke hyperlink se details lo
+        # STRICT SOURCE PRIORITY
         if blogger_is_imdb and blogger_imdb_id:
             try:
                 imdb_details = await get_movie_details(blogger_imdb_id) or {}
@@ -1052,7 +1058,13 @@ async def _process_with_lock(
 
         elif blogger_is_tmdb and blogger_tmdb_id:
             tmdb_details = await fetch_tmdb_safely(blogger_tmdb_id, base_name, is_series) or {}
-            official_search_title = tmdb_details.get("title") or tmdb_details.get("name") or base_name
+            # Anime/Foreign films ke liye localized (English) title prefer karein
+            official_search_title = (
+                tmdb_details.get("localized_title")
+                or tmdb_details.get("title")
+                or tmdb_details.get("name")
+                or base_name
+            )
             imdb_id = tmdb_details.get("imdb_id")
 
         else:
@@ -1095,19 +1107,21 @@ async def _process_with_lock(
             )
             is_backdrop = bool(imdb_details.get("backdrop_url"))
 
+        # EXACT RATING HANDLING
         rating = "x/10"
-        if blogger_is_imdb and imdb_details.get("rating"):
-            rating = str(imdb_details.get("rating")).strip()
-        elif blogger_is_tmdb and tmdb_details.get("rating"):
+        if blogger_is_tmdb and tmdb_details.get("rating"):
             rating = str(tmdb_details.get("rating")).strip()
+        elif blogger_is_imdb and imdb_details.get("rating"):
+            rating = str(imdb_details.get("rating")).strip()
         else:
             imdb_rate = imdb_details.get("rating")
             tmdb_rate = tmdb_details.get("rating")
-            if imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-                rating = str(imdb_rate).strip()
-            elif tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+            if tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
                 rating = str(tmdb_rate).strip()
+            elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+                rating = str(imdb_rate).strip()
 
+        # EXACT TARGET URL HANDLING
         imdb_url = ""
         if blogger_info_url:
             imdb_url = blogger_info_url.strip()
@@ -1123,12 +1137,12 @@ async def _process_with_lock(
         genre_list = []
         raw_genres = None
 
-        if blogger_is_imdb:
-            raw_genres = imdb_details.get("genres")
-        elif blogger_is_tmdb:
+        if blogger_is_tmdb:
             raw_genres = tmdb_details.get("genres")
+        elif blogger_is_imdb:
+            raw_genres = imdb_details.get("genres")
         else:
-            raw_genres = imdb_details.get("genres") or tmdb_details.get("genres")
+            raw_genres = tmdb_details.get("genres") or imdb_details.get("genres")
 
         if isinstance(raw_genres, list):
             for g in raw_genres:
@@ -1139,543 +1153,4 @@ async def _process_with_lock(
         elif isinstance(raw_genres, str) and raw_genres != "N/A":
             genre_list = [g.strip().title() for g in raw_genres.split(",") if g.strip()]
 
-        genres = ", ".join(genre_list) if genre_list else "N/A"
-
-        imdb_r = imdb_details.get("runtime")
-        tmdb_r = (
-            tmdb_details.get("episode_run_time")
-            if is_series and tmdb_details.get("episode_run_time")
-            else tmdb_details.get("runtime")
-        )
-        if isinstance(imdb_r, (list, tuple)) and imdb_r:
-            imdb_r = imdb_r[0]
-        if isinstance(tmdb_r, (list, tuple)) and tmdb_r:
-            tmdb_r = tmdb_r[0]
-
-        if blogger_is_imdb:
-            runtime = str(imdb_r).strip() if (imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else final_file_runtime
-        elif is_series:
-            runtime = str(tmdb_r).strip() if (tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else final_file_runtime
-        else:
-            runtime = str(imdb_r).strip() if (imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else (str(tmdb_r).strip() if (tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else final_file_runtime)
-
-        certificates = (
-            imdb_details.get("certificates")
-            if blogger_is_imdb and imdb_details.get("certificates") and imdb_details.get("certificates") != "N/A"
-            else (
-                tmdb_details.get("certificates")
-                if tmdb_details.get("certificates") and tmdb_details.get("certificates") != "N/A"
-                else imdb_details.get("certificates", "N/A")
-            )
-        )
-
-        movie_year = (
-            media_info.get("year")
-            or imdb_details.get("year")
-            or tmdb_details.get("year")
-        )
-
-        if is_mismatched and movie_doc:
-            update_data = {
-                "title": official_search_title,
-                "clean_title": clean_title,
-                "poster_url": poster_url,
-                "genres": genres,
-                "rating": rating,
-                "runtime": runtime,
-                "certificates": certificates,
-                "imdb_url": imdb_url,
-                "year": movie_year,
-                "tag": media_info["tag"],
-                "ott_platform": media_info["ott_platform"],
-                "error_tmdb": error_tmdb,
-                "is_backdrop": is_backdrop,
-                "from_blogger": bool(blogger_poster_url)
-            }
-            await db.movie_updates.update_one(
-                {"_id": base_name},
-                {
-                    "$set": update_data,
-                    "$push": {"files": file_data}
-                }
-            )
-            schedule_update(bot, base_name)
-            return
-
-        new_doc = {
-            "_id": base_name,
-            "clean_title": clean_title,
-            "title": official_search_title,
-            "files": [file_data],
-            "poster_url": poster_url,
-            "genres": genres,
-            "rating": rating,
-            "runtime": runtime,
-            "certificates": certificates,
-            "imdb_url": imdb_url,
-            "year": movie_year,
-            "tag": media_info["tag"],
-            "ott_platform": media_info["ott_platform"],
-            "message_id": None,
-            "is_photo": False,
-            "error_tmdb": error_tmdb,
-            "is_backdrop": is_backdrop,
-            "from_blogger": bool(blogger_poster_url)
-        }
-
-        try:
-            await db.movie_updates.insert_one(new_doc)
-        except DuplicateKeyError:
-            movie_doc = await db.movie_updates.find_one({"_id": base_name})
-            if not movie_doc:
-                return
-
-            if any(
-                f.get("filename") == filename or 
-                (f.get("quality") == media_info["quality"] and f.get("episode") == media_info["episode"])
-                for f in movie_doc.get("files", [])
-            ):
-                return
-
-            await db.movie_updates.update_one(
-                {"_id": base_name},
-                {"$push": {"files": file_data}}
-            )
-            schedule_update(bot, base_name)
-            return
-
-        await send_movie_update(bot, base_name)
-
-    else:
-        existing_files = movie_doc.get("files", [])
-        is_duplicate = any(
-            f.get("filename") == filename or 
-            (f.get("quality") == media_info["quality"] and f.get("episode") == media_info["episode"])
-            for f in existing_files
-        )
-        if is_duplicate:
-            logger.info(f"Duplicate file skipped: {filename}")
-            return
-
-        update_fields = {"$push": {"files": file_data}}
-
-        current_db_runtime = movie_doc.get("runtime")
-        if (not current_db_runtime or str(current_db_runtime).strip().upper() in ("N/A", "NONE", "0", "")) and final_file_runtime != "N/A":
-            update_fields.setdefault("$set", {})["runtime"] = final_file_runtime
-
-        current_db_genres = movie_doc.get("genres")
-        if not current_db_genres or str(current_db_genres).strip().upper() in ("N/A", "NONE", ""):
-            imdb_details = await fetch_imdb_safely(base_name, is_series=is_series, year=media_info.get("year")) or {}
-            raw_g = imdb_details.get("genres")
-            if raw_g and str(raw_g).strip().upper() not in ("N/A", "NONE", ""):
-                update_fields.setdefault("$set", {})["genres"] = str(raw_g).strip()
-
-        await db.movie_updates.update_one(
-            {"_id": base_name},
-            update_fields
-        )
-
-        schedule_update(bot, base_name)
-
-
-async def send_movie_update(bot, base_name):
-    if base_name in sending_updates:
-        logger.warning(f"Duplicate send prevented: {base_name}")
-        return None
-
-    sending_updates.add(base_name)
-
-    try:
-        max_retries = 3
-
-        for attempt in range(max_retries):
-            try:
-                movie_doc = await db.movie_updates.find_one({"_id": base_name})
-                if not movie_doc:
-                    return None
-
-                existing_message_id = movie_doc.get("message_id")
-                if existing_message_id:
-                    logger.info(f"Movie already posted, updating instead: {base_name}")
-                    await update_movie_message(bot, base_name)
-                    return None
-
-                text = generate_movie_message(movie_doc, base_name)
-
-                all_tags = {
-                    f.get("tag")
-                    for f in movie_doc.get("files", [])
-                    if f.get("tag")
-                }
-
-                primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
-                btn_style = enums.ButtonStyle.SUCCESS if primary_tag == "#SERIES" else enums.ButtonStyle.DANGER
-
-                match = re.search(r'(.+?)\s+Season\s+(\d+)', base_name, re.IGNORECASE)
-                if match:
-                    series_name = match.group(1).strip()
-                    season_num = int(match.group(2))
-                    button_query = f"{series_name}-S{season_num:02d}"
-                else:
-                    button_query = base_name
-
-                buttons = InlineKeyboardMarkup(
-                    [[
-                        InlineKeyboardButton(
-                            "ɢᴇᴛ ғɪʟᴇs",
-                            url=(
-                                f"https://t.me/{temp.U_NAME}"
-                                f"?start=getfile-"
-                                f"{button_query.replace(' ', '-')}"
-                            ),
-                            style=btn_style
-                        )
-                    ]]
-                )
-
-                if movie_doc.get("from_blogger") or (LANDSCAPE_POSTER and movie_doc.get("is_backdrop")):
-                    size = (2560, 1440)
-                else:
-                    size = (853, 1280)
-
-                poster_url = movie_doc.get("poster_url")
-                is_photo = False
-                msg = None
-
-                if poster_url and not LINK_PREVIEW:
-                    try:
-                        resized_poster = await fetch_image(poster_url, size)
-                        photo_to_send = resized_poster or poster_url
-                        msg = await bot.send_photo(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            photo=photo_to_send,
-                            caption=text,
-                            reply_markup=buttons,
-                            parse_mode=enums.ParseMode.HTML
-                        )
-                        is_photo = True
-                    except Exception as err:
-                        logger.warning(f"send_photo failed ({err}), falling back to direct URL")
-                        try:
-                            msg = await bot.send_photo(
-                                chat_id=MOVIE_UPDATE_CHANNEL,
-                                photo=poster_url,
-                                caption=text,
-                                reply_markup=buttons,
-                                parse_mode=enums.ParseMode.HTML
-                            )
-                            is_photo = True
-                        except Exception:
-                            msg = await bot.send_message(
-                                chat_id=MOVIE_UPDATE_CHANNEL,
-                                text=text,
-                                reply_markup=buttons,
-                                parse_mode=enums.ParseMode.HTML
-                            )
-                            is_photo = False
-                else:
-                    send_params = {
-                        "chat_id": MOVIE_UPDATE_CHANNEL,
-                        "text": text,
-                        "reply_markup": buttons,
-                        "parse_mode": enums.ParseMode.HTML
-                    }
-                    if poster_url and LINK_PREVIEW:
-                        send_params["invert_media"] = True
-
-                    msg = await bot.send_message(**send_params)
-                    is_photo = False
-
-                await db.movie_updates.update_one(
-                    {"_id": base_name, "message_id": None},
-                    {"$set": {"message_id": msg.id, "is_photo": is_photo}}
-                )
-
-                logger.info(f"Movie update posted successfully: {base_name} -> {msg.id}")
-                return msg
-
-            except FloodWait as e:
-                await asyncio.sleep(e.value + 2)
-            except Exception as e:
-                logger.error(f"Failed to send movie update: {e}")
-                break
-
-        return None
-
-    finally:
-        sending_updates.discard(base_name)
-
-
-async def update_movie_message(bot, base_name):
-    try:
-        movie_doc = await db.movie_updates.find_one({"_id": base_name})
-        if not movie_doc:
-            return
-
-        text = generate_movie_message(movie_doc, base_name)
-
-        all_tags = {
-            f.get("tag")
-            for f in movie_doc.get("files", [])
-            if f.get("tag")
-        }
-
-        primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
-        btn_style = enums.ButtonStyle.SUCCESS if primary_tag == "#SERIES" else enums.ButtonStyle.DANGER
-
-        match = re.search(r'(.+?)\s+Season\s+(\d+)', base_name, re.IGNORECASE)
-        if match:
-            series_name = match.group(1).strip()
-            season_num = int(match.group(2))
-            button_query = f"{series_name}-S{season_num:02d}"
-        else:
-            button_query = base_name
-
-        buttons = InlineKeyboardMarkup(
-            [[
-                InlineKeyboardButton(
-                    "ɢᴇᴛ ғɪʟᴇs",
-                    url=(
-                        f"https://t.me/{temp.U_NAME}"
-                        f"?start=getfile-"
-                        f"{button_query.replace(' ', '-')}"
-                    ),
-                    style=btn_style
-                )
-            ]]
-        )
-
-        message_id = movie_doc.get("message_id")
-        is_photo = movie_doc.get("is_photo", False)
-
-        if not message_id:
-            await send_movie_update(bot, base_name)
-            return
-
-        try:
-            if is_photo:
-                poster_url = movie_doc.get("poster_url")
-                size = (2560, 1440) if (movie_doc.get("from_blogger") or (LANDSCAPE_POSTER and movie_doc.get("is_backdrop"))) else (853, 1280)
-                try:
-                    resized = await fetch_image(poster_url, size) if poster_url else None
-                    media_photo = resized or poster_url
-                    if media_photo:
-                        await bot.edit_message_media(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            message_id=message_id,
-                            media=InputMediaPhoto(media_photo, caption=text, parse_mode=enums.ParseMode.HTML),
-                            reply_markup=buttons
-                        )
-                    else:
-                        await bot.edit_message_caption(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            message_id=message_id,
-                            caption=text,
-                            reply_markup=buttons,
-                            parse_mode=enums.ParseMode.HTML
-                        )
-                except Exception:
-                    await bot.edit_message_caption(
-                        chat_id=MOVIE_UPDATE_CHANNEL,
-                        message_id=message_id,
-                        caption=text,
-                        reply_markup=buttons,
-                        parse_mode=enums.ParseMode.HTML
-                    )
-            else:
-                await bot.edit_message_text(
-                    chat_id=MOVIE_UPDATE_CHANNEL,
-                    message_id=message_id,
-                    text=text,
-                    reply_markup=buttons,
-                    parse_mode=enums.ParseMode.HTML,
-                    invert_media=True,
-                    disable_web_page_preview=not LINK_PREVIEW
-                )
-
-            logger.info(f"Movie update edited successfully: {base_name}")
-
-        except MessageNotModified:
-            logger.info(f"Movie message unchanged: {base_name}")
-
-        except MessageIdInvalid:
-            logger.warning(f"Invalid movie message ID: {base_name}")
-            await db.movie_updates.update_one(
-                {"_id": base_name},
-                {"$set": {"message_id": None}}
-            )
-            await send_movie_update(bot, base_name)
-
-        except Exception as e:
-            logger.error(f"Error updating movie message: {e}")
-
-    except Exception as e:
-        logger.error(f"Failed to update movie message for {base_name}: {e}")
-
-
-def generate_movie_message(movie_doc, base_name):
-    all_raw_qualities = []
-    all_languages = set()
-    all_ott_platforms = set()
-    all_tags = set()
-    episodes_by_season = defaultdict(set)
-
-    for file in movie_doc.get("files", []):
-        if file.get("quality") and file.get("quality") != "N/A":
-            all_raw_qualities.append(file.get("quality"))
-
-        lang_val = file.get("language")
-        if lang_val and lang_val != "N/A":
-            for lang in lang_val.split(","):
-                clean_l = lang.strip()
-                if clean_l and clean_l != "N/A":
-                    norm_l = CAPTION_LANGUAGES.get(clean_l.lower(), clean_l.title())
-                    all_languages.add(norm_l)
-
-        ott_val = file.get("ott_platform")
-        if ott_val and ott_val != "N/A":
-            for plat in ott_val.split("|"):
-                clean_p = plat.strip()
-                if clean_p and clean_p != "N/A":
-                    norm_p = OTT_PLATFORMS.get(clean_p.lower(), clean_p)
-                    all_ott_platforms.add(norm_p)
-
-        if file.get("tag"):
-            all_tags.add(file.get("tag"))
-
-        if file.get("season") is not None and file.get("episode"):
-            season = file.get("season")
-            episode = str(file.get("episode"))
-            episodes_by_season[season].add(episode)
-
-    if "Disney+ Hotstar" in all_ott_platforms and "Disney+" in all_ott_platforms:
-        all_ott_platforms.remove("Disney+")
-    if "JioHotstar" in all_ott_platforms:
-        all_ott_platforms.discard("Disney+ Hotstar")
-        all_ott_platforms.discard("Disney+")
-    if "HBO Max" in all_ott_platforms and "Max" in all_ott_platforms:
-        all_ott_platforms.remove("Max")
-
-    primary_tag = "#SERIES" if "#SERIES" in all_tags else "#MOVIE"
-    is_series = (primary_tag == "#SERIES")
-
-    epi_block = ""
-
-    if episodes_by_season:
-        episode_lines = []
-
-        for season, episodes in sorted(
-            episodes_by_season.items(),
-            key=lambda x: int(x[0])
-        ):
-            regular_eps = set()
-            bonus_eps = set()
-
-            for ep in episodes:
-                ep_str = str(ep).strip()
-                if not ep_str or ep_str.lower() in ("bonus", "special", "episodes", "episode"):
-                    continue
-
-                if ep_str.lower().startswith("bonus"):
-                    val = re.sub(r'(?i)bonus\s*', '', ep_str).strip()
-                    if "-" in val:
-                        try:
-                            p1, p2 = val.split("-")
-                            bonus_eps.update(range(int(p1), int(p2) + 1))
-                        except ValueError:
-                            pass
-                    elif val.isdigit():
-                        bonus_eps.add(int(val))
-                elif "-" in ep_str:
-                    try:
-                        p1, p2 = ep_str.split("-")
-                        regular_eps.update(range(int(p1), int(p2) + 1))
-                    except ValueError:
-                        pass
-                elif ep_str.isdigit():
-                    regular_eps.add(int(ep_str))
-
-            def collapse_range(num_set):
-                sorted_nums = sorted(num_set)
-                if not sorted_nums:
-                    return []
-                collapsed = []
-                start = end = sorted_nums[0]
-                for num in sorted_nums[1:]:
-                    if num == end + 1:
-                        end = num
-                    else:
-                        collapsed.append(str(start) if start == end else f"{start}-{end}")
-                        start = end = num
-                collapsed.append(str(start) if start == end else f"{start}-{end}")
-                return collapsed
-
-            line_parts = []
-            reg_list = collapse_range(regular_eps)
-            if reg_list:
-                line_parts.append(", ".join(reg_list))
-
-            bon_list = collapse_range(bonus_eps)
-            if bon_list:
-                line_parts.append(f"Bonus {', '.join(bon_list)}")
-
-            if line_parts:
-                episode_lines.append(f"S{int(season)}: {', '.join(line_parts)}")
-
-        epi_str = "\n".join(episode_lines)
-        if epi_str:
-            epi_block = f"\n📺 ᴇᴘɪsᴏᴅᴇs : <b>{epi_str}</b>"
-
-    genres = movie_doc.get("genres", "N/A")
-    quality_str = format_movie_qualities(all_raw_qualities)
-    language_str = ", ".join(sorted(all_languages)) if all_languages else "N/A"
-    ott_str = " | ".join(sorted(all_ott_platforms)) if all_ott_platforms else "N/A"
-
-    raw_rating = str(movie_doc.get("rating", "x/10")).strip()
-    imdb_url = movie_doc.get("imdb_url", "")
-
-    if raw_rating.lower() in ("x/10", "x", "n/a", "-", "none", "", "0", "0.0", "null"):
-        rating_display = "<small>x/10</small>"
-    else:
-        clean_rating = raw_rating.replace("/10", "").strip()
-        rating_display = f"<small>{clean_rating}/10</small>"
-
-    if imdb_url:
-        rating_text = f'<a href="{imdb_url}">{rating_display}</a>'
-    else:
-        rating_text = rating_display
-
-    raw_runtime = movie_doc.get("runtime", "N/A")
-    runtime = format_runtime(raw_runtime, is_series=is_series)
-    certificates = movie_doc.get("certificates", "N/A")
-
-    stored_title = movie_doc.get("title", base_name)
-    display_title = re.sub(r'\s+Season\s*\d+', '', stored_title, flags=re.IGNORECASE).strip()
-    display_title = re.sub(r'\s+S\d+', '', display_title, flags=re.IGNORECASE).strip()
-
-    movie_year = movie_doc.get("year")
-    if movie_year and str(movie_year) not in str(display_title) and primary_tag != "#SERIES":
-        filename_display = f"{display_title} {movie_year}"
-    else:
-        filename_display = display_title
-
-    raw_text = script.MOVIE_UPDATE_NOTIFY_TXT.format(
-        poster_url=movie_doc.get("poster_url", ""),
-        imdb_url=imdb_url,
-        filename=filename_display,
-        tag=primary_tag,
-        genres=genres,
-        ott=ott_str,
-        runtime=runtime,
-        certificates=certificates,
-        quality=quality_str,
-        language=language_str,
-        episodes=epi_block,
-        rating=rating_text,
-        search_link=temp.B_LINK
-    )
-
-    return "\n".join(
-        line.strip()
-        for line in raw_text.splitlines()
-    )
+        genres = ", ".join(genre_list) if genre_list else "N/A
