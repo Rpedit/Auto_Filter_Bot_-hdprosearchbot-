@@ -186,8 +186,10 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     f_raw = YEAR_PATTERN.sub('', found_title).strip()
 
     def clean_words(s: str):
-        s = re.sub(r'\(?\b(?:full\s*movie|full\s*series|full\s*film|hd|rip|dubbed)\b\)?', '', s, flags=re.IGNORECASE)
-        s = re.sub(r'^(the|a|an)\s+', '', s, flags=re.IGNORECASE)
+        # Season / Part tokens ko clean karo taaki 'Bigg Boss Season 20' vs 'Bigg Boss' match fail na kare
+        s = re.sub(r'\b(?:Season\s*\d+|S\d{1,2}|Part\s*\d+|Episode\s*\d+|Ep\s*\d+)\b', ' ', s, flags=re.IGNORECASE)
+        s = re.sub(r'\(?\b(?:full\s*movie|full\s*series|full\s*film|hd|rip|dubbed)\b\)?', ' ', s, flags=re.IGNORECASE)
+        s = re.sub(r'^(the|a|an)\s+', ' ', s, flags=re.IGNORECASE)
         s = re.sub(r"['’]", "", s)
         s = normalize(s).lower()
         return [w for w in s.split() if w]
@@ -204,7 +206,7 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     if len(q_words) == 1:
         return q_words == f_words
 
-    if all(qw in f_words for qw in q_words):
+    if all(qw in f_words for qw in q_words) or all(fw in q_words for fw in f_words):
         return True
 
     for sep in [':', '-', '–', '—', '|']:
@@ -496,34 +498,19 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
         if not target_core:
             return None, None
 
-        words = [w.lower() for w in re.split(r'[\s\-:_.()]+', base_name) if len(w) >= 3 and not w.isdigit()]
-        simple_search = "+".join(words[:2]) if words else target_core
+        # Stop words filter out karo taaki generic 'Season 1' kisi aur post ko match na kar le
+        stop_words = {"season", "series", "complete", "part", "episode", "the", "and", "hindi", "dubbed"}
+        words = [w.lower() for w in re.split(r'[\s\-:_.()]+', base_name) if len(w) >= 3 and not w.isdigit() and w.lower() not in stop_words]
+        
+        if not words:
+            words = [w.lower() for w in re.split(r'[\s\-:_.()]+', base_name) if len(w) >= 3 and not w.isdigit()]
 
+        simple_search = "+".join(words[:2]) if words else target_core
         candidate_urls = []
 
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
-            try:
-                async with session.get(feed_url) as f_resp:
-                    if f_resp.status == 200:
-                        f_text = await f_resp.text()
-                        f_data = json.loads(f_text)
-                        for entry in f_data.get("feed", {}).get("entry", []):
-                            p_title = entry.get("title", {}).get("$t", "")
-                            p_core = clean_core(p_title)
-                            
-                            p_words = [w.lower() for w in re.split(r'[\s\-:_.()]+', p_title) if len(w) >= 3 and not w.isdigit()]
-                            match_count = sum(1 for w in words if w in p_words or w in p_core)
-                            
-                            if (p_core in target_core) or (target_core in p_core) or (match_count >= 2):
-                                for l in entry.get("link", []):
-                                    if l.get("rel") == "alternate":
-                                        candidate_urls.append(l.get("href"))
-                                        break
-            except Exception as fe:
-                logger.warning(f"Error fetching Blogger feed: {fe}")
-
-            if not candidate_urls and simple_search:
+            # 1. Search page specific keyword se
+            if simple_search:
                 search_page_url = f"{blog_url}/search?q={simple_search}"
                 try:
                     async with session.get(search_page_url) as s_resp:
@@ -534,16 +521,38 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                                 h = a_elem["href"].split("?")[0]
                                 title_attr = (a_elem.get("title") or a_elem.get_text() or "").strip()
                                 if h.startswith(blog_url) and h.endswith(".html"):
-                                    if target_core in clean_core(h) or (title_attr and target_core in clean_core(title_attr)):
+                                    p_text = clean_core(h) + " " + clean_core(title_attr)
+                                    # Target ka primary main title word hona compulsory hai (e.g. 'punisher')
+                                    if words and any(w in p_text for w in words):
                                         if h not in candidate_urls:
                                             candidate_urls.append(h)
                 except Exception as se:
                     logger.warning(f"Error fetching Blogger search page: {se}")
 
+            # 2. Feed fallback ONLY IF primary title match ho
             if not candidate_urls:
-                logger.warning(f"Blogger me koi post nahi mili target: '{base_name}' ke liye")
+                feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
+                try:
+                    async with session.get(feed_url) as f_resp:
+                        if f_resp.status == 200:
+                            f_text = await f_resp.text()
+                            f_data = json.loads(f_text)
+                            for entry in f_data.get("feed", {}).get("entry", []):
+                                p_title = entry.get("title", {}).get("$t", "")
+                                p_core = clean_core(p_title)
+                                if words and any(w in p_core for w in words):
+                                    for l in entry.get("link", []):
+                                        if l.get("rel") == "alternate":
+                                            candidate_urls.append(l.get("href"))
+                                            break
+                except Exception as fe:
+                    logger.warning(f"Error fetching Blogger feed: {fe}")
+
+            if not candidate_urls:
+                logger.warning(f"Blogger me koi matching post nahi mili target: '{base_name}' ke liye")
                 return None, None
 
+            # 3. Post Open karke Poster + Hyperlink Extract Karo
             for post_url in candidate_urls:
                 try:
                     async with session.get(post_url) as p_resp:
@@ -555,6 +564,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                         img_url = None
                         target_url = None
 
+                        # Check 1: Image ke upar wrap hua hyperlink
                         for a_tag in post_soup.find_all("a", href=True):
                             href = a_tag["href"].strip()
                             inner_img = a_tag.find("img")
@@ -566,6 +576,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                                         target_url = href
                                         break
 
+                        # Check 2: Standalone <img>
                         if not img_url:
                             for im in post_soup.find_all("img"):
                                 src = im.get("src") or im.get("data-src")
@@ -573,6 +584,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                                     img_url = src.strip()
                                     break
 
+                        # Check 3: Post body me link
                         if not target_url:
                             for a_tag in post_soup.find_all("a", href=True):
                                 href = a_tag["href"].strip()
@@ -586,7 +598,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                             img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
                             img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
 
-                            logger.info(f"Blogger Post Matched! URL: '{post_url}' | Poster: {bool(img_url)} | Target URL: {target_url}")
+                            logger.info(f"Blogger Exact Matched! URL: '{post_url}' | Poster: {bool(img_url)} | Target URL: {target_url}")
                             return img_url, target_url
                 except Exception as err:
                     logger.warning(f"Error parsing post {post_url}: {err}")
