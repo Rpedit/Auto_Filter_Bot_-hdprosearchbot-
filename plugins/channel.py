@@ -1,4 +1,5 @@
 import re
+import json
 import logging
 import asyncio
 import aiohttp
@@ -12,7 +13,7 @@ from pyrogram import Client, filters, enums
 from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, ABOVE_PREVIEW, BAD_WORDS, LANDSCAPE_POSTER, TMDB_POSTER
 from Script import script
 from database.ia_filterdb import save_file
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from utils import temp
 from pymongo.errors import PyMongoError, DuplicateKeyError
 from pyrogram.errors import MessageIdInvalid, MessageNotModified, FloodWait
@@ -478,85 +479,109 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         }
-        timeout = aiohttp.ClientTimeout(total=8)
+        timeout = aiohttp.ClientTimeout(total=10)
 
         def clean_core(s):
+            if not s:
+                return ""
             s = re.sub(r'[\(\)\[\]#]', ' ', s)
-            s = re.sub(r'\b(?:Season\s*\d+|S\d{1,2}|Complete)\b', ' ', s, flags=re.IGNORECASE)
+            s = re.sub(r'\b(?:Season\s*\d+|S\d{1,2}|Complete|Part\s*\d+)\b', ' ', s, flags=re.IGNORECASE)
             s = re.sub(r'\b(19|20)\d{2}\b', ' ', s)
             return re.sub(r'[^a-zA-Z0-9]', '', s).lower().strip()
 
         target_core = clean_core(base_name)
+        if not target_core:
+            return None, None
 
         feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
             async with session.get(feed_url) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    entries = data.get("feed", {}).get("entry", [])
+                if resp.status != 200:
+                    logger.warning(f"Blogger feed returned HTTP {resp.status}")
+                    return None, None
+                text_data = await resp.text()
+                data = json.loads(text_data)
 
-                    for entry in entries:
-                        post_title = entry.get("title", {}).get("$t", "").strip()
-                        entry_core = clean_core(post_title)
+            entries = data.get("feed", {}).get("entry", [])
+            for entry in entries:
+                post_title = entry.get("title", {}).get("$t", "").strip()
+                entry_core = clean_core(post_title)
 
-                        if target_core and (target_core == entry_core or target_core in entry_core or entry_core in target_core):
-                            content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
-                            soup = BeautifulSoup(content_html, "html.parser")
+                if target_core and (target_core == entry_core or target_core in entry_core or entry_core in target_core):
+                    content_html = entry.get("content", {}).get("$t", "") or entry.get("summary", {}).get("$t", "")
 
-                            img_url = None
-                            target_url = None
+                    # Direct Webpage fallback agar feed me HTML truncate ho gaya ho
+                    post_url = None
+                    for l in entry.get("link", []):
+                        if l.get("rel") == "alternate":
+                            post_url = l.get("href")
+                            break
 
-                            # Check 1: Target Link inside <a> that wraps <img> tag (Direct image click hyperlink)
-                            for a_tag in soup.find_all("a", href=True):
-                                href = a_tag["href"].strip()
-                                has_movie_link = (
-                                    re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or 
-                                    re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE)
-                                )
-                                if has_movie_link:
-                                    target_url = href
-                                    inner_img = a_tag.find("img")
-                                    if inner_img and (inner_img.get("src") or inner_img.get("data-src")):
-                                        img_url = (inner_img.get("src") or inner_img.get("data-src")).strip()
-                                        break
+                    if post_url and (not content_html or "<img" not in content_html):
+                        try:
+                            async with session.get(post_url) as p_resp:
+                                if p_resp.status == 200:
+                                    content_html = await p_resp.text()
+                        except Exception as pe:
+                            logger.warning(f"Error fetching direct post URL: {pe}")
 
-                            # Check 2: Normal <img> search agar wrap nahi ho
-                            if not img_url:
-                                for im in soup.find_all("img"):
-                                    src = im.get("src") or im.get("data-src")
-                                    if src and not any(x in src.lower() for x in ["icon", "blank.gif", "avatar"]):
-                                        img_url = src.strip()
-                                        break
+                    soup = BeautifulSoup(content_html, "html.parser")
+                    img_url = None
+                    target_url = None
 
-                            # Check 3: <a> tag pointing to an image file directly
-                            if not img_url:
-                                for a_tag in soup.find_all("a", href=True):
-                                    href = a_tag["href"].strip()
-                                    if any(href.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]):
-                                        img_url = href
-                                        break
+                    # Check 1: <a> tag with IMDb/TMDb link wrapping <img> tag
+                    for a_tag in soup.find_all("a", href=True):
+                        href = a_tag["href"].strip()
+                        has_link = (
+                            re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or 
+                            re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE)
+                        )
+                        if has_link:
+                            target_url = href
+                            inner_img = a_tag.find("img")
+                            if inner_img:
+                                src = inner_img.get("src") or inner_img.get("data-src")
+                                if src and not any(x in src.lower() for x in ["icon", "blank.gif", "avatar"]):
+                                    img_url = src.strip()
+                                    break
 
-                            # Check 4: media$thumbnail feed tag
-                            if not img_url and "media$thumbnail" in entry:
-                                img_url = entry["media$thumbnail"].get("url", "").strip()
+                    # Check 2: Standalone <img> tag
+                    if not img_url:
+                        for im in soup.find_all("img"):
+                            src = im.get("src") or im.get("data-src")
+                            if src and not any(x in src.lower() for x in ["icon", "blank.gif", "avatar"]):
+                                img_url = src.strip()
+                                break
 
-                            # Check 5: General target link agar alag se laga ho
-                            if not target_url:
-                                for a_tag in soup.find_all("a", href=True):
-                                    href = a_tag["href"].strip()
-                                    if re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE):
-                                        target_url = href
-                                        break
+                    # Check 3: <a> tag pointing directly to image file
+                    if not img_url:
+                        for a_tag in soup.find_all("a", href=True):
+                            href = a_tag["href"].strip()
+                            if any(href.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]):
+                                img_url = href
+                                break
 
-                            # Google CDN Resolution to HD
-                            if img_url:
-                                img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
-                                img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s1600/', img_url)
-                                img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
-                                img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
+                    # Check 4: media$thumbnail feed tag
+                    if not img_url and "media$thumbnail" in entry:
+                        img_url = entry["media$thumbnail"].get("url", "").strip()
 
-                            logger.info(f"Blogger Matched! Title: '{post_title}' | Poster: {bool(img_url)} | Target URL: {target_url}")
-                            return img_url, target_url
+                    # Check 5: Standalone target URL agar <a> ke andar image wrap na ho
+                    if not target_url:
+                        for a_tag in soup.find_all("a", href=True):
+                            href = a_tag["href"].strip()
+                            if re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE):
+                                target_url = href
+                                break
+
+                    # Full HD original resolution
+                    if img_url:
+                        img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
+                        img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s1600/', img_url)
+                        img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
+                        img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
+
+                    logger.info(f"Blogger Post Matched! Title: '{post_title}' | Poster: {bool(img_url)} | Target URL: {target_url}")
+                    return img_url, target_url
 
     except Exception as e:
         logger.error(f"Error fetching Blogger data: {e}")
@@ -960,6 +985,10 @@ async def _process_with_lock(
             logger.warning(f"Title mismatch detected: '{stored_title}' for '{base_name}'. Re-fetching!")
             is_mismatched = True
 
+        # IMPORTANT: Agar pehle Blogger se nahi aaya tha, toh dobara Blogger check karo
+        if not movie_doc.get("from_blogger"):
+            is_mismatched = True
+
     error_tmdb = False
 
     final_file_runtime = (
@@ -1138,7 +1167,7 @@ async def _process_with_lock(
             or tmdb_details.get("year")
         )
 
-        if is_mismatched:
+        if is_mismatched and movie_doc:
             update_data = {
                 "title": official_search_title,
                 "clean_title": clean_title,
@@ -1417,13 +1446,35 @@ async def update_movie_message(bot, base_name):
 
         try:
             if is_photo:
-                await bot.edit_message_caption(
-                    chat_id=MOVIE_UPDATE_CHANNEL,
-                    message_id=message_id,
-                    caption=text,
-                    reply_markup=buttons,
-                    parse_mode=enums.ParseMode.HTML
-                )
+                # Agar Blogger poster update hua hai toh media update try karein
+                poster_url = movie_doc.get("poster_url")
+                size = (2560, 1440) if (movie_doc.get("from_blogger") or (LANDSCAPE_POSTER and movie_doc.get("is_backdrop"))) else (853, 1280)
+                try:
+                    resized = await fetch_image(poster_url, size) if poster_url else None
+                    media_photo = resized or poster_url
+                    if media_photo:
+                        await bot.edit_message_media(
+                            chat_id=MOVIE_UPDATE_CHANNEL,
+                            message_id=message_id,
+                            media=InputMediaPhoto(media_photo, caption=text, parse_mode=enums.ParseMode.HTML),
+                            reply_markup=buttons
+                        )
+                    else:
+                        await bot.edit_message_caption(
+                            chat_id=MOVIE_UPDATE_CHANNEL,
+                            message_id=message_id,
+                            caption=text,
+                            reply_markup=buttons,
+                            parse_mode=enums.ParseMode.HTML
+                        )
+                except Exception:
+                    await bot.edit_message_caption(
+                        chat_id=MOVIE_UPDATE_CHANNEL,
+                        message_id=message_id,
+                        caption=text,
+                        reply_markup=buttons,
+                        parse_mode=enums.ParseMode.HTML
+                    )
             else:
                 await bot.edit_message_text(
                     chat_id=MOVIE_UPDATE_CHANNEL,
