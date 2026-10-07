@@ -9,14 +9,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,500;0,700;0,800;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
     <!-- Google Cast Official Engine -->
     <script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
     
-    <!-- HLS.js Engine -->
+    <!-- HLS.js Multi-Codec Engine -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     
+    <!-- Plyr Modern Video Player UI -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.polyfilled.min.js"></script>
+
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
@@ -25,6 +29,7 @@
             --brand-red-bright: #FF1E27;
             --brand-orange: #FF5722;
             --brand-gold: #FFB800;
+            --plyr-color-main: #FF1E27;
         }
 
         body {
@@ -36,7 +41,6 @@
             touch-action: manipulation;
         }
 
-        /* Glassmorphism Styling */
         .glass-card {
             background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
             backdrop-filter: blur(24px);
@@ -45,50 +49,89 @@
             border-top: 1px solid rgba(255, 255, 255, 0.22);
             border-left: 1px solid rgba(255, 255, 255, 0.18);
             border-radius: 20px;
-            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.65);
+            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.65), inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+            transform: translateZ(0);
         }
 
         .glass-card-glow {
+            will-change: transform;
+            transform: translateZ(0);
             box-shadow: 0 0 35px rgba(229, 9, 20, 0.18), 0 12px 40px rgba(0, 0, 0, 0.7);
         }
 
-        /* Action Buttons */
         .player-btn {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 8px;
             width: 100%;
-            padding: 14px 18px;
-            border-radius: 14px;
+            padding: 12px 14px;
+            border-radius: 12px;
             font-weight: 700;
-            letter-spacing: 0.8px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            letter-spacing: 0.6px;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
             text-transform: uppercase;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
             position: relative;
             overflow: hidden;
         }
 
+        .player-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: 0.4s;
+        }
+
+        .player-btn:hover::before {
+            left: 100%;
+        }
+
+        .player-btn:hover {
+            transform: translateY(-2px) scale(1.02);
+            filter: brightness(1.15);
+        }
+
+        /* Themes */
         .btn-copy { 
             background: linear-gradient(135deg, rgba(229, 9, 20, 0.9), rgba(180, 0, 10, 0.95)); 
             color: #ffffff; 
             border: 1px solid rgba(255, 30, 39, 0.4);
-            box-shadow: 0 6px 20px rgba(229, 9, 20, 0.35); 
+            box-shadow: 0 4px 15px rgba(229, 9, 20, 0.3); 
         }
 
         .btn-vlc { 
             background: linear-gradient(135deg, rgba(255, 87, 34, 0.9), rgba(216, 50, 0, 0.95)); 
             color: #ffffff; 
             border: 1px solid rgba(255, 110, 64, 0.4);
-            box-shadow: 0 6px 20px rgba(255, 87, 34, 0.35); 
+            box-shadow: 0 4px 15px rgba(255, 87, 34, 0.3); 
         }
 
         .btn-mx { 
             background: linear-gradient(135deg, rgba(255, 184, 0, 0.9), rgba(212, 147, 0, 0.95)); 
             color: #0d0608; 
             border: 1px solid rgba(255, 200, 50, 0.5);
-            box-shadow: 0 6px 20px rgba(255, 184, 0, 0.35); 
+            box-shadow: 0 4px 15px rgba(255, 184, 0, 0.3); 
+        }
+
+        .btn-playit {
+            background: linear-gradient(135deg, #00C853, #009624);
+            color: #ffffff;
+            border: 1px solid rgba(0, 230, 118, 0.4);
+            box-shadow: 0 4px 15px rgba(0, 200, 83, 0.3);
+        }
+
+        .btn-splayer {
+            background: linear-gradient(135deg, #2979FF, #1565C0);
+            color: #ffffff;
+            border: 1px solid rgba(68, 138, 255, 0.4);
+            box-shadow: 0 4px 15px rgba(41, 121, 255, 0.3);
         }
 
         .btn-download { 
@@ -96,357 +139,33 @@
             color: #ffffff; 
             box-shadow: 0 8px 30px rgba(239, 35, 35, 0.45);
             border: 1px solid rgba(255, 255, 255, 0.3);
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
         }
 
         .brand-gradient-text {
             background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            font-family: 'Josefin Sans', sans-serif;
             font-weight: 800;
         }
 
-        /* =======================================================
-           EXACT NETFLIX UI PLAYER STYLES (MATCHING SCREENSHOT)
-        ======================================================= */
-        #playerContainer {
-            background: #000000;
-            user-select: none;
-            -webkit-user-select: none;
+        .brand-text-inline {
+            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            display: inline-block;
+            white-space: nowrap;
         }
 
-        .netflix-overlay {
-            position: absolute;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.65);
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 16px 22px;
-            transition: opacity 0.28s ease;
-            z-index: 25;
-        }
-
-        @media (min-width: 640px) {
-            .netflix-overlay {
-                padding: 24px 34px;
-            }
-        }
-
-        .netflix-overlay.hide {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        /* Top Bar: (N Logo) - (Reactions) - (Tools) */
-        .top-netflix-bar {
-            display: grid;
-            grid-template-columns: 1fr auto 1fr;
-            align-items: center;
-            width: 100%;
-        }
-
-        /* Netflix N Logo */
-        .netflix-n-brand {
-            color: #E50914;
-            font-size: 32px;
-            font-weight: 900;
-            line-height: 1;
-            font-family: -apple-system, BlinkMacSystemFont, "Impact", "Arial Black", sans-serif;
-            letter-spacing: -1px;
-            justify-self: start;
-        }
-
-        /* Center Reaction Circles */
-        .reactions-container {
-            grid-column: 2;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .circle-action-btn {
-            width: 42px;
-            height: 42px;
-            border-radius: 50%;
-            background: rgba(36, 36, 36, 0.85);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            backdrop-filter: blur(8px);
-            transition: transform 0.15s, background 0.2s;
-        }
-
-        @media (max-width: 640px) {
-            .circle-action-btn {
-                width: 36px;
-                height: 36px;
-            }
-        }
-
-        .circle-action-btn:active, .circle-action-btn.active {
-            transform: scale(1.18);
-            background: #E50914;
-        }
-
-        .circle-action-btn i {
-            font-size: 15px;
-        }
-
-        /* Top Right Icons */
-        .tools-container {
-            grid-column: 3;
-            display: flex;
-            align-items: center;
-            justify-self: end;
-            gap: 20px;
-        }
-
-        .tool-icon-btn {
-            color: #ffffff;
-            font-size: 19px;
-            cursor: pointer;
-            transition: opacity 0.2s, transform 0.15s;
-        }
-
-        .tool-icon-btn:hover {
-            opacity: 0.8;
-        }
-
-        .tool-icon-btn:active {
-            transform: scale(0.9);
-        }
-
-        /* Left Exact Vertical Brightness Slider */
-        .brightness-capsule-box {
-            position: absolute;
-            left: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 14px;
-            z-index: 26;
-        }
-
-        @media (min-width: 640px) {
-            .brightness-capsule-box {
-                left: 32px;
-            }
-        }
-
-        .sun-icon {
-            color: #ffffff;
-            font-size: 16px;
-            opacity: 0.85;
-        }
-
-        .vertical-capsule-track {
-            position: relative;
-            width: 6px;
-            height: 120px;
-            background: rgba(255, 255, 255, 0.25);
-            border-radius: 6px;
+        /* Custom Plyr adjustments */
+        .plyr {
+            border-radius: 16px;
             overflow: hidden;
-            cursor: pointer;
+            background: #000;
         }
 
-        .vertical-capsule-fill {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 70%;
-            background: #ffffff;
-            border-radius: 6px;
-            transition: height 0.05s linear;
-        }
-
-        /* Center Seek & Solid Play Controls */
-        .center-playback-box {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 55px;
-        }
-
-        @media (min-width: 640px) {
-            .center-playback-box {
-                gap: 80px;
-            }
-        }
-
-        .seek-round-btn {
-            position: relative;
-            background: none;
-            border: none;
-            color: #ffffff;
-            font-size: 34px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.15s;
-        }
-
-        .seek-round-btn:active {
-            transform: scale(1.15);
-        }
-
-        .seek-round-btn span {
-            position: absolute;
-            font-size: 10px;
-            font-weight: 800;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            top: 51%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-        }
-
-        .solid-play-btn {
-            background: none;
-            border: none;
-            color: #ffffff;
-            font-size: 48px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.15s;
-        }
-
-        @media (min-width: 640px) {
-            .solid-play-btn {
-                font-size: 58px;
-            }
-        }
-
-        .solid-play-btn:active {
-            transform: scale(1.15);
-        }
-
-        /* Bottom Section: Scrubber + Options */
-        .bottom-shelf {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .scrubber-container {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            width: 100%;
-        }
-
-        .netflix-red-slider {
-            flex: 1;
-            -webkit-appearance: none;
-            appearance: none;
-            height: 3px;
-            background: rgba(255, 255, 255, 0.28);
-            border-radius: 2px;
-            outline: none;
-            cursor: pointer;
-            accent-color: #E50914;
-        }
-
-        .netflix-red-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: #E50914;
-            cursor: pointer;
-            box-shadow: 0 0 10px rgba(229, 9, 20, 0.9);
-        }
-
-        .countdown-time {
-            color: #ffffff;
-            font-size: 13px;
-            font-weight: 500;
-            letter-spacing: 0.5px;
-            min-width: 65px;
-            text-align: right;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        }
-
-        .sub-options-row {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 32px;
-            padding-top: 4px;
-        }
-
-        @media (min-width: 640px) {
-            .sub-options-row {
-                gap: 52px;
-            }
-        }
-
-        .bottom-action-pill {
-            background: none;
-            border: none;
-            color: #f1f5f9;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            opacity: 0.9;
-            transition: opacity 0.2s, transform 0.15s;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        }
-
-        .bottom-action-pill:hover {
-            opacity: 1;
-        }
-
-        .bottom-action-pill:active {
-            transform: scale(0.95);
-        }
-
-        .bottom-action-pill i {
-            font-size: 15px;
-        }
-
-        /* Screen Locked Badge */
-        .screen-lock-status-badge {
-            position: absolute;
-            top: 22px;
-            right: 24px;
-            color: #ffffff;
-            background: rgba(18, 18, 18, 0.9);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 9px 18px;
-            border-radius: 26px;
-            font-size: 13px;
-            font-weight: 700;
-            display: none;
-            align-items: center;
-            gap: 9px;
-            cursor: pointer;
-            z-index: 35;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
-        }
-
-        /* Audio & Subtitles Bottom Sheet Modal */
-        #audioSubModal {
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        #audioSubModal.translate-y-full {
-            transform: translateY(100%);
-        }
-
-        /* Toast Popup */
         #toast {
             position: fixed;
             bottom: 25px;
@@ -470,10 +189,9 @@
 
 <body>
 
-    <!-- Centered Header -->
     <nav class="sticky top-0 z-50 glass-card mx-3 my-3 px-4 py-3 max-w-7xl md:mx-auto flex justify-center items-center">
-        <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="flex items-center gap-2">
-            <h3 class="text-xl sm:text-2xl font-extrabold brand-gradient-text tracking-wide text-center uppercase flex items-center gap-1.5">
+        <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="inline-flex items-center justify-center">
+            <h3 class="text-xl sm:text-2xl font-extrabold brand-gradient-text tracking-wide text-center uppercase flex items-center justify-center gap-1.5">
                 <span>HD PRO SEARCH BOT</span>
                 <span style="-webkit-text-fill-color: initial;" class="inline-block leading-none">🔍</span>
             </h3>
@@ -484,122 +202,14 @@
         <div class="inner">
             <div class="main" id="main">
 
-                <!-- VIDEO CONTAINER WITH SCREENSHOT-MATCHING NETFLIX PLAYER -->
-                <div id="playerContainer" class="w-full rounded-2xl overflow-hidden shadow-2xl bg-black relative glass-card-glow aspect-video">
-                    <video id="player" class="w-full h-full object-contain" playsinline preload="metadata">
-                        Your browser does not support playing this video directly.
+                <!-- Video Player Container with Plyr -->
+                <div id="playerContainer" class="w-full rounded-2xl overflow-hidden shadow-2xl bg-black/80 backdrop-blur-2xl border border-white/10 relative glass-card-glow">
+                    <video id="player" class="w-full aspect-video" playsinline controls crossorigin="anonymous" preload="metadata">
+                        Your browser does not support video playback.
                     </video>
 
-                    <!-- Lock Screen Badge -->
-                    <div class="screen-lock-status-badge" id="unlockScreenBadge">
-                        <i class="fa-solid fa-lock text-[#E50914]"></i> Screen Locked
-                    </div>
-
-                    <!-- Netflix UI Overlay -->
-                    <div class="netflix-overlay" id="netflixOverlay">
-                        
-                        <!-- Top Bar: N Logo, Reactions, Tools -->
-                        <div class="top-netflix-bar">
-                            <div class="netflix-n-brand" title="Netflix Player">N</div>
-
-                            <!-- Reactions -->
-                            <div class="reactions-container">
-                                <div class="circle-action-btn" id="btnDislike" title="Not for me">
-                                    <i class="fa-regular fa-thumbs-down"></i>
-                                </div>
-                                <div class="circle-action-btn" id="btnLike" title="I like this">
-                                    <i class="fa-regular fa-thumbs-up"></i>
-                                </div>
-                                <div class="circle-action-btn" id="btnDoubleLike" title="Love this!">
-                                    <span class="flex items-center tracking-tighter">
-                                        <i class="fa-solid fa-thumbs-up text-[11px] -mr-1"></i>
-                                        <i class="fa-solid fa-thumbs-up text-[11px]"></i>
-                                    </span>
-                                </div>
-                            </div>
-
-                            <!-- Right Tools: Cast, Lock, Close -->
-                            <div class="tools-container">
-                                <i class="fa-solid fa-chromecast tool-icon-btn" id="btnCast" title="Cast Video"></i>
-                                <i class="fa-solid fa-lock tool-icon-btn" id="btnLock" title="Lock Screen"></i>
-                                <i class="fa-solid fa-xmark tool-icon-btn" id="btnClose" title="Close / Fullscreen"></i>
-                            </div>
-                        </div>
-
-                        <!-- Left Vertical Brightness Capsule -->
-                        <div class="brightness-capsule-box" id="brightnessContainer">
-                            <i class="fa-regular fa-sun sun-icon"></i>
-                            <div class="vertical-capsule-track" id="brightnessTrack">
-                                <div class="vertical-capsule-fill" id="brightnessFill"></div>
-                            </div>
-                        </div>
-
-                        <!-- Center Controls: Rewind 10, Play/Pause, Forward 10 -->
-                        <div class="center-playback-box">
-                            <button class="seek-round-btn" id="btnRewind10" title="10s Back">
-                                <i class="fa-solid fa-arrow-rotate-left"></i>
-                                <span>10</span>
-                            </button>
-                            <button class="solid-play-btn" id="btnPlayPause" title="Play / Pause">
-                                <i class="fa-solid fa-play"></i>
-                            </button>
-                            <button class="seek-round-btn" id="btnForward10" title="10s Ahead">
-                                <i class="fa-solid fa-arrow-rotate-right"></i>
-                                <span>10</span>
-                            </button>
-                        </div>
-
-                        <!-- Bottom Section: Red Scrubber + Sub Controls -->
-                        <div class="bottom-shelf">
-                            <div class="scrubber-container">
-                                <input type="range" class="netflix-red-slider" id="timelineSlider" min="0" value="0" step="0.1">
-                                <div class="countdown-time" id="remainingTimeText">0:00:00</div>
-                            </div>
-
-                            <div class="sub-options-row">
-                                <button class="bottom-action-pill" id="btnClip">
-                                    <i class="fa-solid fa-scissors"></i> Clip
-                                </button>
-                                <button class="bottom-action-pill" id="btnSpeed">
-                                    <i class="fa-solid fa-gauge-high"></i> Speed (<span id="speedLabel">1x</span>)
-                                </button>
-                                <button class="bottom-action-pill" id="btnAudioSub">
-                                    <i class="fa-regular fa-message"></i> Audio & Subtitles
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Audio & Subtitles Bottom Sheet -->
-                    <div id="audioSubModal" class="absolute bottom-0 inset-x-0 bg-zinc-950/95 border-t border-white/15 p-5 rounded-t-2xl z-40 translate-y-full flex flex-col gap-4 backdrop-blur-2xl">
-                        <div class="flex justify-between items-center pb-2 border-b border-white/10">
-                            <h4 class="text-sm font-bold text-white uppercase tracking-wider">Audio & Subtitles</h4>
-                            <button onclick="toggleAudioSubSheet(false)" class="text-zinc-400 hover:text-white text-lg">
-                                <i class="fa-solid fa-xmark"></i>
-                            </button>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4 text-xs font-medium text-zinc-300">
-                            <div>
-                                <h5 class="text-white font-bold mb-2 uppercase tracking-wider text-[11px] text-zinc-400">Audio</h5>
-                                <div class="space-y-2" id="audioTrackList">
-                                    <label class="flex items-center gap-2 cursor-pointer">
-                                        <input type="radio" name="audioTrack" checked class="accent-[#E50914]"> Original Audio
-                                    </label>
-                                </div>
-                            </div>
-                            <div>
-                                <h5 class="text-white font-bold mb-2 uppercase tracking-wider text-[11px] text-zinc-400">Subtitles</h5>
-                                <div class="space-y-2" id="subtitleTrackList">
-                                    <label class="flex items-center gap-2 cursor-pointer">
-                                        <input type="radio" name="subTrack" checked class="accent-[#E50914]"> Off
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Resume Modal -->
-                    <div id="resumeModal" class="hidden absolute inset-0 bg-black/90 flex items-center justify-center p-3 z-50 transition-all duration-300">
+                    <div id="resumeModal" class="hidden absolute inset-0 bg-black/90 flex items-center justify-center p-3 z-30 transition-all duration-300">
                         <div class="bg-black/90 text-slate-100 rounded-xl py-5 px-4 sm:px-6 max-w-sm sm:max-w-md w-11/12 text-center shadow-2xl border border-[#FF5722]/40 backdrop-blur-xl">
                             <p class="text-xs sm:text-sm font-normal text-slate-300 mb-4 leading-snug">
                                 You were watching this video at <span id="resumeTimeText" class="font-bold text-[#FFB800]">00:00:00</span>. Do you want to resume?
@@ -617,49 +227,58 @@
                 </div>
 
                 <!-- File Info Card -->
-                <div class="file-name my-6 p-4 glass-card text-center md:text-left">
-                    <p id="myDiv" class="break-all text-slate-100 text-sm md:text-base font-bold tracking-wide"></p>
+                <div class="file-name my-5 p-4 glass-card text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 w-full">
+                        <i class="fa-solid fa-film text-[#FF1E27] text-xl shrink-0"></i>
+                        <p id="myDiv" class="break-all text-slate-100 text-sm md:text-base font-bold tracking-wide"></p>
+                    </div>
                 </div>
 
-                <!-- External Player Launchers -->
-                <div class="downloadBtn grid grid-cols-1 sm:grid-cols-3 gap-3.5 my-6">
+                <!-- Multi-Player Options Grid -->
+                <div class="downloadBtn grid grid-cols-2 sm:grid-cols-5 gap-3 my-6">
                     <button class="player-btn btn-copy" onclick="copyStreamLink()">
-                        <i class="fa-solid fa-copy text-lg"></i> Copy Link
+                        <i class="fa-solid fa-copy text-base"></i> Copy Link
                     </button>
 
                     <button class="player-btn btn-vlc" onclick="vlc_player()">
-                        <img src="https://i.postimg.cc/15TQ4y7B/vlc.png" class="w-5 h-5 object-contain" alt="VLC"> VLC Player
+                        <img src="https://i.postimg.cc/15TQ4y7B/vlc.png" class="w-4 h-4 object-contain" alt="VLC"> VLC
                     </button>
 
                     <button class="player-btn btn-mx" onclick="mx_player()">
-                        <img src="https://i.postimg.cc/sx4Msv4T/mx.png" class="w-5 h-5 object-contain" alt="MX"> MX Player
+                        <img src="https://i.postimg.cc/sx4Msv4T/mx.png" class="w-4 h-4 object-contain" alt="MX"> MX Player
                     </button>
 
-                    <button class="player-btn btn-download sm:col-span-3 py-4 text-base font-extrabold" onclick="bisalDownload()">
-                        <img src="https://i.postimg.cc/Zncc9YLq/Pngtree-download-icon-3581467.png" class="w-6 h-6 object-contain filter brightness-200" alt="Download"> Download Video
+                    <button class="player-btn btn-playit" onclick="playit_player()">
+                        <i class="fa-solid fa-circle-play text-base"></i> PlayIt
+                    </button>
+
+                    <button class="player-btn btn-splayer col-span-2 sm:col-span-1" onclick="splayer()">
+                        <i class="fa-solid fa-play text-base"></i> SPlayer
+                    </button>
+
+                    <button class="player-btn btn-download col-span-2 sm:col-span-5 py-3.5 text-base font-extrabold mt-2" onclick="bisalDownload()">
+                        <i class="fa-solid fa-cloud-arrow-down text-lg mr-1"></i> Download Video
                     </button>
                 </div>
             </div>
 
-            <!-- About Section -->
             <div class="abt space-y-8 my-10">
-                <div class="about glass-card p-6 md:p-10 text-center">
-                    <h1 class="text-2xl md:text-3xl font-black mb-3 uppercase tracking-wide leading-normal">
-                        WELCOME TO <span class="brand-gradient-text">HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span></span>
+                <div class="about glass-card p-6 md:p-8 text-center">
+                    <h1 class="text-xl md:text-2xl font-black mb-3 uppercase tracking-wide leading-normal">
+                        WELCOME TO <span class="brand-text-inline">HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span></span>
                     </h1>
                     <p class="max-w-xl mx-auto text-slate-300 text-xs md:text-sm leading-relaxed">
-                        Enjoy high-speed playback, multi-codec streaming options, and seamless external video player integration.
+                        Enjoy bufferless high-speed video playback, subtitle support, and external Android & iOS media player integration.
                     </p>
                 </div>
             </div>
         </div>
 
-        <!-- Footer -->
         <footer class="mt-10 border-t border-white/10 pt-6 pb-8 text-center">
             <div class="copyright text-xs text-slate-400 space-y-3">
                 <h5 class="flex items-center justify-center gap-1 flex-wrap font-semibold">
-                    <span>Copyright © 2025</span> 
-                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="brand-gradient-text">
+                    <span>Copyright © 2026</span> 
+                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="brand-text-inline">
                         HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span>
                     </a>. 
                     <span>All Rights Reserved.</span>
@@ -676,381 +295,124 @@
         </footer>
     </div>
 
-    <!-- Toast Overlay -->
+    <!-- Toast Popup -->
     <div id="toast" class="glass-card px-5 py-3 text-xs font-bold text-slate-100 border border-[#FF5722]/50 shadow-2xl flex items-center gap-2">
         <i class="fa-solid fa-circle-check text-[#FFB800] text-base"></i>
         <span id="toastMsg">Action completed!</span>
     </div>
 
-    <!-- MAIN JAVASCRIPT CONTROLLER -->
     <script>
         const fileUrl = "{{file_url}}";
         const fileName = "{{file_name}}";
-        const storageKey = "watch_progress_" + btoa(fileUrl).replace(/=/g, '');
+        const storageKey = "watch_progress_" + btoa(fileUrl || "stream").replace(/=/g, '');
         let savedTime = 0;
+        let plyrInstance = null;
 
-        // Player DOM References
-        const player = document.getElementById("player");
-        const playerContainer = document.getElementById("playerContainer");
-        const netflixOverlay = document.getElementById("netflixOverlay");
-        const btnPlayPause = document.getElementById("btnPlayPause");
-        const playIcon = btnPlayPause.querySelector("i");
-        const btnRewind10 = document.getElementById("btnRewind10");
-        const btnForward10 = document.getElementById("btnForward10");
-        const timelineSlider = document.getElementById("timelineSlider");
-        const remainingTimeText = document.getElementById("remainingTimeText");
-        const btnSpeed = document.getElementById("btnSpeed");
-        const speedLabel = document.getElementById("speedLabel");
-        const btnLock = document.getElementById("btnLock");
-        const unlockScreenBadge = document.getElementById("unlockScreenBadge");
-        const btnCast = document.getElementById("btnCast");
-        const btnClose = document.getElementById("btnClose");
-        const btnClip = document.getElementById("btnClip");
-        const btnAudioSub = document.getElementById("btnAudioSub");
-        const audioSubModal = document.getElementById("audioSubModal");
-
-        // Brightness References
-        const brightnessTrack = document.getElementById("brightnessTrack");
-        const brightnessFill = document.getElementById("brightnessFill");
-
-        let isScreenLocked = false;
-        let overlayTimeout = null;
-        let currentBrightness = 1.0;
-
-        window.addEventListener("DOMContentLoaded", () => {
+        window.addEventListener("DOMContentLoaded", function() {
             document.getElementById("myDiv").innerText = cleanMovieName(fileName);
-            initFastStream();
+            initModernPlayer();
             initAutoResumeModal();
-            initNetflixPlayerSystem();
         });
-
-        // Initialize Google Cast SDK
-        window['__onGCastApiAvailable'] = function(isAvailable) {
-            if (isAvailable && window.cast) {
-                try {
-                    cast.framework.CastContext.getInstance().setOptions({
-                        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-                        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-                    });
-                } catch(e) {}
-            }
-        };
 
         function cleanMovieName(rawName) {
             if (!rawName) return "Movie Stream";
             let clean = rawName.replace(/\.(mkv|mp4|webm|avi|flv|mov)$/i, "");
             const pattern = /[\.\_\s\(-](480p|720p|1080p|2160p|4k|2k|360p|hd|sd|bluray|web-dl|web|webrip|hdr|hdrip|hevc|x264|x265|h264|h265|10bit|ds4k|dvdrip|cam|camrip|nf|amzn|esub|sub|hindi|english|telugu|tamil|kannada|malayalam|bengali|marathi|gujarati|punjabi|dubbed|dual|multi|aac|ac3|dts|2\.0|5\.1|7\.1).*$/i;
             clean = clean.split(pattern)[0];
-            return clean.replace(/[\._]/g, " ").trim() || rawName;
+            clean = clean.replace(/[\._]/g, " ").trim();
+            return clean || rawName;
         }
 
-        // Fast Streaming Engine
-        function initFastStream() {
+        function initModernPlayer() {
+            const videoElem = document.getElementById("player");
+
+            // Attach HLS if available
             if (Hls.isSupported() && (fileUrl.includes('.m3u8') || fileUrl.includes('hls'))) {
                 const hls = new Hls({
                     enableWorker: true,
                     lowLatencyMode: true,
-                    maxBufferLength: 15,
-                    maxMaxBufferLength: 30,
-                    maxBufferSize: 30 * 1024 * 1024,
+                    maxBufferLength: 20,
+                    maxMaxBufferLength: 45,
+                    maxBufferSize: 40 * 1024 * 1024,
                     startFragPrefetch: true
                 });
                 hls.loadSource(fileUrl);
-                hls.attachMedia(player);
-                hls.on(Hls.Events.ERROR, (_, data) => {
-                    if (data.fatal) {
-                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-                        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-                        else player.src = fileUrl;
-                    }
-                });
+                hls.attachMedia(videoElem);
             } else {
-                player.src = fileUrl;
+                videoElem.src = fileUrl;
             }
+
+            // Initialize Plyr Custom Controls
+            plyrInstance = new Plyr(videoElem, {
+                controls: [
+                    'play-large', 'play', 'progress', 'current-time', 'duration',
+                    'mute', 'volume', 'settings', 'pip', 'airplay', 'fullscreen'
+                ],
+                settings: ['speed', 'quality'],
+                speed: { selected: 1, options: [0.75, 1, 1.25, 1.5, 2] }
+            });
         }
 
-        function formatRemainingTime(seconds) {
-            if (isNaN(seconds) || seconds < 0) seconds = 0;
+        function formatTime(seconds) {
             const sec = Math.floor(seconds);
             const hrs = Math.floor(sec / 3600);
             const mins = Math.floor((sec % 3600) / 60);
             const s = sec % 60;
             const pad = (n) => n.toString().padStart(2, '0');
-            return `${hrs}:${pad(mins)}:${pad(s)}`;
+            return `${pad(hrs)}:${pad(mins)}:${pad(s)}`;
         }
 
-        /* ----------------------------------------------------
-           NETFLIX PLAYER CONTROLLER & INTERACTION SYSTEM
-        ---------------------------------------------------- */
-        function initNetflixPlayerSystem() {
-            // Play / Pause Click
-            btnPlayPause.addEventListener('click', togglePlayPause);
-
-            player.addEventListener('play', () => {
-                playIcon.classList.replace('fa-play', 'fa-pause');
-                startOverlayCountdown();
-            });
-
-            player.addEventListener('pause', () => {
-                playIcon.classList.replace('fa-pause', 'fa-play');
-                clearTimeout(overlayTimeout);
-                netflixOverlay.classList.remove('hide');
-            });
-
-            // 10s Rewind / Forward
-            btnRewind10.addEventListener('click', (e) => {
-                e.stopPropagation();
-                player.currentTime = Math.max(0, player.currentTime - 10);
-                showToast("-10 seconds");
-                startOverlayCountdown();
-            });
-
-            btnForward10.addEventListener('click', (e) => {
-                e.stopPropagation();
-                player.currentTime = Math.min(player.duration || 0, player.currentTime + 10);
-                showToast("+10 seconds");
-                startOverlayCountdown();
-            });
-
-            // Timeline & Scrubber Progress
-            player.addEventListener('loadedmetadata', () => {
-                timelineSlider.max = player.duration || 0;
-                updateRemainingDisplay();
-            });
-
-            player.addEventListener('timeupdate', () => {
-                timelineSlider.value = player.currentTime;
-                updateRemainingDisplay();
-            });
-
-            timelineSlider.addEventListener('input', (e) => {
-                player.currentTime = e.target.value;
-                updateRemainingDisplay();
-            });
-
-            // Vertical Brightness Capsule Drag / Touch
-            setupBrightnessControl();
-
-            // Playback Speed Cycle (1x -> 1.25x -> 1.5x -> 2x -> 0.5x -> 0.75x)
-            const speedLevels = [1, 1.25, 1.5, 2, 0.5, 0.75];
-            let speedIndex = 0;
-            btnSpeed.addEventListener('click', (e) => {
-                e.stopPropagation();
-                speedIndex = (speedIndex + 1) % speedLevels.length;
-                const spd = speedLevels[speedIndex];
-                player.playbackRate = spd;
-                speedLabel.innerText = `${spd}x`;
-                showToast(`Playback Speed: ${spd}x`);
-                startOverlayCountdown();
-            });
-
-            // Lock Screen Mode
-            btnLock.addEventListener('click', (e) => {
-                e.stopPropagation();
-                isScreenLocked = true;
-                netflixOverlay.classList.add('hide');
-                unlockScreenBadge.style.display = 'flex';
-                showToast("Screen locked");
-            });
-
-            unlockScreenBadge.addEventListener('click', (e) => {
-                e.stopPropagation();
-                isScreenLocked = false;
-                unlockScreenBadge.style.display = 'none';
-                netflixOverlay.classList.remove('hide');
-                showToast("Screen unlocked");
-                startOverlayCountdown();
-            });
-
-            // Close / Fullscreen Toggle
-            btnClose.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (document.fullscreenElement) {
-                    document.exitFullscreen().catch(() => {});
-                } else if (playerContainer.requestFullscreen) {
-                    playerContainer.requestFullscreen().catch(() => {});
-                }
-            });
-
-            // Google Cast Request
-            btnCast.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (window.cast && cast.framework) {
-                    cast.framework.CastContext.getInstance().requestSession().catch(() => {
-                        showToast("No Google Cast devices found");
-                    });
-                } else {
-                    showToast("Casting ready for Smart TV");
-                }
-            });
-
-            // Clip Action: Copy Timestamp link
-            btnClip.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const cur = Math.floor(player.currentTime);
-                const clipUrl = `${fileUrl}#t=${cur}`;
-                navigator.clipboard.writeText(clipUrl).then(() => {
-                    showToast(`Clip copied at ${formatRemainingTime(cur)}`);
-                });
-            });
-
-            // Audio & Subtitles Trigger
-            btnAudioSub.addEventListener('click', (e) => {
-                e.stopPropagation();
-                toggleAudioSubSheet(true);
-            });
-
-            // Reactions Trigger
-            setupReactions();
-
-            // Overlay Show/Hide on Container Tap
-            playerContainer.addEventListener('click', (e) => {
-                if (isScreenLocked) return;
-                if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.circle-action-btn') || e.target.closest('.tools-container') || e.target.closest('#brightnessContainer') || e.target.closest('#audioSubModal') || e.target.closest('#resumeModal')) {
-                    return;
-                }
-
-                if (netflixOverlay.classList.contains('hide')) {
-                    netflixOverlay.classList.remove('hide');
-                    startOverlayCountdown();
-                } else {
-                    netflixOverlay.classList.add('hide');
-                }
-            });
-        }
-
-        function togglePlayPause() {
-            if (player.paused) {
-                player.play().catch(() => {});
-            } else {
-                player.pause();
-            }
-            startOverlayCountdown();
-        }
-
-        function updateRemainingDisplay() {
-            const rem = (player.duration || 0) - player.currentTime;
-            remainingTimeText.innerText = formatRemainingTime(rem);
-        }
-
-        function startOverlayCountdown() {
-            clearTimeout(overlayTimeout);
-            if (!player.paused && !isScreenLocked) {
-                overlayTimeout = setTimeout(() => {
-                    netflixOverlay.classList.add('hide');
-                }, 3500);
-            }
-        }
-
-        // Setup Real-time Brightness Dragging
-        function setupBrightnessControl() {
-            let isDragging = false;
-
-            function applyBrightnessFromPointer(clientY) {
-                const rect = brightnessTrack.getBoundingClientRect();
-                const offsetY = Math.max(0, Math.min(rect.height, rect.bottom - clientY));
-                const percentage = offsetY / rect.height; // 0 to 1
-                
-                // Map percentage (0 to 1) -> brightness scale (0.3x to 1.5x)
-                const brightnessVal = (0.3 + percentage * 1.2).toFixed(2);
-                currentBrightness = brightnessVal;
-                player.style.filter = `brightness(${brightnessVal})`;
-                brightnessFill.style.height = `${percentage * 100}%`;
-            }
-
-            brightnessTrack.addEventListener('mousedown', (e) => {
-                isDragging = true;
-                applyBrightnessFromPointer(e.clientY);
-            });
-
-            window.addEventListener('mousemove', (e) => {
-                if (isDragging) applyBrightnessFromPointer(e.clientY);
-            });
-
-            window.addEventListener('mouseup', () => { isDragging = false; });
-
-            // Mobile Touch Events
-            brightnessTrack.addEventListener('touchstart', (e) => {
-                isDragging = true;
-                applyBrightnessFromPointer(e.touches[0].clientY);
-            }, { passive: true });
-
-            window.addEventListener('touchmove', (e) => {
-                if (isDragging && e.touches.length > 0) {
-                    applyBrightnessFromPointer(e.touches[0].clientY);
-                }
-            }, { passive: true });
-
-            window.addEventListener('touchend', () => { isDragging = false; });
-        }
-
-        // Setup 3 Reaction Buttons
-        function setupReactions() {
-            const rButtons = [
-                { id: 'btnDislike', text: 'Marked: Not for me' },
-                { id: 'btnLike', text: 'Marked: I like this' },
-                { id: 'btnDoubleLike', text: 'Marked: Love this!' }
-            ];
-
-            rButtons.forEach(btn => {
-                const el = document.getElementById(btn.id);
-                el.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    rButtons.forEach(b => document.getElementById(b.id).classList.remove('active'));
-                    el.classList.add('active');
-                    showToast(btn.text);
-                    startOverlayCountdown();
-                });
-            });
-        }
-
-        function toggleAudioSubSheet(show) {
-            if (show) {
-                audioSubModal.classList.remove('translate-y-full');
-            } else {
-                audioSubModal.classList.add('translate-y-full');
-            }
-        }
-
-        // Throttled Resume Engine
         function initAutoResumeModal() {
+            const video = document.getElementById("player");
             const modal = document.getElementById("resumeModal");
             const timeText = document.getElementById("resumeTimeText");
 
-            player.addEventListener("loadedmetadata", () => {
+            video.addEventListener("loadedmetadata", function() {
                 const storedVal = localStorage.getItem(storageKey);
                 if (storedVal && parseFloat(storedVal) > 5) {
                     savedTime = parseFloat(storedVal);
-                    timeText.innerText = formatRemainingTime(savedTime);
+                    timeText.innerText = formatTime(savedTime);
                     modal.classList.remove("hidden");
                 }
             });
 
-            let lastSave = 0;
-            player.addEventListener("timeupdate", () => {
+            let lastSaveTime = 0;
+            video.addEventListener("timeupdate", function() {
                 const now = Date.now();
-                if (player.currentTime > 0 && (now - lastSave > 2000)) {
-                    localStorage.setItem(storageKey, player.currentTime);
-                    lastSave = now;
+                if (video.currentTime > 0 && (now - lastSaveTime > 2500)) {
+                    localStorage.setItem(storageKey, video.currentTime);
+                    lastSaveTime = now;
                 }
             });
 
-            player.addEventListener("ended", () => {
+            video.addEventListener("ended", function() {
                 localStorage.removeItem(storageKey);
             });
         }
 
         function confirmResume() {
+            const video = document.getElementById("player");
             document.getElementById("resumeModal").classList.add("hidden");
-            player.currentTime = savedTime;
-            player.play().catch(() => {});
+            if (plyrInstance) {
+                plyrInstance.currentTime = savedTime;
+                plyrInstance.play().catch(() => {});
+            } else {
+                video.currentTime = savedTime;
+                video.play().catch(() => {});
+            }
         }
 
         function confirmRestart() {
+            const video = document.getElementById("player");
             document.getElementById("resumeModal").classList.add("hidden");
             localStorage.removeItem(storageKey);
-            player.currentTime = 0;
-            player.play().catch(() => {});
+            if (plyrInstance) {
+                plyrInstance.currentTime = 0;
+                plyrInstance.play().catch(() => {});
+            } else {
+                video.currentTime = 0;
+                video.play().catch(() => {});
+            }
         }
 
         function showToast(message) {
@@ -1058,19 +420,35 @@
             const toastMsg = document.getElementById("toastMsg");
             toastMsg.innerText = message;
             toast.classList.add("show");
-            setTimeout(() => toast.classList.remove("show"), 2800);
+            setTimeout(() => {
+                toast.classList.remove("show");
+            }, 3000);
         }
 
         function copyStreamLink() {
             navigator.clipboard.writeText(fileUrl).then(() => {
-                showToast("Stream Link Copied to Clipboard!");
+                showToast("Stream link copied!");
             }).catch(() => {
-                showToast("Failed to Copy Link!");
+                showToast("Failed to copy link!");
             });
         }
 
-        function vlc_player() { window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=org.videolan.vlc;type=video/*;end;"; }
-        function mx_player() { window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end;"; }
+        /* External Players Intents */
+        function vlc_player() { 
+            window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=org.videolan.vlc;type=video/*;end;"; 
+        }
+
+        function mx_player() { 
+            window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end;"; 
+        }
+
+        function playit_player() {
+            window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=com.playit.videoplayer;type=video/*;end;";
+        }
+
+        function splayer() {
+            window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=com.vanced.android.youtube;action=android.intent.action.VIEW;type=video/*;end;";
+        }
 
         function bisalDownload() {
             const a = document.createElement('a');
