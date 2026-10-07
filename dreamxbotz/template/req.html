@@ -1,277 +1,193 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>HD PRO SEARCH BOT | Request Content</title>
+    <title>HD PRO SEARCH BOT | Request Movie & Series</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,500;0,700;0,800;1,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
-        :root {
-            --brand-red: #E50914;
-            --brand-red-bright: #FF1E27;
-            --brand-orange: #FF5722;
-            --brand-gold: #FFB800;
-        }
-
         body {
-            background: radial-gradient(circle at 10% 10%, #2b0507 0%, #120305 45%, #080204 90%);
+            background: radial-gradient(circle at 15% 15%, #2b0507 0%, #120305 45%, #080204 95%);
             color: #f8fafc;
             font-family: 'Josefin Sans', sans-serif;
             overflow-x: hidden;
             min-height: 100vh;
-            touch-action: manipulation;
         }
 
         .glass-card {
             background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.12);
-            border-top: 1px solid rgba(255, 255, 255, 0.22);
-            border-left: 1px solid rgba(255, 255, 255, 0.18);
+            border-top: 1px solid rgba(255, 255, 255, 0.25);
             border-radius: 20px;
-            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.65), inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
-            transform: translateZ(0);
-        }
-
-        .glass-card-glow {
-            will-change: transform;
-            transform: translateZ(0);
-            box-shadow: 0 0 35px rgba(229, 9, 20, 0.18), 0 12px 40px rgba(0, 0, 0, 0.7);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65), inset 0 1px 1px rgba(255, 255, 255, 0.15);
         }
 
         .brand-gradient-text {
             background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            font-family: 'Josefin Sans', sans-serif;
             font-weight: 800;
         }
 
-        .brand-text-inline {
-            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-weight: 800;
-            display: inline-block;
-            white-space: nowrap;
-        }
-
-        .input-field {
-            background: rgba(0, 0, 0, 0.5);
+        .glass-input {
+            background: rgba(0, 0, 0, 0.45);
             border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 12px;
             color: #fff;
-            padding: 12px 16px;
-            width: 100%;
-            outline: none;
-            transition: all 0.3s ease;
-        }
-
-        .input-field:focus {
-            border-color: #FF5722;
-            box-shadow: 0 0 15px rgba(255, 87, 34, 0.3);
-        }
-
-        .btn-submit {
-            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
-            color: #ffffff;
-            box-shadow: 0 8px 30px rgba(239, 35, 35, 0.45);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
             transition: all 0.25s ease;
         }
+        .glass-input:focus {
+            outline: none;
+            border-color: #FF5722;
+            box-shadow: 0 0 15px rgba(255, 87, 34, 0.35);
+        }
 
-        .btn-submit:hover {
-            transform: translateY(-2px) scale(1.01);
-            filter: brightness(1.15);
+        .submit-btn {
+            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
+            color: white;
+            font-weight: 800;
+            transition: all 0.25s ease;
+            box-shadow: 0 6px 25px rgba(255, 30, 39, 0.4);
+        }
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
         }
 
         #toast {
             position: fixed;
-            bottom: 25px;
+            bottom: 30px;
             left: 50%;
             transform: translateX(-50%) translateY(100px);
             opacity: 0;
             transition: all 0.3s ease;
             z-index: 1000;
         }
-
         #toast.show {
             transform: translateX(-50%) translateY(0);
             opacity: 1;
         }
-
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #080204; }
-        ::-webkit-scrollbar-thumb { background: rgba(255, 87, 34, 0.3); border-radius: 10px; }
     </style>
 </head>
 
-<body>
-
-    <!-- Header Navbar -->
-    <nav class="sticky top-0 z-50 glass-card mx-3 my-3 px-4 py-3 max-w-7xl md:mx-auto flex justify-center items-center">
-        <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="inline-flex items-center justify-center">
-            <h3 class="text-xl sm:text-2xl font-extrabold brand-gradient-text tracking-wide text-center uppercase flex items-center justify-center gap-1.5">
-                <span>HD PRO SEARCH BOT</span>
-                <span style="-webkit-text-fill-color: initial;" class="inline-block leading-none">🔍</span>
-            </h3>
+<body class="p-4 flex flex-col justify-between">
+    <!-- Navbar -->
+    <nav class="glass-card mx-auto w-full max-w-2xl px-5 py-3.5 mb-8 flex justify-center items-center">
+        <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="flex items-center gap-2">
+            <h1 class="text-xl sm:text-2xl font-extrabold brand-gradient-text uppercase tracking-wide">
+                HD PRO REQUEST PORTAL <span style="-webkit-text-fill-color: initial;">🎬</span>
+            </h1>
         </a>
     </nav>
 
-    <!-- Main Container -->
-    <div class="max-w-4xl mx-auto px-3 sm:px-4 mt-6">
-        
-        <!-- Request Card -->
-        <div class="glass-card glass-card-glow p-6 sm:p-10 mb-8">
-            <div class="text-center mb-8">
-                <h1 class="text-2xl sm:text-3xl font-extrabold uppercase brand-gradient-text">
-                    Request Movies & Series
-                </h1>
-                <p class="text-xs sm:text-sm text-slate-300 mt-2">
-                    Agar aapko koi film ya web series bot par nahi mil rahi hai, toh neeche detail fill karke request send karein.
-                </p>
-            </div>
-
-            <form id="reqForm" onsubmit="handleRequest(event)" class="space-y-5">
-                <div>
-                    <label class="block text-xs uppercase font-bold text-slate-300 mb-2">
-                        <i class="fa-solid fa-clapperboard text-[#FF1E27] mr-1"></i> Content Name & Release Year *
-                    </label>
-                    <input type="text" id="movieName" class="input-field text-sm" placeholder="e.g. Spider-Man: Brand New Day (2026)" required>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs uppercase font-bold text-slate-300 mb-2">
-                            <i class="fa-solid fa-film text-[#FF5722] mr-1"></i> Content Type
-                        </label>
-                        <select id="contentType" class="input-field text-sm">
-                            <option value="Movie">Movie</option>
-                            <option value="Web Series">Web Series</option>
-                            <option value="Anime">Anime</option>
-                            <option value="Other">Other</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-xs uppercase font-bold text-slate-300 mb-2">
-                            <i class="fa-solid fa-language text-[#FFB800] mr-1"></i> Preferred Audio / Language
-                        </label>
-                        <input type="text" id="langPref" class="input-field text-sm" placeholder="e.g. Hindi Dubbed, Dual Audio, English">
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-xs uppercase font-bold text-slate-300 mb-2">
-                        <i class="fa-solid fa-link text-[#FF5722] mr-1"></i> IMDb / TMDb / Reference Link (Optional)
-                    </label>
-                    <input type="url" id="refLink" class="input-field text-sm" placeholder="https://www.imdb.com/title/tt...">
-                </div>
-
-                <div>
-                    <label class="block text-xs uppercase font-bold text-slate-300 mb-2">
-                        <i class="fa-solid fa-comment-dots text-slate-400 mr-1"></i> Extra Note (Season / Episode Details)
-                    </label>
-                    <textarea id="extraNote" rows="3" class="input-field text-sm resize-none" placeholder="e.g. Season 2 all episodes in 1080p"></textarea>
-                </div>
-
-                <button type="submit" class="btn-submit w-full py-4 rounded-xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-paper-plane text-base"></i> Send Request via Telegram
-                </button>
-            </form>
+    <!-- Request Form Card -->
+    <main class="w-full max-w-2xl mx-auto glass-card p-6 sm:p-10 mb-8">
+        <div class="text-center mb-6">
+            <h2 class="text-2xl sm:text-3xl font-black uppercase tracking-wide mb-2 brand-gradient-text">
+                Movie / Series Request
+            </h2>
+            <p class="text-xs sm:text-sm text-slate-300">
+                Aapko jo bhi movie ya web-series chahiye uska accurate naam aur details bharein.
+            </p>
         </div>
 
-        <!-- Rules & Guidelines -->
-        <div class="glass-card p-6 sm:p-8 space-y-4 mb-10 text-xs sm:text-sm text-slate-300">
-            <h3 class="text-base sm:text-lg font-bold brand-gradient-text uppercase flex items-center gap-2">
-                <i class="fa-solid fa-shield-halved text-[#FF1E27]"></i> Request Guidelines
-            </h3>
-            <ul class="list-disc list-inside space-y-2">
-                <li>Request bhejne se pehle bot par sahi spelling ke sath search karke zaroor check kar lein.</li>
-                <li>Theatres mein nayi aayi hui movies ka OTT/HD print aane ke baad hi upload kiya jata hai.</li>
-                <li>Agar Web Series request kar rahe hain, toh Season aur Episode number note section mein zaroor likhein.</li>
-            </ul>
-        </div>
-
-        <!-- Footer -->
-        <footer class="mt-10 border-t border-white/10 pt-6 pb-8 text-center">
-            <div class="copyright text-xs text-slate-400 space-y-3">
-                <h5 class="flex items-center justify-center gap-1 flex-wrap font-semibold">
-                    <span>Copyright © 2026</span> 
-                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="brand-text-inline">
-                        HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span>
-                    </a>. 
-                    <span>All Rights Reserved.</span>
-                </h5>
-                
-                <div class="icons flex justify-center py-1">
-                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="text-[#FF5722] hover:text-[#FFB800] transition inline-flex items-center justify-center p-2 rounded-full bg-white/5 border border-white/10">
-                        <i class="fa-brands fa-telegram text-lg"></i>
-                    </a>
-                </div>
-
-                <h4 class="font-bold">This Page Is Made By <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="font-extrabold text-[#FF1E27]">RPEDITZ</a></h4>
+        <form id="requestForm" onsubmit="handleRequest(event)" class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Movie / Series Title <span class="text-[#FF1E27]">*</span>
+                </label>
+                <input type="text" id="movieTitle" required placeholder="e.g. Inception, Stranger Things"
+                    class="w-full px-4 py-3 rounded-xl text-sm glass-input placeholder-slate-500">
             </div>
-        </footer>
-    </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">Release Year</label>
+                    <input type="number" id="releaseYear" min="1950" max="2027" placeholder="e.g. 2024"
+                        class="w-full px-4 py-3 rounded-xl text-sm glass-input placeholder-slate-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">Preferred Audio</label>
+                    <select id="audioLang" class="w-full px-4 py-3 rounded-xl text-sm glass-input bg-[#120305] text-slate-200">
+                        <option value="Hindi Dual Audio">Hindi (Dual Audio)</option>
+                        <option value="Hindi Dubbed">Hindi Dubbed</option>
+                        <option value="English">English / Original</option>
+                        <option value="Multi Audio">Multi Audio</option>
+                        <option value="South Indian Dubbed">South Dubbed</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">Preferred Quality</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <label class="flex items-center gap-2 text-xs bg-white/5 p-3 rounded-xl border border-white/10 cursor-pointer hover:bg-white/10">
+                        <input type="radio" name="quality" value="480p" class="accent-[#FF1E27]"> 480p
+                    </label>
+                    <label class="flex items-center gap-2 text-xs bg-white/5 p-3 rounded-xl border border-white/10 cursor-pointer hover:bg-white/10">
+                        <input type="radio" name="quality" value="720p" checked class="accent-[#FF1E27]"> 720p HD
+                    </label>
+                    <label class="flex items-center gap-2 text-xs bg-white/5 p-3 rounded-xl border border-white/10 cursor-pointer hover:bg-white/10">
+                        <input type="radio" name="quality" value="1080p" class="accent-[#FF1E27]"> 1080p FHD
+                    </label>
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn w-full py-4 rounded-xl text-sm uppercase tracking-wider flex items-center justify-center gap-2 mt-6">
+                <i class="fa-solid fa-paper-plane"></i> Submit Request via Telegram
+            </button>
+        </form>
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center text-xs text-slate-500 pb-4">
+        Made for <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="brand-gradient-text font-bold">HD PRO SEARCH BOT</a>
+    </footer>
 
     <!-- Toast Notification -->
-    <div id="toast" class="glass-card px-5 py-3 text-xs font-bold text-slate-100 border border-[#FF5722]/50 shadow-2xl flex items-center gap-2">
+    <div id="toast" class="glass-card px-5 py-3 text-xs font-bold text-slate-100 border border-[#FF5722]/50 flex items-center gap-2">
         <i class="fa-solid fa-circle-check text-[#FFB800] text-base"></i>
-        <span id="toastMsg">Action completed!</span>
+        <span id="toastMsg">Submitted!</span>
     </div>
 
     <script>
-        function showToast(message) {
+        function showToast(msg) {
             const toast = document.getElementById("toast");
-            const toastMsg = document.getElementById("toastMsg");
-            toastMsg.innerText = message;
+            document.getElementById("toastMsg").innerText = msg;
             toast.classList.add("show");
-            setTimeout(() => {
-                toast.classList.remove("show");
-            }, 3000);
+            setTimeout(() => toast.classList.remove("show"), 2800);
         }
 
         function handleRequest(e) {
             e.preventDefault();
-            
-            const name = document.getElementById("movieName").value.trim();
-            const type = document.getElementById("contentType").value;
-            const lang = document.getElementById("langPref").value.trim() || "Any Language";
-            const ref = document.getElementById("refLink").value.trim() || "N/A";
-            const note = document.getElementById("extraNote").value.trim() || "None";
+            const title = document.getElementById("movieTitle").value.trim();
+            const year = document.getElementById("releaseYear").value.trim() || "Any";
+            const lang = document.getElementById("audioLang").value;
+            const qual = document.querySelector('input[name="quality"]:checked').value;
 
-            if (!name) {
-                showToast("Please enter movie/series name!");
-                return;
-            }
-
-            // Telegram deep-link formatted message
-            let msg = `✨ NEW CONTENT REQUEST ✨\n\n`;
-            msg += `🎬 Name: ${name}\n`;
-            msg += `📁 Type: ${type}\n`;
-            msg += `🌐 Language: ${lang}\n`;
-            msg += `🔗 Link: ${ref}\n`;
-            msg += `📝 Note: ${note}`;
+            const telegramMsg = encodeURIComponent(
+                `🎬 *NEW MOVIE REQUEST*\n\n` +
+                `📌 *Title:* ${title}\n` +
+                `📅 *Year:* ${year}\n` +
+                `🗣 *Audio:* ${lang}\n` +
+                `📺 *Quality:* ${qual}\n\n` +
+                `Submitted via Request Portal.`
+            );
 
             showToast("Redirecting to Telegram...");
-
-            // Replace with your bot username or support group link
-            const targetUsername = "rpeditz_07"; 
-            const encodedMsg = encodeURIComponent(msg);
             
+            // Channel/Bot redirect link
             setTimeout(() => {
-                window.location.href = `https://t.me/${targetUsername}?text=${encodedMsg}`;
-            }, 800);
+                window.location.href = `https://t.me/+sIOgiCYLtBxhNGI1?text=${telegramMsg}`;
+            }, 600);
         }
     </script>
 </body>
