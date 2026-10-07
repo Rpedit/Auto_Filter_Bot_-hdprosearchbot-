@@ -4,22 +4,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
     <title>HD PRO SEARCH BOT | {{file_name}}</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,500;0,700;0,800;1,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
 
-    <!-- Google Cast Official Engine -->
-    <script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
-    
-    <!-- HLS.js Multi-Codec Engine -->
+    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,500;0,700;0,800;1,700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+
+    <!-- Google Cast -->
+    <script
+        type="text/javascript"
+        src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1">
+    </script>
+
+    <!-- HLS.js -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    
+
+    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
 
+
     <style>
+
         :root {
             --brand-red: #E50914;
             --brand-red-bright: #FF1E27;
@@ -27,422 +37,2320 @@
             --brand-gold: #FFB800;
         }
 
+
+        * {
+            box-sizing: border-box;
+        }
+
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+
         body {
-            background: radial-gradient(circle at 10% 10%, #2b0507 0%, #120305 45%, #080204 90%);
+            background:
+                radial-gradient(
+                    circle at 10% 10%,
+                    #2b0507 0%,
+                    #120305 45%,
+                    #080204 90%
+                );
+
             color: #f8fafc;
-            font-family: 'Josefin Sans', sans-serif;
+
+            font-family:
+                'Josefin Sans',
+                sans-serif;
+
             overflow-x: hidden;
+
             min-height: 100vh;
+
             touch-action: manipulation;
         }
 
-        /* Glassmorphism Styling + GPU Acceleration */
+
+        /* =====================================
+           GLASS
+        ===================================== */
+
         .glass-card {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(255,255,255,0.08) 0%,
+                    rgba(255,255,255,0.02) 100%
+                );
+
             backdrop-filter: blur(24px);
             -webkit-backdrop-filter: blur(24px);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-top: 1px solid rgba(255, 255, 255, 0.22);
-            border-left: 1px solid rgba(255, 255, 255, 0.18);
+
+            border: 1px solid rgba(255,255,255,0.12);
+
+            border-top:
+                1px solid rgba(255,255,255,0.22);
+
+            border-left:
+                1px solid rgba(255,255,255,0.18);
+
             border-radius: 20px;
-            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.65), inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
-            transform: translateZ(0); /* Hardware Acceleration */
+
+            box-shadow:
+                0 12px 40px rgba(0,0,0,0.65),
+                inset 0 1px 1px rgba(255,255,255,0.15);
+
+            transform: translateZ(0);
         }
+
 
         .glass-card-glow {
-            will-change: transform;
+
             transform: translateZ(0);
-            box-shadow: 0 0 35px rgba(229, 9, 20, 0.18), 0 12px 40px rgba(0, 0, 0, 0.7);
+
+            box-shadow:
+                0 0 35px rgba(229,9,20,0.18),
+                0 12px 40px rgba(0,0,0,0.7);
         }
 
-        /* Action Buttons Styling */
-        .player-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            width: 100%;
-            padding: 14px 18px;
-            border-radius: 14px;
-            font-weight: 700;
-            letter-spacing: 0.8px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            text-transform: uppercase;
-            font-size: 0.85rem;
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
-            position: relative;
-            overflow: hidden;
-            -webkit-backface-visibility: hidden;
-            backface-visibility: hidden;
+
+        /* =====================================
+           PLAYER
+        ===================================== */
+
+        #playerContainer {
+
+            background: #000;
+
+            isolation: isolate;
+
+            contain:
+                layout
+                paint
+                style;
         }
+
+
+        #player {
+
+            display: block;
+
+            width: 100%;
+
+            aspect-ratio: 16 / 9;
+
+            background: #000;
+
+            object-fit: contain;
+        }
+
+
+        /* =====================================
+           PLAYER LOADER
+        ===================================== */
+
+        #playerLoader {
+
+            position: absolute;
+
+            inset: 0;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            background:
+                rgba(0,0,0,0.58);
+
+            backdrop-filter: blur(4px);
+
+            z-index: 20;
+
+            opacity: 0;
+
+            visibility: hidden;
+
+            transition:
+                opacity .2s ease,
+                visibility .2s ease;
+
+            pointer-events: none;
+        }
+
+
+        #playerLoader.show {
+
+            opacity: 1;
+
+            visibility: visible;
+        }
+
+
+        .loader-ring {
+
+            width: 42px;
+
+            height: 42px;
+
+            border-radius: 50%;
+
+            border:
+                4px solid
+                rgba(255,255,255,0.15);
+
+            border-top-color:
+                var(--brand-orange);
+
+            animation:
+                playerSpin .8s linear infinite;
+        }
+
+
+        @keyframes playerSpin {
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+
+        /* =====================================
+           PLAYER ERROR
+        ===================================== */
+
+        #playerError {
+
+            display: none;
+
+            position: absolute;
+
+            inset: 0;
+
+            z-index: 25;
+
+            align-items: center;
+
+            justify-content: center;
+
+            background:
+                rgba(0,0,0,0.9);
+
+            text-align: center;
+
+            padding: 20px;
+        }
+
+
+        #playerError.show {
+            display: flex;
+        }
+
+
+        /* =====================================
+           BUTTONS
+        ===================================== */
+
+        .player-btn {
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            gap: 10px;
+
+            width: 100%;
+
+            padding: 14px 18px;
+
+            border-radius: 14px;
+
+            font-weight: 700;
+
+            letter-spacing: .8px;
+
+            transition:
+                transform .25s ease,
+                filter .25s ease,
+                box-shadow .25s ease;
+
+            text-transform: uppercase;
+
+            font-size: .85rem;
+
+            backdrop-filter: blur(14px);
+
+            -webkit-backdrop-filter: blur(14px);
+
+            position: relative;
+
+            overflow: hidden;
+
+            -webkit-tap-highlight-color:
+                transparent;
+        }
+
 
         .player-btn::before {
+
             content: '';
+
             position: absolute;
+
             top: 0;
-            left: -100%;
+
+            left: -120%;
+
             width: 100%;
+
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
-            transition: 0.5s;
+
+            background:
+                linear-gradient(
+                    90deg,
+                    transparent,
+                    rgba(255,255,255,.25),
+                    transparent
+                );
+
+            transition: .5s;
         }
+
 
         .player-btn:hover::before {
-            left: 100%;
+            left: 120%;
         }
+
 
         .player-btn:hover {
-            transform: translateY(-3px) scale(1.01);
-            filter: brightness(1.15);
+
+            transform:
+                translateY(-3px)
+                scale(1.01);
+
+            filter: brightness(1.12);
         }
 
-        /* Red-Orange-Gold Gradient Theme Buttons */
-        .btn-copy { 
-            background: linear-gradient(135deg, rgba(229, 9, 20, 0.9), rgba(180, 0, 10, 0.95)); 
-            color: #ffffff; 
-            border: 1px solid rgba(255, 30, 39, 0.4);
-            box-shadow: 0 6px 20px rgba(229, 9, 20, 0.35); 
+
+        .player-btn:active {
+
+            transform:
+                scale(.97);
         }
 
-        .btn-vlc { 
-            background: linear-gradient(135deg, rgba(255, 87, 34, 0.9), rgba(216, 50, 0, 0.95)); 
-            color: #ffffff; 
-            border: 1px solid rgba(255, 110, 64, 0.4);
-            box-shadow: 0 6px 20px rgba(255, 87, 34, 0.35); 
+
+        .btn-copy {
+
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(229,9,20,.9),
+                    rgba(180,0,10,.95)
+                );
+
+            color: white;
+
+            border:
+                1px solid
+                rgba(255,30,39,.4);
+
+            box-shadow:
+                0 6px 20px
+                rgba(229,9,20,.35);
         }
 
-        .btn-mx { 
-            background: linear-gradient(135deg, rgba(255, 184, 0, 0.9), rgba(212, 147, 0, 0.95)); 
-            color: #0d0608; 
-            border: 1px solid rgba(255, 200, 50, 0.5);
-            box-shadow: 0 6px 20px rgba(255, 184, 0, 0.35); 
+
+        .btn-vlc {
+
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(255,87,34,.9),
+                    rgba(216,50,0,.95)
+                );
+
+            color: white;
+
+            border:
+                1px solid
+                rgba(255,110,64,.4);
+
+            box-shadow:
+                0 6px 20px
+                rgba(255,87,34,.35);
         }
 
-        .btn-download { 
-            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%); 
-            color: #ffffff; 
-            box-shadow: 0 8px 30px rgba(239, 35, 35, 0.45);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+
+        .btn-mx {
+
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(255,184,0,.9),
+                    rgba(212,147,0,.95)
+                );
+
+            color: #0d0608;
+
+            border:
+                1px solid
+                rgba(255,200,50,.5);
+
+            box-shadow:
+                0 6px 20px
+                rgba(255,184,0,.35);
         }
 
-        /* Gradient Text Classes */
+
+        .btn-download {
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #FF1E27 0%,
+                    #FF5722 50%,
+                    #FFB800 100%
+                );
+
+            color: white;
+
+            box-shadow:
+                0 8px 30px
+                rgba(239,35,35,.45);
+
+            border:
+                1px solid
+                rgba(255,255,255,.3);
+
+            text-shadow:
+                0 1px 3px
+                rgba(0,0,0,.5);
+        }
+
+
+        /* =====================================
+           BRAND TEXT
+        ===================================== */
+
         .brand-gradient-text {
-            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #FF1E27 0%,
+                    #FF5722 50%,
+                    #FFB800 100%
+                );
+
             -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-family: 'Josefin Sans', sans-serif;
+
+            -webkit-text-fill-color:
+                transparent;
+
+            font-family:
+                'Josefin Sans',
+                sans-serif;
+
             font-weight: 800;
         }
+
 
         .brand-text-inline {
-            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #FF1E27 0%,
+                    #FF5722 50%,
+                    #FFB800 100%
+                );
+
             -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+
+            -webkit-text-fill-color:
+                transparent;
+
             font-weight: 800;
+
             display: inline-block;
+
             white-space: nowrap;
         }
+
 
         .no-wrap-title {
+
             display: inline-flex;
+
             align-items: center;
+
             justify-content: center;
+
             white-space: nowrap;
-            flex-wrap: nowrap;
         }
 
-        /* Toast Popup */
-        #toast {
-            position: fixed;
-            bottom: 25px;
-            left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            opacity: 0;
-            transition: all 0.3s ease;
-            z-index: 1000;
-            will-change: transform, opacity;
+
+        /* =====================================
+           AD CONTAINER
+        ===================================== */
+
+        .ad-wrapper {
+
+            width: 100%;
+
+            margin:
+                18px auto;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            min-height: 50px;
+
+            overflow: hidden;
+
+            border-radius: 12px;
         }
+
+
+        .ad-label {
+
+            font-size: 8px;
+
+            color:
+                rgba(255,255,255,.28);
+
+            text-align: center;
+
+            margin-bottom: 4px;
+
+            letter-spacing: 1px;
+
+            text-transform:
+                uppercase;
+        }
+
+
+        .ad-box {
+
+            width: 100%;
+
+            max-width: 728px;
+
+            min-height: 50px;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            overflow: hidden;
+        }
+
+
+        /* =====================================
+           TOAST
+        ===================================== */
+
+        #toast {
+
+            position: fixed;
+
+            bottom: 25px;
+
+            left: 50%;
+
+            transform:
+                translateX(-50%)
+                translateY(100px);
+
+            opacity: 0;
+
+            transition:
+                all .3s ease;
+
+            z-index: 1000;
+
+            will-change:
+                transform,
+                opacity;
+        }
+
 
         #toast.show {
-            transform: translateX(-50%) translateY(0);
+
+            transform:
+                translateX(-50%)
+                translateY(0);
+
             opacity: 1;
         }
 
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #080204; }
-        ::-webkit-scrollbar-thumb { background: rgba(255, 87, 34, 0.3); border-radius: 10px; }
+
+        /* =====================================
+           SCROLLBAR
+        ===================================== */
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+
+        ::-webkit-scrollbar-track {
+            background: #080204;
+        }
+
+
+        ::-webkit-scrollbar-thumb {
+
+            background:
+                rgba(255,87,34,.3);
+
+            border-radius: 10px;
+        }
+
+
+        /* =====================================
+           MOBILE
+        ===================================== */
+
+        @media (max-width: 640px) {
+
+            .player-btn {
+
+                padding:
+                    13px 12px;
+
+                font-size:
+                    .78rem;
+            }
+
+
+            .ad-wrapper {
+
+                margin:
+                    14px auto;
+            }
+        }
+
     </style>
 </head>
 
+
 <body>
 
-    <!-- Centered Header / Navbar -->
-    <nav class="sticky top-0 z-50 glass-card mx-3 my-3 px-4 py-3 max-w-7xl md:mx-auto flex justify-center items-center">
-        <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="no-wrap-title">
-            <h3 class="text-xl sm:text-2xl font-extrabold brand-gradient-text tracking-wide text-center uppercase flex items-center justify-center gap-1.5">
-                <span>HD PRO SEARCH BOT</span>
-                <span style="-webkit-text-fill-color: initial;" class="inline-block leading-none">🔍</span>
+
+    <!-- =====================================
+         NAVBAR
+    ===================================== -->
+
+    <nav
+        class="sticky top-0 z-50 glass-card mx-3 my-3 px-4 py-3 max-w-7xl md:mx-auto flex justify-center items-center">
+
+        <a
+            href="https://t.me/+sIOgiCYLtBxhNGI1"
+            class="no-wrap-title">
+
+            <h3
+                class="text-xl sm:text-2xl font-extrabold brand-gradient-text tracking-wide text-center uppercase flex items-center justify-center gap-1.5">
+
+                <span>
+                    HD PRO SEARCH BOT
+                </span>
+
+                <span
+                    style="-webkit-text-fill-color: initial;"
+                    class="inline-block leading-none">
+
+                    🔍
+
+                </span>
+
             </h3>
+
         </a>
+
     </nav>
 
-    <div class="outer max-w-5xl mx-auto px-3 sm:px-4 mt-4">
-        <div class="inner">
-            <div class="main" id="main">
 
-                <!-- Video Player Container -->
-                <div id="playerContainer" class="w-full rounded-2xl overflow-hidden shadow-2xl bg-black/80 backdrop-blur-2xl border border-white/10 relative glass-card-glow">
-                    <video id="player" class="w-full aspect-video object-contain" playsinline controls crossorigin="anonymous" preload="metadata">
+    <div
+        class="outer max-w-5xl mx-auto px-3 sm:px-4 mt-4">
+
+        <div class="inner">
+
+            <div
+                class="main"
+                id="main">
+
+
+                <!-- =====================================
+                     AD #1 — ABOVE PLAYER
+                ===================================== -->
+
+                <div class="ad-wrapper">
+
+                    <div class="w-full">
+
+                        <div class="ad-label">
+                            Advertisement
+                        </div>
+
+                        <div class="ad-box">
+
+                            <!-- =================================
+                                 PASTE YOUR AD NETWORK CODE HERE
+                            ================================== -->
+
+                            <!-- AD_CODE_HERE -->
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- =====================================
+                     VIDEO PLAYER
+                ===================================== -->
+
+                <div
+                    id="playerContainer"
+                    class="w-full rounded-2xl overflow-hidden shadow-2xl bg-black/80 backdrop-blur-2xl border border-white/10 relative glass-card-glow">
+
+
+                    <video
+                        id="player"
+                        class="w-full aspect-video object-contain bg-black"
+                        playsinline
+                        webkit-playsinline
+                        controls
+                        crossorigin="anonymous"
+                        preload="metadata">
+
                         Your browser does not support playing this video directly.
+
                     </video>
 
-                    <!-- Exact Matching Resume Overlay -->
-                    <div id="resumeModal" class="hidden absolute inset-0 bg-black/90 flex items-center justify-center p-3 z-30 transition-all duration-300">
-                        <div class="bg-black/90 text-slate-100 rounded-xl py-5 px-4 sm:px-6 max-w-sm sm:max-w-md w-11/12 text-center shadow-2xl border border-[#FF5722]/40 backdrop-blur-xl">
-                            <p class="text-xs sm:text-sm font-normal text-slate-300 mb-4 leading-snug">
-                                You were watching this video at <span id="resumeTimeText" class="font-bold text-[#FFB800]">00:00:00</span>. Do you want to resume?
-                            </p>
-                            <div class="flex flex-row gap-2.5 justify-center items-center">
-                                <button onclick="confirmResume()" class="bg-[#FF1E27] hover:bg-[#E50914] text-white font-bold py-2 px-4 rounded-lg text-xs sm:text-sm transition active:scale-95 shadow-lg shadow-red-900/40">
-                                    Resume
-                                </button>
-                                <button onclick="confirmRestart()" class="bg-zinc-800 hover:bg-zinc-700 text-slate-200 font-bold py-2 px-4 rounded-lg text-xs sm:text-sm transition active:scale-95 border border-white/10">
-                                    Start Over
-                                </button>
+
+                    <!-- LOADER -->
+
+                    <div
+                        id="playerLoader">
+
+                        <div class="text-center">
+
+                            <div
+                                class="loader-ring mx-auto">
                             </div>
+
+                            <p
+                                id="loaderText"
+                                class="text-xs text-white/80 mt-3 font-bold">
+
+                                Loading...
+
+                            </p>
+
                         </div>
+
                     </div>
+
+
+                    <!-- ERROR -->
+
+                    <div
+                        id="playerError">
+
+                        <div>
+
+                            <i
+                                class="fa-solid fa-triangle-exclamation text-3xl text-[#FF5722] mb-3">
+                            </i>
+
+                            <p
+                                class="font-bold text-white">
+
+                                Unable to play this video
+
+                            </p>
+
+                            <button
+                                onclick="retryPlayer()"
+                                class="mt-4 px-5 py-2 rounded-lg bg-[#E50914] text-white text-sm font-bold">
+
+                                Retry
+
+                            </button>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- RESUME -->
+
+                    <div
+                        id="resumeModal"
+                        class="hidden absolute inset-0 bg-black/90 flex items-center justify-center p-3 z-30">
+
+                        <div
+                            class="bg-black/95 text-slate-100 rounded-xl py-5 px-4 sm:px-6 max-w-sm sm:max-w-md w-11/12 text-center shadow-2xl border border-[#FF5722]/40 backdrop-blur-xl">
+
+
+                            <p
+                                class="text-xs sm:text-sm text-slate-300 mb-4 leading-snug">
+
+                                You were watching this video at
+
+                                <span
+                                    id="resumeTimeText"
+                                    class="font-bold text-[#FFB800]">
+
+                                    00:00:00
+
+                                </span>.
+
+                                Do you want to resume?
+
+                            </p>
+
+
+                            <div
+                                class="flex flex-row gap-2.5 justify-center">
+
+                                <button
+                                    onclick="confirmResume()"
+                                    class="bg-[#FF1E27] hover:bg-[#E50914] text-white font-bold py-2 px-4 rounded-lg text-xs sm:text-sm">
+
+                                    Resume
+
+                                </button>
+
+
+                                <button
+                                    onclick="confirmRestart()"
+                                    class="bg-zinc-800 hover:bg-zinc-700 text-slate-200 font-bold py-2 px-4 rounded-lg text-xs sm:text-sm border border-white/10">
+
+                                    Start Over
+
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
                 </div>
 
-                <!-- File Info Card -->
-                <div class="file-name my-6 p-4 glass-card text-center md:text-left">
-                    <p id="myDiv" class="break-all text-slate-100 text-sm md:text-base font-bold tracking-wide"></p>
-                </div>
 
-                <!-- Translucent Compact Buttons Grid -->
-                <div class="downloadBtn grid grid-cols-1 sm:grid-cols-3 gap-3.5 my-6">
-                    <button class="player-btn btn-copy" onclick="copyStreamLink()">
-                        <i class="fa-solid fa-copy text-lg"></i> Copy Link
-                    </button>
+                <!-- =====================================
+                     FILE INFO
+                ===================================== -->
 
-                    <button class="player-btn btn-vlc" onclick="vlc_player()">
-                        <img src="https://i.postimg.cc/15TQ4y7B/vlc.png" class="w-5 h-5 object-contain" alt="VLC"> VLC Player
-                    </button>
+                <div
+                    class="file-name my-6 p-4 glass-card text-center md:text-left">
 
-                    <button class="player-btn btn-mx" onclick="mx_player()">
-                        <img src="https://i.postimg.cc/sx4Msv4T/mx.png" class="w-5 h-5 object-contain" alt="MX"> MX Player
-                    </button>
-
-                    <button class="player-btn btn-download sm:col-span-3 py-4 text-base font-extrabold" onclick="bisalDownload()">
-                        <img src="https://i.postimg.cc/Zncc9YLq/Pngtree-download-icon-3581467.png" class="w-6 h-6 object-contain filter brightness-200" alt="Download"> Download Video
-                    </button>
-                </div>
-            </div>
-
-            <!-- Info Section -->
-            <div class="abt space-y-8 my-10">
-                <div class="about glass-card p-6 md:p-10 text-center">
-                    <h1 class="text-2xl md:text-3xl font-black mb-3 uppercase tracking-wide leading-normal">
-                        WELCOME TO <span class="brand-text-inline">HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span></span>
-                    </h1>
-                    <p class="max-w-xl mx-auto text-slate-300 text-xs md:text-sm leading-relaxed">
-                        Enjoy high-speed playback, multi-codec streaming options, and seamless external video player integration.
+                    <p
+                        id="myDiv"
+                        class="break-all text-slate-100 text-sm md:text-base font-bold tracking-wide">
                     </p>
+
                 </div>
+
+
+                <!-- =====================================
+                     BUTTONS
+                ===================================== -->
+
+                <div
+                    class="downloadBtn grid grid-cols-1 sm:grid-cols-3 gap-3.5 my-6">
+
+
+                    <button
+                        class="player-btn btn-copy"
+                        onclick="copyStreamLink()">
+
+                        <i
+                            class="fa-solid fa-copy text-lg">
+                        </i>
+
+                        Copy Link
+
+                    </button>
+
+
+                    <button
+                        class="player-btn btn-vlc"
+                        onclick="vlc_player()">
+
+                        <img
+                            src="https://i.postimg.cc/15TQ4y7B/vlc.png"
+                            class="w-5 h-5 object-contain"
+                            alt="VLC">
+
+                        VLC Player
+
+                    </button>
+
+
+                    <button
+                        class="player-btn btn-mx"
+                        onclick="mx_player()">
+
+                        <img
+                            src="https://i.postimg.cc/sx4Msv4T/mx.png"
+                            class="w-5 h-5 object-contain"
+                            alt="MX">
+
+                        MX Player
+
+                    </button>
+
+
+                    <button
+                        class="player-btn btn-download sm:col-span-3 py-4 text-base font-extrabold"
+                        onclick="bisalDownload()">
+
+                        <img
+                            src="https://i.postimg.cc/Zncc9YLq/Pngtree-download-icon-3581467.png"
+                            class="w-6 h-6 object-contain filter brightness-200"
+                            alt="Download">
+
+                        Download Video
+
+                    </button>
+
+                </div>
+
+
+                <!-- =====================================
+                     AD #2 — BELOW BUTTONS
+                ===================================== -->
+
+                <div class="ad-wrapper">
+
+                    <div class="w-full">
+
+                        <div class="ad-label">
+                            Advertisement
+                        </div>
+
+                        <div class="ad-box">
+
+                            <!-- =================================
+                                 PASTE YOUR AD NETWORK CODE HERE
+                            ================================== -->
+
+                            <!-- AD_CODE_HERE_2 -->
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
             </div>
+
+
+            <!-- =====================================
+                 INFO
+            ===================================== -->
+
+            <div
+                class="abt space-y-8 my-10">
+
+                <div
+                    class="about glass-card p-6 md:p-10 text-center">
+
+                    <h1
+                        class="text-2xl md:text-3xl font-black mb-3 uppercase tracking-wide leading-normal">
+
+                        WELCOME TO
+
+                        <span class="brand-text-inline">
+
+                            HD PRO SEARCH BOT
+
+                            <span
+                                style="-webkit-text-fill-color: initial;">
+
+                                🔍
+
+                            </span>
+
+                        </span>
+
+                    </h1>
+
+
+                    <p
+                        class="max-w-xl mx-auto text-slate-300 text-xs md:text-sm leading-relaxed">
+
+                        Enjoy high-speed playback, multi-codec streaming options,
+                        automatic resume and seamless external video player integration.
+
+                    </p>
+
+                </div>
+
+            </div>
+
         </div>
 
-        <!-- Footer -->
-        <footer class="mt-10 border-t border-white/10 pt-6 pb-8 text-center">
-            <div class="copyright text-xs text-slate-400 space-y-3">
-                <h5 class="flex items-center justify-center gap-1 flex-wrap font-semibold">
-                    <span>Copyright © 2025</span> 
-                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="brand-text-inline">
-                        HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span>
-                    </a>. 
-                    <span>All Rights Reserved.</span>
-                </h5>
-                
-                <div class="icons flex justify-center py-1">
-                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="text-[#FF5722] hover:text-[#FFB800] transition inline-flex items-center justify-center p-2 rounded-full bg-white/5 border border-white/10">
-                        <i class="fa-brands fa-telegram text-lg"></i>
+
+        <!-- =====================================
+             FOOTER
+        ===================================== -->
+
+        <footer
+            class="mt-10 border-t border-white/10 pt-6 pb-8 text-center">
+
+            <div
+                class="copyright text-xs text-slate-400 space-y-3">
+
+
+                <h5
+                    class="flex items-center justify-center gap-1 flex-wrap font-semibold">
+
+                    <span>
+                        Copyright © 2025
+                    </span>
+
+
+                    <a
+                        href="https://t.me/+sIOgiCYLtBxhNGI1"
+                        class="brand-text-inline">
+
+                        HD PRO SEARCH BOT
+
+                        <span
+                            style="-webkit-text-fill-color: initial;">
+
+                            🔍
+
+                        </span>
+
                     </a>
+
+
+                    <span>
+                        . All Rights Reserved.
+                    </span>
+
+                </h5>
+
+
+                <div
+                    class="icons flex justify-center py-1">
+
+                    <a
+                        href="https://t.me/+sIOgiCYLtBxhNGI1"
+                        class="text-[#FF5722] hover:text-[#FFB800] transition inline-flex items-center justify-center p-2 rounded-full bg-white/5 border border-white/10">
+
+                        <i
+                            class="fa-brands fa-telegram text-lg">
+                        </i>
+
+                    </a>
+
                 </div>
 
-                <h4 class="font-bold">This Page Is Made By <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="font-extrabold text-[#FF1E27]">RPEDITZ</a></h4>
+
+                <h4 class="font-bold">
+
+                    This Page Is Made By
+
+                    <a
+                        href="https://t.me/+sIOgiCYLtBxhNGI1"
+                        class="font-extrabold text-[#FF1E27]">
+
+                        RPEDITZ
+
+                    </a>
+
+                </h4>
+
             </div>
+
         </footer>
+
     </div>
 
-    <!-- Toast Notification Overlay -->
-    <div id="toast" class="glass-card px-5 py-3 text-xs font-bold text-slate-100 border border-[#FF5722]/50 shadow-2xl flex items-center gap-2">
-        <i class="fa-solid fa-circle-check text-[#FFB800] text-base"></i>
-        <span id="toastMsg">Action completed!</span>
+
+    <!-- =====================================
+         TOAST
+    ===================================== -->
+
+    <div
+        id="toast"
+        class="glass-card px-5 py-3 text-xs font-bold text-slate-100 border border-[#FF5722]/50 shadow-2xl flex items-center gap-2">
+
+        <i
+            class="fa-solid fa-circle-check text-[#FFB800] text-base">
+        </i>
+
+        <span id="toastMsg">
+            Action completed!
+        </span>
+
     </div>
 
-    <!-- Scripts -->
+
+    <!-- =====================================
+         JAVASCRIPT
+    ===================================== -->
+
     <script>
-        const fileUrl = "{{file_url}}";
-        const fileName = "{{file_name}}";
-        const storageKey = "watch_progress_" + btoa(fileUrl).replace(/=/g, '');
+
+
+        /* =====================================
+           VARIABLES
+        ===================================== */
+
+        const fileUrl =
+            "{{file_url}}";
+
+        const fileName =
+            "{{file_name}}";
+
+
+        let storageKey;
+
+        try {
+
+            storageKey =
+                "hdpro_progress_" +
+                btoa(
+                    unescape(
+                        encodeURIComponent(fileUrl)
+                    )
+                )
+                .replace(/=/g, "")
+                .substring(0, 150);
+
+        } catch (e) {
+
+            storageKey =
+                "hdpro_progress_video";
+
+        }
+
+
+        let player = null;
+
+        let hls = null;
+
         let savedTime = 0;
 
-        window.addEventListener("DOMContentLoaded", function() {
-            document.getElementById("myDiv").innerText = cleanMovieName(fileName);
-            initFastStream();
-            initAutoResumeModal();
-        });
+        let resumeShown = false;
 
-        // Initialize Google Cast SDK
-        window['__onGCastApiAvailable'] = function(isAvailable) {
-            if (isAvailable && window.cast) {
-                try {
-                    cast.framework.CastContext.getInstance().setOptions({
-                        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-                        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-                    });
-                } catch(e) {}
+        let lastSave = 0;
+
+        let retryCount = 0;
+
+
+        /* =====================================
+           DOM READY
+        ===================================== */
+
+        window.addEventListener(
+            "DOMContentLoaded",
+            function () {
+
+                const title =
+                    document.getElementById("myDiv");
+
+                if (title) {
+
+                    title.innerText =
+                        cleanMovieName(fileName);
+
+                }
+
+
+                player =
+                    document.getElementById("player");
+
+
+                initPlayer();
+
+                initResume();
+
+                initPlayerEvents();
+
             }
-        };
+        );
 
-        // Extract Clean Movie Title
-        function cleanMovieName(rawName) {
-            if (!rawName) return "Movie Stream";
-            
-            let clean = rawName.replace(/\.(mkv|mp4|webm|avi|flv|mov)$/i, "");
-            const pattern = /[\.\_\s\(-](480p|720p|1080p|2160p|4k|2k|360p|hd|sd|bluray|web-dl|web|webrip|hdr|hdrip|hevc|x264|x265|h264|h265|10bit|ds4k|dvdrip|cam|camrip|nf|amzn|esub|sub|hindi|english|telugu|tamil|kannada|malayalam|bengali|marathi|gujarati|punjabi|dubbed|dual|multi|aac|ac3|dts|2\.0|5\.1|7\.1).*$/i;
-            
-            clean = clean.split(pattern)[0];
-            clean = clean.replace(/[\._]/g, " ").trim();
-            
-            return clean || rawName;
-        }
 
-        // Fast Streaming Engine
-        function initFastStream() {
-            const player = document.getElementById("player");
+        /* =====================================
+           GOOGLE CAST
+        ===================================== */
 
-            if (Hls.isSupported() && (fileUrl.includes('.m3u8') || fileUrl.includes('hls'))) {
-                const hls = new Hls({
-                    enableWorker: true,
-                    lowLatencyMode: true,
-                    maxBufferLength: 15,            // Fast start: initial 15-second buffer
-                    maxMaxBufferLength: 30,         // Cap buffer at 30 seconds to save RAM
-                    maxBufferSize: 30 * 1024 * 1024, // 30 MB Cache Limit
-                    startFragPrefetch: true,        // Prefetch initial frames for instant load
-                    appendErrorMaxRetry: 3
-                });
-                
-                hls.loadSource(fileUrl);
-                hls.attachMedia(player);
+        window.__onGCastApiAvailable =
+            function (isAvailable) {
 
-                // Auto-recover stream on network lag or media stall
-                hls.on(Hls.Events.ERROR, function (event, data) {
-                    if (data.fatal) {
-                        switch (data.type) {
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                hls.startLoad();
-                                break;
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-                                hls.recoverMediaError();
-                                break;
-                            default:
-                                hls.destroy();
-                                player.src = fileUrl;
-                                break;
-                        }
+                if (
+                    isAvailable &&
+                    window.cast &&
+                    window.cast.framework
+                ) {
+
+                    try {
+
+                        cast.framework
+                            .CastContext
+                            .getInstance()
+                            .setOptions({
+
+                                receiverApplicationId:
+                                    chrome.cast.media
+                                        .DEFAULT_MEDIA_RECEIVER_APP_ID,
+
+                                autoJoinPolicy:
+                                    chrome.cast
+                                        .AutoJoinPolicy
+                                        .ORIGIN_SCOPED
+
+                            });
+
+                    } catch (e) {
+
+                        console.warn(
+                            "Cast unavailable"
+                        );
+
                     }
-                });
-            } else {
-                player.src = fileUrl;
+
+                }
+
+            };
+
+
+        /* =====================================
+           CLEAN TITLE
+        ===================================== */
+
+        function cleanMovieName(rawName) {
+
+            if (!rawName)
+                return "Movie Stream";
+
+
+            let clean =
+                rawName.replace(
+                    /\.(mkv|mp4|webm|avi|flv|mov|m4v)$/i,
+                    ""
+                );
+
+
+            const pattern =
+                /[\._\-\s\(\[]+(480p|576p|720p|1080p|1440p|2160p|4k|2k|360p|hd|sd|bluray|blu-ray|web-dl|web|webrip|hdr|hdr10|hdrip|hevc|x264|x265|h264|h265|10bit|dvdrip|cam|camrip|nf|amzn|esub|sub|hindi|english|telugu|tamil|kannada|malayalam|bengali|marathi|gujarati|punjabi|dubbed|dual|multi|aac|ac3|dts|2\.0|5\.1|7\.1).*$/i;
+
+
+            clean =
+                clean.split(pattern)[0];
+
+
+            clean =
+                clean
+                .replace(/[._]+/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+
+
+            return clean || rawName;
+
+        }
+
+
+        /* =====================================
+           INIT PLAYER
+        ===================================== */
+
+        function initPlayer() {
+
+            if (!player || !fileUrl)
+                return;
+
+
+            showLoader(
+                "Connecting..."
+            );
+
+
+            const isHLS =
+                /\.m3u8(\?|#|$)/i.test(fileUrl) ||
+                /[?&](hls|m3u8)=/i.test(fileUrl) ||
+                fileUrl.toLowerCase().includes("m3u8");
+
+
+            /* ============================
+               NATIVE HLS
+            ============================ */
+
+            if (
+                isHLS &&
+                player.canPlayType(
+                    "application/vnd.apple.mpegurl"
+                )
+            ) {
+
+                player.src =
+                    fileUrl;
+
+                player.addEventListener(
+                    "loadedmetadata",
+                    function () {
+
+                        hideLoader();
+
+                    },
+                    { once: true }
+                );
+
+                return;
             }
+
+
+            /* ============================
+               HLS.JS
+            ============================ */
+
+            if (
+                isHLS &&
+                typeof Hls !== "undefined" &&
+                Hls.isSupported()
+            ) {
+
+
+                hls =
+                    new Hls({
+
+                        enableWorker: true,
+
+                        lowLatencyMode: false,
+
+                        startLevel: -1,
+
+                        autoStartLoad: true,
+
+
+                        /* BUFFER */
+
+                        maxBufferLength: 35,
+
+                        maxMaxBufferLength: 60,
+
+                        maxBufferSize:
+                            60 * 1000 * 1000,
+
+                        backBufferLength: 30,
+
+
+                        /* NETWORK */
+
+                        maxLoadingDelay: 4,
+
+                        maxFragLookUpTolerance:
+                            0.2,
+
+
+                        /* RETRIES */
+
+                        manifestLoadingMaxRetry: 4,
+
+                        levelLoadingMaxRetry: 4,
+
+                        fragLoadingMaxRetry: 5,
+
+                        manifestLoadingRetryDelay:
+                            1000,
+
+                        levelLoadingRetryDelay:
+                            1000,
+
+                        fragLoadingRetryDelay:
+                            1000,
+
+
+                        /* PERFORMANCE */
+
+                        capLevelToPlayerSize: true,
+
+                        abrBandWidthFactor:
+                            0.85,
+
+                        abrBandWidthUpFactor:
+                            0.70
+
+                    });
+
+
+                hls.loadSource(
+                    fileUrl
+                );
+
+
+                hls.attachMedia(
+                    player
+                );
+
+
+                hls.on(
+                    Hls.Events.MANIFEST_PARSED,
+                    function () {
+
+                        retryCount = 0;
+
+                        hideLoader();
+
+                    }
+                );
+
+
+                hls.on(
+                    Hls.Events.FRAG_BUFFERED,
+                    function () {
+
+                        hideLoader();
+
+                    }
+                );
+
+
+                /* ============================
+                   HLS ERROR RECOVERY
+                ============================ */
+
+                hls.on(
+                    Hls.Events.ERROR,
+                    function (event, data) {
+
+                        if (!data.fatal)
+                            return;
+
+
+                        console.warn(
+                            "HLS Error:",
+                            data.type,
+                            data.details
+                        );
+
+
+                        switch (data.type) {
+
+
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+
+                                retryCount++;
+
+                                showLoader(
+                                    "Reconnecting..."
+                                );
+
+
+                                if (
+                                    retryCount <= 5
+                                ) {
+
+                                    setTimeout(
+                                        function () {
+
+                                            if (hls) {
+
+                                                hls.startLoad();
+
+                                            }
+
+                                        },
+                                        Math.min(
+                                            retryCount * 1000,
+                                            5000
+                                        )
+                                    );
+
+                                } else {
+
+                                    hideLoader();
+
+                                    showPlayerError();
+
+                                }
+
+                                break;
+
+
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+
+                                retryCount++;
+
+                                showLoader(
+                                    "Recovering video..."
+                                );
+
+
+                                if (
+                                    retryCount <= 3
+                                ) {
+
+                                    hls.recoverMediaError();
+
+                                } else {
+
+                                    hideLoader();
+
+                                    showPlayerError();
+
+                                }
+
+                                break;
+
+
+                            default:
+
+                                hideLoader();
+
+                                showPlayerError();
+
+                                break;
+
+                        }
+
+                    }
+                );
+
+
+            }
+
+
+            /* ============================
+               NORMAL MP4 / WEBM
+            ============================ */
+
+            else {
+
+                player.src =
+                    fileUrl;
+
+
+                player.addEventListener(
+                    "loadedmetadata",
+                    function () {
+
+                        hideLoader();
+
+                    },
+                    { once: true }
+                );
+
+            }
+
         }
 
-        function formatTime(seconds) {
-            const sec = Math.floor(seconds);
-            const hrs = Math.floor(sec / 3600);
-            const mins = Math.floor((sec % 3600) / 60);
-            const secs = sec % 60;
-            const pad = (n) => n.toString().padStart(2, '0');
-            return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
-        }
 
-        // Optimized Progress Saving (Throttled LocalStorage)
-        function initAutoResumeModal() {
-            const player = document.getElementById("player");
-            const modal = document.getElementById("resumeModal");
-            const timeText = document.getElementById("resumeTimeText");
+        /* =====================================
+           PLAYER EVENTS
+        ===================================== */
 
-            player.addEventListener("loadedmetadata", function() {
-                const storedVal = localStorage.getItem(storageKey);
-                if (storedVal && parseFloat(storedVal) > 5) {
-                    savedTime = parseFloat(storedVal);
-                    timeText.innerText = formatTime(savedTime);
-                    modal.classList.remove("hidden");
+        function initPlayerEvents() {
+
+            if (!player)
+                return;
+
+
+            player.addEventListener(
+                "waiting",
+                function () {
+
+                    showLoader(
+                        "Buffering..."
+                    );
+
                 }
-            });
+            );
 
-            let lastSaveTime = 0;
-            player.addEventListener("timeupdate", function() {
-                const now = Date.now();
-                if (player.currentTime > 0 && (now - lastSaveTime > 2000)) {
-                    localStorage.setItem(storageKey, player.currentTime);
-                    lastSaveTime = now;
+
+            player.addEventListener(
+                "stalled",
+                function () {
+
+                    showLoader(
+                        "Reconnecting..."
+                    );
+
                 }
-            });
+            );
 
-            player.addEventListener("ended", function() {
-                localStorage.removeItem(storageKey);
-            });
+
+            player.addEventListener(
+                "playing",
+                function () {
+
+                    hideLoader();
+
+                    retryCount = 0;
+
+                }
+            );
+
+
+            player.addEventListener(
+                "canplay",
+                function () {
+
+                    hideLoader();
+
+                }
+            );
+
+
+            player.addEventListener(
+                "error",
+                function () {
+
+                    hideLoader();
+
+                }
+            );
+
+
+            /* ============================
+               SAVE PROGRESS
+            ============================ */
+
+            player.addEventListener(
+                "timeupdate",
+                function () {
+
+                    const now =
+                        Date.now();
+
+
+                    if (
+                        player.currentTime > 5 &&
+                        now - lastSave > 3000
+                    ) {
+
+                        saveProgress();
+
+                        lastSave =
+                            now;
+
+                    }
+
+                }
+            );
+
+
+            window.addEventListener(
+                "beforeunload",
+                saveProgress
+            );
+
+
+            document.addEventListener(
+                "visibilitychange",
+                function () {
+
+                    if (
+                        document.hidden
+                    ) {
+
+                        saveProgress();
+
+                    }
+
+                }
+            );
+
+
+            player.addEventListener(
+                "ended",
+                function () {
+
+                    localStorage.removeItem(
+                        storageKey
+                    );
+
+                }
+            );
+
         }
+
+
+        /* =====================================
+           RESUME SYSTEM
+        ===================================== */
+
+        function initResume() {
+
+            if (!player)
+                return;
+
+
+            player.addEventListener(
+                "loadedmetadata",
+                function () {
+
+                    const stored =
+                        localStorage.getItem(
+                            storageKey
+                        );
+
+
+                    if (!stored)
+                        return;
+
+
+                    const time =
+                        parseFloat(stored);
+
+
+                    if (
+                        !isFinite(time) ||
+                        time < 10 ||
+                        !player.duration ||
+                        time >=
+                        player.duration - 15
+                    ) {
+
+                        return;
+
+                    }
+
+
+                    savedTime =
+                        time;
+
+
+                    const modal =
+                        document.getElementById(
+                            "resumeModal"
+                        );
+
+
+                    const timeText =
+                        document.getElementById(
+                            "resumeTimeText"
+                        );
+
+
+                    if (timeText) {
+
+                        timeText.innerText =
+                            formatTime(time);
+
+                    }
+
+
+                    if (
+                        modal &&
+                        !resumeShown
+                    ) {
+
+                        resumeShown =
+                            true;
+
+                        modal.classList.remove(
+                            "hidden"
+                        );
+
+                    }
+
+                },
+                { once: true }
+            );
+
+        }
+
+
+        /* =====================================
+           RESUME
+        ===================================== */
 
         function confirmResume() {
-            const player = document.getElementById("player");
-            document.getElementById("resumeModal").classList.add("hidden");
-            player.currentTime = savedTime;
-            player.play().catch(() => {});
+
+            const modal =
+                document.getElementById(
+                    "resumeModal"
+                );
+
+
+            if (modal) {
+
+                modal.classList.add(
+                    "hidden"
+                );
+
+            }
+
+
+            if (
+                player &&
+                isFinite(savedTime)
+            ) {
+
+                try {
+
+                    player.currentTime =
+                        savedTime;
+
+                } catch (e) {}
+
+
+                tryPlay();
+
+            }
+
         }
+
+
+        /* =====================================
+           RESTART
+        ===================================== */
 
         function confirmRestart() {
-            const player = document.getElementById("player");
-            document.getElementById("resumeModal").classList.add("hidden");
-            localStorage.removeItem(storageKey);
-            player.currentTime = 0;
-            player.play().catch(() => {});
+
+            const modal =
+                document.getElementById(
+                    "resumeModal"
+                );
+
+
+            if (modal) {
+
+                modal.classList.add(
+                    "hidden"
+                );
+
+            }
+
+
+            localStorage.removeItem(
+                storageKey
+            );
+
+
+            savedTime = 0;
+
+
+            try {
+
+                player.currentTime =
+                    0;
+
+            } catch (e) {}
+
+
+            tryPlay();
+
         }
 
-        function showToast(message) {
-            const toast = document.getElementById("toast");
-            const toastMsg = document.getElementById("toastMsg");
-            toastMsg.innerText = message;
-            toast.classList.add("show");
-            setTimeout(() => {
-                toast.classList.remove("show");
-            }, 3000);
+
+        /* =====================================
+           TRY PLAY
+        ===================================== */
+
+        function tryPlay() {
+
+            if (!player)
+                return;
+
+
+            const promise =
+                player.play();
+
+
+            if (
+                promise &&
+                promise.catch
+            ) {
+
+                promise.catch(
+                    function () {}
+                );
+
+            }
+
         }
 
-        function copyStreamLink() {
-            navigator.clipboard.writeText(fileUrl).then(() => {
-                showToast("Stream Link Copied to Clipboard!");
-            }).catch(() => {
-                showToast("Failed to Copy Link!");
-            });
+
+        /* =====================================
+           SAVE PROGRESS
+        ===================================== */
+
+        function saveProgress() {
+
+            if (
+                !player ||
+                !isFinite(
+                    player.currentTime
+                ) ||
+                player.currentTime <= 5
+            ) {
+
+                return;
+
+            }
+
+
+            try {
+
+                localStorage.setItem(
+                    storageKey,
+                    player.currentTime.toString()
+                );
+
+            } catch (e) {}
+
         }
 
-        function vlc_player() { window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=org.videolan.vlc;type=video/*;end;"; }
-        function mx_player() { window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end;"; }
+
+        /* =====================================
+           FORMAT TIME
+        ===================================== */
+
+        function formatTime(seconds) {
+
+            seconds =
+                Math.floor(
+                    seconds || 0
+                );
+
+
+            const hours =
+                Math.floor(
+                    seconds / 3600
+                );
+
+
+            const minutes =
+                Math.floor(
+                    (seconds % 3600) / 60
+                );
+
+
+            const secs =
+                seconds % 60;
+
+
+            const pad =
+                function (n) {
+
+                    return String(n)
+                        .padStart(2, "0");
+
+                };
+
+
+            return (
+                pad(hours) +
+                ":" +
+                pad(minutes) +
+                ":" +
+                pad(secs)
+            );
+
+        }
+
+
+        /* =====================================
+           LOADER
+        ===================================== */
+
+        function showLoader(
+            text = "Loading..."
+        ) {
+
+            const loader =
+                document.getElementById(
+                    "playerLoader"
+                );
+
+
+            const textElement =
+                document.getElementById(
+                    "loaderText"
+                );
+
+
+            if (textElement) {
+
+                textElement.innerText =
+                    text;
+
+            }
+
+
+            if (loader) {
+
+                loader.classList.add(
+                    "show"
+                );
+
+            }
+
+        }
+
+
+        function hideLoader() {
+
+            const loader =
+                document.getElementById(
+                    "playerLoader"
+                );
+
+
+            if (loader) {
+
+                loader.classList.remove(
+                    "show"
+                );
+
+            }
+
+        }
+
+
+        /* =====================================
+           PLAYER ERROR
+        ===================================== */
+
+        function showPlayerError() {
+
+            const error =
+                document.getElementById(
+                    "playerError"
+                );
+
+
+            if (error) {
+
+                error.classList.add(
+                    "show"
+                );
+
+            }
+
+        }
+
+
+        function retryPlayer() {
+
+            const error =
+                document.getElementById(
+                    "playerError"
+                );
+
+
+            if (error) {
+
+                error.classList.remove(
+                    "show"
+                );
+
+            }
+
+
+            retryCount = 0;
+
+
+            showLoader(
+                "Retrying..."
+            );
+
+
+            if (hls) {
+
+                try {
+
+                    hls.stopLoad();
+
+                    hls.startLoad();
+
+                } catch (e) {}
+
+            } else {
+
+                try {
+
+                    player.load();
+
+                    player.play()
+                        .catch(
+                            function () {}
+                        );
+
+                } catch (e) {}
+
+            }
+
+        }
+
+
+        /* =====================================
+           TOAST
+        ===================================== */
+
+        function showToast(
+            message
+        ) {
+
+            const toast =
+                document.getElementById(
+                    "toast"
+                );
+
+
+            const toastMsg =
+                document.getElementById(
+                    "toastMsg"
+                );
+
+
+            if (
+                !toast ||
+                !toastMsg
+            ) return;
+
+
+            toastMsg.innerText =
+                message;
+
+
+            toast.classList.add(
+                "show"
+            );
+
+
+            clearTimeout(
+                window.toastTimer
+            );
+
+
+            window.toastTimer =
+                setTimeout(
+                    function () {
+
+                        toast.classList.remove(
+                            "show"
+                        );
+
+                    },
+                    3000
+                );
+
+        }
+
+
+        /* =====================================
+           COPY LINK
+        ===================================== */
+
+        async function copyStreamLink() {
+
+            try {
+
+                await navigator.clipboard
+                    .writeText(fileUrl);
+
+
+                showToast(
+                    "Stream Link Copied!"
+                );
+
+
+            } catch (e) {
+
+                const input =
+                    document.createElement(
+                        "textarea"
+                    );
+
+
+                input.value =
+                    fileUrl;
+
+
+                input.style.position =
+                    "fixed";
+
+
+                input.style.opacity =
+                    "0";
+
+
+                document.body.appendChild(
+                    input
+                );
+
+
+                input.select();
+
+
+                try {
+
+                    document.execCommand(
+                        "copy"
+                    );
+
+
+                    showToast(
+                        "Stream Link Copied!"
+                    );
+
+                } catch (err) {
+
+                    showToast(
+                        "Failed to Copy Link!"
+                    );
+
+                }
+
+
+                input.remove();
+
+            }
+
+        }
+
+
+        /* =====================================
+           VLC
+        ===================================== */
+
+        function vlc_player() {
+
+            if (!fileUrl)
+                return;
+
+
+            window.location.href =
+                "intent:" +
+                encodeURI(fileUrl) +
+                "#Intent;" +
+                "package=org.videolan.vlc;" +
+                "type=video/*;" +
+                "end;";
+
+        }
+
+
+        /* =====================================
+           MX PLAYER
+        ===================================== */
+
+        function mx_player() {
+
+            if (!fileUrl)
+                return;
+
+
+            window.location.href =
+                "intent:" +
+                encodeURI(fileUrl) +
+                "#Intent;" +
+                "package=com.mxtech.videoplayer.ad;" +
+                "type=video/*;" +
+                "end;";
+
+        }
+
+
+        /* =====================================
+           DOWNLOAD
+        ===================================== */
 
         function bisalDownload() {
-            const a = document.createElement('a');
-            a.href = fileUrl;
-            a.download = fileName || 'video.mp4';
-            document.body.appendChild(a);
+
+            if (!fileUrl) {
+
+                showToast(
+                    "Invalid Video Link!"
+                );
+
+                return;
+
+            }
+
+
+            const a =
+                document.createElement(
+                    "a"
+                );
+
+
+            a.href =
+                fileUrl;
+
+
+            a.download =
+                fileName ||
+                "video.mp4";
+
+
+            a.target =
+                "_blank";
+
+
+            a.rel =
+                "noopener";
+
+
+            document.body.appendChild(
+                a
+            );
+
+
             a.click();
-            document.body.removeChild(a);
-            showToast("Download Started!");
+
+
+            a.remove();
+
+
+            showToast(
+                "Download Started!"
+            );
+
         }
+
+
+        /* =====================================
+           CLEANUP
+        ===================================== */
+
+        window.addEventListener(
+            "pagehide",
+            function () {
+
+                saveProgress();
+
+
+                if (hls) {
+
+                    try {
+
+                        hls.destroy();
+
+                    } catch (e) {}
+
+                }
+
+            }
+        );
+
     </script>
+
 </body>
+
 </html>
