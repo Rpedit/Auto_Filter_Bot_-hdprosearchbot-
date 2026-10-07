@@ -2,1649 +2,1444 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-    <title>HD PRO SEARCH BOT | {{file_name}}</title>
+<meta charset="UTF-8">
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta
+name="viewport"
+content="width=device-width, initial-scale=1.0">
 
-    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,500;0,700;0,800;1,700&display=swap" rel="stylesheet">
+<title>HD PRO SEARCH BOT | {{file_name}}</title>
 
-    <link rel="stylesheet"
-          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+<meta
+name="theme-color"
+content="#080808">
 
-    <!-- Google Cast -->
-    <script
-        type="text/javascript"
-        src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1">
-    </script>
+<link
+rel="preconnect"
+href="https://fonts.googleapis.com">
 
-    <!-- HLS.js -->
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<link
+rel="preconnect"
+href="https://fonts.gstatic.com"
+crossorigin>
 
-    <!-- Tailwind -->
-    <script src="https://cdn.tailwindcss.com"></script>
+<link
+href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@400;500;600;700&display=swap"
+rel="stylesheet">
 
+<link
+rel="stylesheet"
+href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 
-    <style>
+<!-- GOOGLE CAST -->
 
-        :root {
-            --brand-red: #E50914;
-            --brand-red-bright: #FF1E27;
-            --brand-orange: #FF5722;
-            --brand-gold: #FFB800;
-        }
+<script
+src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1">
+</script>
 
+<!-- HLS.JS -->
 
-        * {
-            box-sizing: border-box;
-        }
+<script
+src="https://cdn.jsdelivr.net/npm/hls.js@latest">
+</script>
 
+<script
+src="https://cdn.tailwindcss.com">
+</script>
 
-        html {
-            scroll-behavior: smooth;
-        }
 
+<style>
 
-        body {
-            background:
-                radial-gradient(
-                    circle at 10% 10%,
-                    #2b0507 0%,
-                    #120305 45%,
-                    #080204 90%
-                );
+*{
+    box-sizing:border-box;
+}
 
-            color: #f8fafc;
+body{
 
-            font-family:
-                'Josefin Sans',
-                sans-serif;
+    margin:0;
 
-            overflow-x: hidden;
+    min-height:100vh;
 
-            min-height: 100vh;
+    color:#fff;
 
-            touch-action: manipulation;
-        }
+    font-family:"Josefin Sans",sans-serif;
 
+    background:
+    radial-gradient(
+        circle at top,
+        rgba(150,0,0,.23),
+        transparent 38%
+    ),
+    linear-gradient(
+        180deg,
+        #070707,
+        #0d0d0d
+    );
+}
 
-        /* =====================================
-           GLASS
-        ===================================== */
 
-        .glass-card {
+.glass{
 
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(255,255,255,0.08) 0%,
-                    rgba(255,255,255,0.02) 100%
-                );
+    background:
+    rgba(20,20,20,.78);
 
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
+    border:
+    1px solid
+    rgba(255,255,255,.08);
 
-            border: 1px solid rgba(255,255,255,0.12);
+    box-shadow:
+    0 15px 45px
+    rgba(0,0,0,.4);
 
-            border-top:
-                1px solid rgba(255,255,255,0.22);
+    backdrop-filter:
+    blur(15px);
 
-            border-left:
-                1px solid rgba(255,255,255,0.18);
+    -webkit-backdrop-filter:
+    blur(15px);
+}
 
-            border-radius: 20px;
 
-            box-shadow:
-                0 12px 40px rgba(0,0,0,0.65),
-                inset 0 1px 1px rgba(255,255,255,0.15);
+.logo{
 
-            transform: translateZ(0);
-        }
+    background:
+    linear-gradient(
+        90deg,
+        #ff2020,
+        #ff7a00,
+        #ffd000
+    );
 
+    -webkit-background-clip:text;
 
-        .glass-card-glow {
+    background-clip:text;
 
-            transform: translateZ(0);
+    color:transparent;
+}
 
-            box-shadow:
-                0 0 35px rgba(229,9,20,0.18),
-                0 12px 40px rgba(0,0,0,0.7);
-        }
 
+.header{
 
-        /* =====================================
-           PLAYER
-        ===================================== */
+    position:sticky;
 
-        #playerContainer {
+    top:0;
 
-            background: #000;
+    z-index:100;
 
-            isolation: isolate;
+    background:
+    rgba(5,5,5,.9);
 
-            contain:
-                layout
-                paint
-                style;
-        }
+    border-bottom:
+    1px solid
+    rgba(255,255,255,.07);
 
+    backdrop-filter:
+    blur(15px);
+}
 
-        #player {
 
-            display: block;
+.player-box{
 
-            width: 100%;
+    position:relative;
 
-            aspect-ratio: 16 / 9;
+    overflow:hidden;
 
-            background: #000;
+    background:#000;
 
-            object-fit: contain;
-        }
+    border-radius:18px;
 
+    border:
+    1px solid
+    rgba(255,255,255,.08);
 
-        /* =====================================
-           PLAYER LOADER
-        ===================================== */
+    box-shadow:
+    0 20px 55px
+    rgba(0,0,0,.5);
+}
 
-        #playerLoader {
 
-            position: absolute;
+video{
 
-            inset: 0;
+    display:block;
 
-            display: flex;
+    width:100%;
 
-            align-items: center;
+    height:auto;
 
-            justify-content: center;
+    min-height:220px;
 
-            background:
-                rgba(0,0,0,0.58);
+    background:#000;
+}
 
-            backdrop-filter: blur(4px);
 
-            z-index: 20;
+.loader{
 
-            opacity: 0;
+    position:absolute;
 
-            visibility: hidden;
+    inset:0;
 
-            transition:
-                opacity .2s ease,
-                visibility .2s ease;
+    z-index:5;
 
-            pointer-events: none;
-        }
+    display:flex;
 
+    align-items:center;
 
-        #playerLoader.show {
+    justify-content:center;
 
-            opacity: 1;
+    background:
+    rgba(0,0,0,.58);
 
-            visibility: visible;
-        }
+    pointer-events:none;
 
+    transition:.2s;
+}
 
-        .loader-ring {
 
-            width: 42px;
+.loader.hide{
 
-            height: 42px;
+    opacity:0;
 
-            border-radius: 50%;
+    visibility:hidden;
+}
 
-            border:
-                4px solid
-                rgba(255,255,255,0.15);
 
-            border-top-color:
-                var(--brand-orange);
+.spinner{
 
-            animation:
-                playerSpin .8s linear infinite;
-        }
+    width:42px;
 
+    height:42px;
 
-        @keyframes playerSpin {
+    border-radius:50%;
 
-            to {
-                transform: rotate(360deg);
-            }
-        }
+    border:
+    4px solid
+    rgba(255,255,255,.15);
 
+    border-top-color:#ff3030;
 
-        /* =====================================
-           PLAYER ERROR
-        ===================================== */
+    animation:
+    spin .8s linear infinite;
+}
 
-        #playerError {
 
-            display: none;
+@keyframes spin{
 
-            position: absolute;
+    to{
+        transform:rotate(360deg);
+    }
 
-            inset: 0;
+}
 
-            z-index: 25;
 
-            align-items: center;
+.error-box{
 
-            justify-content: center;
+    position:absolute;
 
-            background:
-                rgba(0,0,0,0.9);
+    z-index:10;
 
-            text-align: center;
+    left:50%;
 
-            padding: 20px;
-        }
+    top:50%;
 
+    transform:
+    translate(-50%,-50%);
 
-        #playerError.show {
-            display: flex;
-        }
+    width:min(90%,420px);
 
+    padding:20px;
 
-        /* =====================================
-           BUTTONS
-        ===================================== */
+    text-align:center;
 
-        .player-btn {
+    border-radius:16px;
 
-            display: flex;
+    background:
+    rgba(15,15,15,.96);
 
-            align-items: center;
+    border:
+    1px solid
+    rgba(255,60,60,.3);
+}
 
-            justify-content: center;
 
-            gap: 10px;
+.error-box.hidden{
 
-            width: 100%;
+    display:none;
+}
 
-            padding: 14px 18px;
 
-            border-radius: 14px;
+.retry{
 
-            font-weight: 700;
+    border:0;
 
-            letter-spacing: .8px;
+    margin-top:12px;
 
-            transition:
-                transform .25s ease,
-                filter .25s ease,
-                box-shadow .25s ease;
+    padding:9px 18px;
 
-            text-transform: uppercase;
+    border-radius:9px;
 
-            font-size: .85rem;
+    color:#fff;
 
-            backdrop-filter: blur(14px);
+    background:#e50914;
 
-            -webkit-backdrop-filter: blur(14px);
+    font-weight:700;
 
-            position: relative;
+    cursor:pointer;
+}
 
-            overflow: hidden;
 
-            -webkit-tap-highlight-color:
-                transparent;
-        }
+.retry:hover{
 
+    background:#ff1825;
+}
 
-        .player-btn::before {
 
-            content: '';
+.ad-label{
 
-            position: absolute;
+    color:#666;
 
-            top: 0;
+    font-size:9px;
 
-            left: -120%;
+    letter-spacing:1.5px;
 
-            width: 100%;
+    text-align:center;
 
-            height: 100%;
+    margin-bottom:5px;
+}
 
-            background:
-                linear-gradient(
-                    90deg,
-                    transparent,
-                    rgba(255,255,255,.25),
-                    transparent
-                );
 
-            transition: .5s;
-        }
+.ad-slot{
 
+    width:100%;
 
-        .player-btn:hover::before {
-            left: 120%;
-        }
+    overflow:hidden;
 
+    border-radius:10px;
+}
 
-        .player-btn:hover {
 
-            transform:
-                translateY(-3px)
-                scale(1.01);
+.info{
 
-            filter: brightness(1.12);
-        }
+    border-radius:16px;
 
+    padding:18px;
+}
 
-        .player-btn:active {
 
-            transform:
-                scale(.97);
-        }
+.action{
 
+    transition:
+    transform .18s ease,
+    border-color .18s ease;
+}
 
-        .btn-copy {
 
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(229,9,20,.9),
-                    rgba(180,0,10,.95)
-                );
+.action:hover{
 
-            color: white;
+    transform:
+    translateY(-2px);
 
-            border:
-                1px solid
-                rgba(255,30,39,.4);
+    border-color:
+    rgba(255,50,50,.3);
+}
 
-            box-shadow:
-                0 6px 20px
-                rgba(229,9,20,.35);
-        }
 
+.action:active{
 
-        .btn-vlc {
+    transform:
+    scale(.97);
+}
 
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(255,87,34,.9),
-                    rgba(216,50,0,.95)
-                );
 
-            color: white;
+.modal{
 
-            border:
-                1px solid
-                rgba(255,110,64,.4);
+    position:fixed;
 
-            box-shadow:
-                0 6px 20px
-                rgba(255,87,34,.35);
-        }
+    inset:0;
 
+    z-index:999;
 
-        .btn-mx {
+    display:none;
 
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(255,184,0,.9),
-                    rgba(212,147,0,.95)
-                );
+    align-items:center;
 
-            color: #0d0608;
+    justify-content:center;
 
-            border:
-                1px solid
-                rgba(255,200,50,.5);
+    padding:20px;
 
-            box-shadow:
-                0 6px 20px
-                rgba(255,184,0,.35);
-        }
+    background:
+    rgba(0,0,0,.8);
 
+    backdrop-filter:
+    blur(8px);
+}
 
-        .btn-download {
 
-            background:
-                linear-gradient(
-                    135deg,
-                    #FF1E27 0%,
-                    #FF5722 50%,
-                    #FFB800 100%
-                );
+.modal.show{
 
-            color: white;
+    display:flex;
+}
 
-            box-shadow:
-                0 8px 30px
-                rgba(239,35,35,.45);
 
-            border:
-                1px solid
-                rgba(255,255,255,.3);
+.modal-box{
 
-            text-shadow:
-                0 1px 3px
-                rgba(0,0,0,.5);
-        }
+    width:min(100%,420px);
 
+    padding:24px;
 
-        /* =====================================
-           BRAND TEXT
-        ===================================== */
+    border-radius:20px;
+}
 
-        .brand-gradient-text {
 
-            background:
-                linear-gradient(
-                    135deg,
-                    #FF1E27 0%,
-                    #FF5722 50%,
-                    #FFB800 100%
-                );
+.toast{
 
-            -webkit-background-clip: text;
+    position:fixed;
 
-            -webkit-text-fill-color:
-                transparent;
+    z-index:1000;
 
-            font-family:
-                'Josefin Sans',
-                sans-serif;
+    left:50%;
 
-            font-weight: 800;
-        }
+    bottom:25px;
 
+    transform:
+    translate(-50%,20px);
 
-        .brand-text-inline {
+    opacity:0;
 
-            background:
-                linear-gradient(
-                    135deg,
-                    #FF1E27 0%,
-                    #FF5722 50%,
-                    #FFB800 100%
-                );
+    pointer-events:none;
 
-            -webkit-background-clip: text;
+    transition:.25s;
 
-            -webkit-text-fill-color:
-                transparent;
+    padding:11px 17px;
 
-            font-weight: 800;
+    border-radius:10px;
 
-            display: inline-block;
+    background:
+    rgba(25,25,25,.96);
 
-            white-space: nowrap;
-        }
+    border:
+    1px solid
+    rgba(255,255,255,.1);
+}
 
 
-        .no-wrap-title {
+.toast.show{
 
-            display: inline-flex;
+    opacity:1;
 
-            align-items: center;
+    transform:
+    translate(-50%,0);
+}
 
-            justify-content: center;
 
-            white-space: nowrap;
-        }
+footer{
 
+    border-top:
+    1px solid
+    rgba(255,255,255,.07);
+}
 
-        /* =====================================
-           AD CONTAINER
-        ===================================== */
 
-        .ad-wrapper {
+@media(max-width:640px){
 
-            width: 100%;
+    .player-box{
+        border-radius:12px;
+    }
 
-            margin:
-                18px auto;
+    video{
+        min-height:200px;
+    }
 
-            display: flex;
+    .info{
+        padding:14px;
+    }
 
-            align-items: center;
+}
 
-            justify-content: center;
+</style>
 
-            min-height: 50px;
-
-            overflow: hidden;
-
-            border-radius: 12px;
-        }
-
-
-        .ad-label {
-
-            font-size: 8px;
-
-            color:
-                rgba(255,255,255,.28);
-
-            text-align: center;
-
-            margin-bottom: 4px;
-
-            letter-spacing: 1px;
-
-            text-transform:
-                uppercase;
-        }
-
-
-        .ad-box {
-
-            width: 100%;
-
-            max-width: 728px;
-
-            min-height: 50px;
-
-            display: flex;
-
-            align-items: center;
-
-            justify-content: center;
-
-            overflow: hidden;
-        }
-
-
-        /* =====================================
-           TOAST
-        ===================================== */
-
-        #toast {
-
-            position: fixed;
-
-            bottom: 25px;
-
-            left: 50%;
-
-            transform:
-                translateX(-50%)
-                translateY(100px);
-
-            opacity: 0;
-
-            transition:
-                all .3s ease;
-
-            z-index: 1000;
-
-            will-change:
-                transform,
-                opacity;
-        }
-
-
-        #toast.show {
-
-            transform:
-                translateX(-50%)
-                translateY(0);
-
-            opacity: 1;
-        }
-
-
-        /* =====================================
-           SCROLLBAR
-        ===================================== */
-
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-
-
-        ::-webkit-scrollbar-track {
-            background: #080204;
-        }
-
-
-        ::-webkit-scrollbar-thumb {
-
-            background:
-                rgba(255,87,34,.3);
-
-            border-radius: 10px;
-        }
-
-
-        /* =====================================
-           MOBILE
-        ===================================== */
-
-        @media (max-width: 640px) {
-
-            .player-btn {
-
-                padding:
-                    13px 12px;
-
-                font-size:
-                    .78rem;
-            }
-
-
-            .ad-wrapper {
-
-                margin:
-                    14px auto;
-            }
-        }
-
-    </style>
 </head>
 
 
 <body>
 
 
-    <!-- =====================================
-         NAVBAR
-    ===================================== -->
+<!-- HEADER -->
 
-    <nav
-        class="sticky top-0 z-50 glass-card mx-3 my-3 px-4 py-3 max-w-7xl md:mx-auto flex justify-center items-center">
+<header class="header">
 
-        <a
-            href="https://t.me/+sIOgiCYLtBxhNGI1"
-            class="no-wrap-title">
+<div
+class="max-w-6xl mx-auto px-4 py-4
+flex items-center justify-between gap-4">
 
-            <h3
-                class="text-xl sm:text-2xl font-extrabold brand-gradient-text tracking-wide text-center uppercase flex items-center justify-center gap-1.5">
+<div>
 
-                <span>
-                    HD PRO SEARCH BOT
-                </span>
+<div class="logo font-bold text-xl sm:text-2xl">
+HD PRO SEARCH BOT
+</div>
 
-                <span
-                    style="-webkit-text-fill-color: initial;"
-                    class="inline-block leading-none">
+<div class="text-xs text-gray-500 mt-1">
+Fast • Secure • HD Streaming
+</div>
 
-                    🔍
+</div>
 
-                </span>
 
-            </h3>
+<a
+href="https://t.me/+sIOgiCYLtBxhNGI1"
+target="_blank"
+rel="noopener noreferrer"
+class="bg-red-600 hover:bg-red-700
+px-4 py-2 rounded-lg
+text-sm font-semibold">
 
-        </a>
+<i class="fa-brands fa-telegram mr-1"></i>
 
-    </nav>
+Telegram
 
+</a>
 
-    <div
-        class="outer max-w-5xl mx-auto px-3 sm:px-4 mt-4">
+</div>
 
-        <div class="inner">
+</header>
 
-            <div
-                class="main"
-                id="main">
 
 
-                <!-- =====================================
-                     AD #1 — ABOVE PLAYER
-                ===================================== -->
+<main
+class="max-w-6xl mx-auto px-4 py-5">
 
-                <div class="ad-wrapper">
 
-                    <div class="w-full">
+<!-- TOP AD -->
 
-                        <div class="ad-label">
-                            Advertisement
-                        </div>
+<div class="mb-5">
 
-                        <div class="ad-box">
+<div class="ad-label">
+ADVERTISEMENT
+</div>
 
-                            <!-- =================================
-                                 PASTE YOUR AD NETWORK CODE HERE
-                            ================================== -->
+<div id="ad-slot-top" class="ad-slot">
 
-                            <!-- AD_CODE_HERE -->
+<!--
+PASTE YOUR REAL AD NETWORK CODE HERE
+-->
 
-                        </div>
+</div>
 
-                    </div>
+</div>
 
-                </div>
 
 
-                <!-- =====================================
-                     VIDEO PLAYER
-                ===================================== -->
+<!-- TITLE -->
 
-                <div
-                    id="playerContainer"
-                    class="w-full rounded-2xl overflow-hidden shadow-2xl bg-black/80 backdrop-blur-2xl border border-white/10 relative glass-card-glow">
+<section class="mb-4">
 
+<h1
+id="movieTitle"
+class="text-xl sm:text-2xl
+font-bold break-words">
 
-                    <video
-                        id="player"
-                        class="w-full aspect-video object-contain bg-black"
-                        playsinline
-                        webkit-playsinline
-                        controls
-                        crossorigin="anonymous"
-                        preload="metadata">
+{{file_name}}
 
-                        Your browser does not support playing this video directly.
+</h1>
 
-                    </video>
 
+<div
+class="text-xs text-gray-500 mt-1">
 
-                    <!-- LOADER -->
+<i class="
+fa-solid fa-circle-play
+text-red-500 mr-1"></i>
 
-                    <div
-                        id="playerLoader">
+HD Streaming Player
 
-                        <div class="text-center">
+</div>
 
-                            <div
-                                class="loader-ring mx-auto">
-                            </div>
+</section>
 
-                            <p
-                                id="loaderText"
-                                class="text-xs text-white/80 mt-3 font-bold">
 
-                                Loading...
 
-                            </p>
+<!-- PLAYER -->
 
-                        </div>
+<section class="player-box">
 
-                    </div>
 
+<video
+id="player"
+playsinline
+controls
+crossorigin="anonymous"
+preload="metadata"
+x-webkit-airplay="allow">
+</video>
 
-                    <!-- ERROR -->
 
-                    <div
-                        id="playerError">
+<!-- LOADER -->
 
-                        <div>
+<div
+id="loader"
+class="loader">
 
-                            <i
-                                class="fa-solid fa-triangle-exclamation text-3xl text-[#FF5722] mb-3">
-                            </i>
+<div class="text-center">
 
-                            <p
-                                class="font-bold text-white">
+<div class="spinner mx-auto"></div>
 
-                                Unable to play this video
+<div
+id="loaderText"
+class="text-sm text-gray-300 mt-3">
 
-                            </p>
+Loading video...
 
-                            <button
-                                onclick="retryPlayer()"
-                                class="mt-4 px-5 py-2 rounded-lg bg-[#E50914] text-white text-sm font-bold">
+</div>
 
-                                Retry
+</div>
 
-                            </button>
+</div>
 
-                        </div>
 
-                    </div>
+<!-- ERROR -->
 
+<div
+id="errorBox"
+class="error-box hidden">
 
-                    <!-- RESUME -->
+<div
+class="text-red-400
+text-3xl mb-2">
 
-                    <div
-                        id="resumeModal"
-                        class="hidden absolute inset-0 bg-black/90 flex items-center justify-center p-3 z-30">
+<i class="
+fa-solid
+fa-triangle-exclamation">
+</i>
 
-                        <div
-                            class="bg-black/95 text-slate-100 rounded-xl py-5 px-4 sm:px-6 max-w-sm sm:max-w-md w-11/12 text-center shadow-2xl border border-[#FF5722]/40 backdrop-blur-xl">
+</div>
 
 
-                            <p
-                                class="text-xs sm:text-sm text-slate-300 mb-4 leading-snug">
+<div class="font-bold text-lg">
+Unable to play video
+</div>
 
-                                You were watching this video at
 
-                                <span
-                                    id="resumeTimeText"
-                                    class="font-bold text-[#FFB800]">
+<div
+id="errorText"
+class="text-gray-400 text-sm mt-1">
 
-                                    00:00:00
+The stream may be temporarily unavailable.
 
-                                </span>.
+</div>
 
-                                Do you want to resume?
 
-                            </p>
+<button
+onclick="retryStream()"
+class="retry">
 
+<i class="
+fa-solid fa-rotate-right mr-1">
+</i>
 
-                            <div
-                                class="flex flex-row gap-2.5 justify-center">
+Retry
 
-                                <button
-                                    onclick="confirmResume()"
-                                    class="bg-[#FF1E27] hover:bg-[#E50914] text-white font-bold py-2 px-4 rounded-lg text-xs sm:text-sm">
+</button>
 
-                                    Resume
+</div>
 
-                                </button>
+</section>
 
 
-                                <button
-                                    onclick="confirmRestart()"
-                                    class="bg-zinc-800 hover:bg-zinc-700 text-slate-200 font-bold py-2 px-4 rounded-lg text-xs sm:text-sm border border-white/10">
 
-                                    Start Over
+<!-- STATUS -->
 
-                                </button>
+<div
+class="flex flex-wrap
+justify-between gap-2
+mt-3 text-xs text-gray-500">
 
-                            </div>
+<div id="playerStatus">
 
-                        </div>
+<i class="
+fa-solid fa-circle-notch mr-1">
+</i>
 
-                    </div>
+Preparing player...
 
-                </div>
+</div>
 
 
-                <!-- =====================================
-                     FILE INFO
-                ===================================== -->
+<div id="streamType">
+Detecting...
+</div>
 
-                <div
-                    class="file-name my-6 p-4 glass-card text-center md:text-left">
+</div>
 
-                    <p
-                        id="myDiv"
-                        class="break-all text-slate-100 text-sm md:text-base font-bold tracking-wide">
-                    </p>
 
-                </div>
 
+<!-- RESUME MODAL -->
 
-                <!-- =====================================
-                     BUTTONS
-                ===================================== -->
+<div
+id="resumeModal"
+class="modal">
 
-                <div
-                    class="downloadBtn grid grid-cols-1 sm:grid-cols-3 gap-3.5 my-6">
+<div class="modal-box glass">
 
+<div class="text-2xl font-bold">
+Continue watching?
+</div>
 
-                    <button
-                        class="player-btn btn-copy"
-                        onclick="copyStreamLink()">
 
-                        <i
-                            class="fa-solid fa-copy text-lg">
-                        </i>
+<p class="text-gray-400 text-sm mt-2">
 
-                        Copy Link
+You have already watched part
+of this video.
 
-                    </button>
+</p>
 
 
-                    <button
-                        class="player-btn btn-vlc"
-                        onclick="vlc_player()">
+<div class="flex gap-3 mt-5">
 
-                        <img
-                            src="https://i.postimg.cc/15TQ4y7B/vlc.png"
-                            class="w-5 h-5 object-contain"
-                            alt="VLC">
+<button
+id="resumeBtn"
+class="
+flex-1 bg-red-600
+hover:bg-red-700
+rounded-lg py-3
+font-semibold">
 
-                        VLC Player
+Resume
 
-                    </button>
+</button>
 
 
-                    <button
-                        class="player-btn btn-mx"
-                        onclick="mx_player()">
+<button
+id="restartBtn"
+class="
+flex-1 bg-gray-800
+hover:bg-gray-700
+rounded-lg py-3
+font-semibold">
 
-                        <img
-                            src="https://i.postimg.cc/sx4Msv4T/mx.png"
-                            class="w-5 h-5 object-contain"
-                            alt="MX">
+Start Over
 
-                        MX Player
+</button>
 
-                    </button>
+</div>
 
+</div>
 
-                    <button
-                        class="player-btn btn-download sm:col-span-3 py-4 text-base font-extrabold"
-                        onclick="bisalDownload()">
+</div>
 
-                        <img
-                            src="https://i.postimg.cc/Zncc9YLq/Pngtree-download-icon-3581467.png"
-                            class="w-6 h-6 object-contain filter brightness-200"
-                            alt="Download">
 
-                        Download Video
 
-                    </button>
+<!-- FILE INFO -->
 
-                </div>
+<section class="glass info mt-5">
 
+<div class="flex gap-3 items-start">
 
-                <!-- =====================================
-                     AD #2 — BELOW BUTTONS
-                ===================================== -->
+<div
+class="
+w-11 h-11 shrink-0
+rounded-xl
+bg-red-600/10
+flex items-center justify-center">
 
-                <div class="ad-wrapper">
+<i class="
+fa-solid fa-film
+text-red-500 text-xl">
+</i>
 
-                    <div class="w-full">
+</div>
 
-                        <div class="ad-label">
-                            Advertisement
-                        </div>
 
-                        <div class="ad-box">
+<div class="min-w-0">
 
-                            <!-- =================================
-                                 PASTE YOUR AD NETWORK CODE HERE
-                            ================================== -->
+<div
+class="
+text-xs text-gray-500
+uppercase tracking-wider">
 
-                            <!-- AD_CODE_HERE_2 -->
+File
 
-                        </div>
+</div>
 
-                    </div>
 
-                </div>
+<div
+id="fileName"
+class="
+font-semibold
+break-words mt-1">
 
+{{file_name}}
 
-            </div>
+</div>
 
+</div>
 
-            <!-- =====================================
-                 INFO
-            ===================================== -->
+</div>
 
-            <div
-                class="abt space-y-8 my-10">
+</section>
 
-                <div
-                    class="about glass-card p-6 md:p-10 text-center">
 
-                    <h1
-                        class="text-2xl md:text-3xl font-black mb-3 uppercase tracking-wide leading-normal">
 
-                        WELCOME TO
+<!-- ACTIONS -->
 
-                        <span class="brand-text-inline">
+<section
+class="
+grid grid-cols-2
+sm:grid-cols-4
+gap-3 mt-5">
 
-                            HD PRO SEARCH BOT
 
-                            <span
-                                style="-webkit-text-fill-color: initial;">
+<!-- COPY -->
 
-                                🔍
+<button
+onclick="copyStreamLink()"
+class="action glass rounded-xl p-4">
 
-                            </span>
+<i
+class="
+fa-solid fa-copy
+text-blue-400 text-xl">
+</i>
 
-                        </span>
+<div class="text-sm font-semibold mt-2">
+Copy Link
+</div>
 
-                    </h1>
+</button>
 
 
-                    <p
-                        class="max-w-xl mx-auto text-slate-300 text-xs md:text-sm leading-relaxed">
 
-                        Enjoy high-speed playback, multi-codec streaming options,
-                        automatic resume and seamless external video player integration.
+<!-- VLC -->
 
-                    </p>
+<button
+onclick="openVLC()"
+class="action glass rounded-xl p-4">
 
-                </div>
+<img
+src="https://i.postimg.cc/15TQ4y7B/vlc.png"
+alt="VLC"
+class="w-8 h-8 mx-auto object-contain">
 
-            </div>
+<div class="text-sm font-semibold mt-2">
+VLC Player
+</div>
 
-        </div>
+</button>
 
 
-        <!-- =====================================
-             FOOTER
-        ===================================== -->
 
-        <footer
-            class="mt-10 border-t border-white/10 pt-6 pb-8 text-center">
+<!-- MX -->
 
-            <div
-                class="copyright text-xs text-slate-400 space-y-3">
+<button
+onclick="openMX()"
+class="action glass rounded-xl p-4">
 
+<img
+src="https://i.postimg.cc/sx4Msv4T/mx.png"
+alt="MX Player"
+class="w-8 h-8 mx-auto object-contain">
 
-                <h5
-                    class="flex items-center justify-center gap-1 flex-wrap font-semibold">
+<div class="text-sm font-semibold mt-2">
+MX Player
+</div>
 
-                    <span>
-                        Copyright © 2025
-                    </span>
+</button>
 
 
-                    <a
-                        href="https://t.me/+sIOgiCYLtBxhNGI1"
-                        class="brand-text-inline">
 
-                        HD PRO SEARCH BOT
+<!-- DOWNLOAD -->
 
-                        <span
-                            style="-webkit-text-fill-color: initial;">
+<button
+onclick="downloadVideo()"
+class="action glass rounded-xl p-4">
 
-                            🔍
+<img
+src="https://i.postimg.cc/Zncc9YLq/Pngtree-download-icon-3581467.png"
+alt="Download"
+class="w-8 h-8 mx-auto object-contain">
 
-                        </span>
+<div class="text-sm font-semibold mt-2">
+Download
+</div>
 
-                    </a>
+</button>
 
 
-                    <span>
-                        . All Rights Reserved.
-                    </span>
+</section>
 
-                </h5>
 
 
-                <div
-                    class="icons flex justify-center py-1">
+<!-- BOTTOM AD -->
 
-                    <a
-                        href="https://t.me/+sIOgiCYLtBxhNGI1"
-                        class="text-[#FF5722] hover:text-[#FFB800] transition inline-flex items-center justify-center p-2 rounded-full bg-white/5 border border-white/10">
+<div class="mt-7">
 
-                        <i
-                            class="fa-brands fa-telegram text-lg">
-                        </i>
+<div class="ad-label">
+ADVERTISEMENT
+</div>
 
-                    </a>
+<div id="ad-slot-bottom" class="ad-slot">
 
-                </div>
+<!-- OPTIONAL SECOND AD -->
 
+</div>
 
-                <h4 class="font-bold">
+</div>
 
-                    This Page Is Made By
 
-                    <a
-                        href="https://t.me/+sIOgiCYLtBxhNGI1"
-                        class="font-extrabold text-[#FF1E27]">
 
-                        RPEDITZ
+<!-- INFO -->
 
-                    </a>
+<section class="glass info mt-5">
 
-                </h4>
+<div class="flex items-center gap-2 mb-3">
 
-            </div>
+<i
+class="
+fa-solid fa-circle-info
+text-yellow-500">
+</i>
 
-        </footer>
+<h2 class="font-bold text-lg">
+Player Information
+</h2>
 
-    </div>
+</div>
 
 
-    <!-- =====================================
-         TOAST
-    ===================================== -->
+<div
+class="
+text-sm text-gray-400
+leading-6">
 
-    <div
-        id="toast"
-        class="glass-card px-5 py-3 text-xs font-bold text-slate-100 border border-[#FF5722]/50 shadow-2xl flex items-center gap-2">
+<p>
+The player automatically selects
+the best playback method supported
+by your browser.
+</p>
 
-        <i
-            class="fa-solid fa-circle-check text-[#FFB800] text-base">
-        </i>
 
-        <span id="toastMsg">
-            Action completed!
-        </span>
+<p class="mt-2">
+HLS streams use native browser HLS
+when available and HLS.js as fallback.
+</p>
 
-    </div>
 
+<p class="mt-2">
+Network and media errors are
+automatically recovered when possible.
+</p>
 
-    <!-- =====================================
-         JAVASCRIPT
-    ===================================== -->
+</div>
 
-    <script>
+</section>
 
 
-        /* =====================================
-           VARIABLES
-        ===================================== */
+</main>
 
-        const fileUrl =
-            "{{file_url}}";
 
-        const fileName =
-            "{{file_name}}";
 
+<footer
+class="
+mt-10 py-6
+text-center
+text-gray-600 text-sm">
 
-        let storageKey;
+<div>
+HD PRO SEARCH BOT
+</div>
 
-        try {
+<div class="mt-1">
 
-            storageKey =
-                "hdpro_progress_" +
-                btoa(
-                    unescape(
-                        encodeURIComponent(fileUrl)
-                    )
-                )
-                .replace(/=/g, "")
-                .substring(0, 150);
+Made by
+<span class="text-gray-400">
+RPEDITZ
+</span>
 
-        } catch (e) {
+</div>
 
-            storageKey =
-                "hdpro_progress_video";
+</footer>
 
-        }
 
 
-        let player = null;
+<!-- TOAST -->
 
-        let hls = null;
+<div id="toast" class="toast"></div>
 
-        let savedTime = 0;
 
-        let resumeShown = false;
 
-        let lastSave = 0;
+<script>
 
-        let retryCount = 0;
+/* =========================================================
+   STREAM DATA
+========================================================= */
 
+const fileUrl =
+"{{file_url}}";
 
-        /* =====================================
-           DOM READY
-        ===================================== */
+const fileName =
+"{{file_name}}";
 
-        window.addEventListener(
-            "DOMContentLoaded",
-            function () {
 
-                const title =
-                    document.getElementById("myDiv");
+/* =========================================================
+   ELEMENTS
+========================================================= */
 
-                if (title) {
+const player =
+document.getElementById("player");
 
-                    title.innerText =
-                        cleanMovieName(fileName);
+const loader =
+document.getElementById("loader");
 
-                }
+const loaderText =
+document.getElementById("loaderText");
 
+const errorBox =
+document.getElementById("errorBox");
 
-                player =
-                    document.getElementById("player");
+const errorText =
+document.getElementById("errorText");
 
+const playerStatus =
+document.getElementById("playerStatus");
 
-                initPlayer();
+const streamType =
+document.getElementById("streamType");
 
-                initResume();
+const resumeModal =
+document.getElementById("resumeModal");
 
-                initPlayerEvents();
 
-            }
+/* =========================================================
+   GLOBALS
+========================================================= */
+
+let hls = null;
+
+let hlsErrors = 0;
+
+let resumeTime = 0;
+
+let lastSavedTime = 0;
+
+let retryTimer = null;
+
+
+/* =========================================================
+   SAFE HASH
+========================================================= */
+
+function hashString(str){
+
+    let hash = 2166136261;
+
+    for(let i=0;i<str.length;i++){
+
+        hash ^= str.charCodeAt(i);
+
+        hash =
+        Math.imul(
+            hash,
+            16777619
         );
 
+    }
 
-        /* =====================================
-           GOOGLE CAST
-        ===================================== */
-
-        window.__onGCastApiAvailable =
-            function (isAvailable) {
-
-                if (
-                    isAvailable &&
-                    window.cast &&
-                    window.cast.framework
-                ) {
-
-                    try {
-
-                        cast.framework
-                            .CastContext
-                            .getInstance()
-                            .setOptions({
-
-                                receiverApplicationId:
-                                    chrome.cast.media
-                                        .DEFAULT_MEDIA_RECEIVER_APP_ID,
-
-                                autoJoinPolicy:
-                                    chrome.cast
-                                        .AutoJoinPolicy
-                                        .ORIGIN_SCOPED
-
-                            });
-
-                    } catch (e) {
-
-                        console.warn(
-                            "Cast unavailable"
-                        );
-
-                    }
-
-                }
-
-            };
+    return (hash>>>0).toString(16);
+}
 
 
-        /* =====================================
-           CLEAN TITLE
-        ===================================== */
-
-        function cleanMovieName(rawName) {
-
-            if (!rawName)
-                return "Movie Stream";
+const storageKey =
+"hdpro_progress_" +
+hashString(fileUrl);
 
 
-            let clean =
-                rawName.replace(
-                    /\.(mkv|mp4|webm|avi|flv|mov|m4v)$/i,
-                    ""
-                );
+/* =========================================================
+   HLS DETECTION
+========================================================= */
+
+function isHLS(){
+
+    if(!fileUrl)
+        return false;
+
+    const clean =
+    fileUrl
+    .toLowerCase()
+    .split("?")[0]
+    .split("#")[0];
 
 
-            const pattern =
-                /[\._\-\s\(\[]+(480p|576p|720p|1080p|1440p|2160p|4k|2k|360p|hd|sd|bluray|blu-ray|web-dl|web|webrip|hdr|hdr10|hdrip|hevc|x264|x265|h264|h265|10bit|dvdrip|cam|camrip|nf|amzn|esub|sub|hindi|english|telugu|tamil|kannada|malayalam|bengali|marathi|gujarati|punjabi|dubbed|dual|multi|aac|ac3|dts|2\.0|5\.1|7\.1).*$/i;
+    return (
+        clean.endsWith(".m3u8") ||
+        /[?&]hls(?:=|&|$)/i.test(fileUrl)
+    );
+
+}
 
 
-            clean =
-                clean.split(pattern)[0];
+/* =========================================================
+   UI
+========================================================= */
+
+function showLoader(text){
+
+    loaderText.textContent =
+    text || "Loading video...";
+
+    loader.classList.remove("hide");
+
+}
 
 
-            clean =
-                clean
-                .replace(/[._]+/g, " ")
-                .replace(/\s+/g, " ")
-                .trim();
+function hideLoader(){
+
+    loader.classList.add("hide");
+
+}
 
 
-            return clean || rawName;
+function showError(text){
+
+    hideLoader();
+
+    errorText.textContent =
+    text ||
+    "The stream may be temporarily unavailable.";
+
+    errorBox.classList.remove("hidden");
+
+    playerStatus.innerHTML =
+    '<i class="fa-solid fa-circle-xmark text-red-500 mr-1"></i> Playback error';
+
+}
+
+
+function hideError(){
+
+    errorBox.classList.add("hidden");
+
+}
+
+
+function status(text){
+
+    playerStatus.innerHTML =
+    '<i class="fa-solid fa-circle-play text-green-500 mr-1"></i> '+
+    text;
+
+}
+
+
+function toast(text){
+
+    const el =
+    document.getElementById("toast");
+
+    el.textContent=text;
+
+    el.classList.add("show");
+
+    clearTimeout(window.toastTimer);
+
+    window.toastTimer =
+    setTimeout(
+        ()=>{
+            el.classList.remove("show");
+        },
+        2500
+    );
+
+}
+
+
+/* =========================================================
+   STREAM TYPE
+========================================================= */
+
+function updateStreamType(){
+
+    if(isHLS()){
+
+        streamType.innerHTML =
+        '<i class="fa-solid fa-layer-group mr-1"></i> HLS';
+
+    }
+    else{
+
+        streamType.innerHTML =
+        '<i class="fa-solid fa-file-video mr-1"></i> Direct Video';
+
+    }
+
+}
+
+
+/* =========================================================
+   DESTROY HLS
+========================================================= */
+
+function destroyHLS(){
+
+    if(hls){
+
+        try{
+
+            hls.destroy();
+
+        }
+        catch(e){
+
+            console.warn(e);
+
+        }
+
+        hls=null;
+
+    }
+
+}
+
+
+/* =========================================================
+   START PLAYER
+========================================================= */
+
+function startPlayer(){
+
+    hideError();
+
+    showLoader(
+        "Connecting to video..."
+    );
+
+    updateStreamType();
+
+
+    if(!fileUrl){
+
+        showError(
+            "Video URL is missing."
+        );
+
+        return;
+
+    }
+
+
+    /*
+    ============================================
+    HLS STREAM
+    ============================================
+    */
+
+    if(isHLS()){
+
+
+        /*
+        Native HLS first.
+        Safari/iPhone/iPad.
+        */
+
+        if(
+            player.canPlayType(
+                "application/vnd.apple.mpegurl"
+            )
+        ){
+
+            destroyHLS();
+
+            player.src=fileUrl;
+
+            player.load();
+
+            status(
+                "Native HLS playback"
+            );
+
+            return;
 
         }
 
 
-        /* =====================================
-           INIT PLAYER
-        ===================================== */
+        /*
+        HLS.JS
+        */
 
-        function initPlayer() {
+        if(
+            window.Hls &&
+            Hls.isSupported()
+        ){
 
-            if (!player || !fileUrl)
-                return;
+            destroyHLS();
+
+            hlsErrors=0;
+
+            hls =
+            new Hls({
+
+                enableWorker:true,
+
+                lowLatencyMode:false,
+
+                startLevel:-1,
+
+                capLevelToPlayerSize:true,
+
+                maxBufferLength:30,
+
+                maxMaxBufferLength:60,
+
+                maxBufferSize:
+                60*1024*1024,
+
+                backBufferLength:30,
+
+                maxBufferHole:.5,
+
+                maxFragLookUpTolerance:.2,
+
+                fragLoadingMaxRetry:5,
+
+                fragLoadingRetryDelay:1000,
+
+                fragLoadingMaxRetryTimeout:10000,
+
+                manifestLoadingMaxRetry:5,
+
+                manifestLoadingRetryDelay:1000,
+
+                manifestLoadingMaxRetryTimeout:10000,
+
+                levelLoadingMaxRetry:5,
+
+                levelLoadingRetryDelay:1000,
+
+                levelLoadingMaxRetryTimeout:10000,
+
+                appendErrorMaxRetry:3
+
+            });
 
 
-            showLoader(
-                "Connecting..."
+            hls.loadSource(fileUrl);
+
+            hls.attachMedia(player);
+
+
+            hls.on(
+                Hls.Events.MANIFEST_PARSED,
+                function(){
+
+                    status(
+                        "Stream connected"
+                    );
+
+                    hideError();
+
+                }
             );
 
 
-            const isHLS =
-                /\.m3u8(\?|#|$)/i.test(fileUrl) ||
-                /[?&](hls|m3u8)=/i.test(fileUrl) ||
-                fileUrl.toLowerCase().includes("m3u8");
+            hls.on(
+                Hls.Events.ERROR,
+                function(event,data){
 
+                    if(!data.fatal){
 
-            /* ============================
-               NATIVE HLS
-            ============================ */
-
-            if (
-                isHLS &&
-                player.canPlayType(
-                    "application/vnd.apple.mpegurl"
-                )
-            ) {
-
-                player.src =
-                    fileUrl;
-
-                player.addEventListener(
-                    "loadedmetadata",
-                    function () {
-
-                        hideLoader();
-
-                    },
-                    { once: true }
-                );
-
-                return;
-            }
-
-
-            /* ============================
-               HLS.JS
-            ============================ */
-
-            if (
-                isHLS &&
-                typeof Hls !== "undefined" &&
-                Hls.isSupported()
-            ) {
-
-
-                hls =
-                    new Hls({
-
-                        enableWorker: true,
-
-                        lowLatencyMode: false,
-
-                        startLevel: -1,
-
-                        autoStartLoad: true,
-
-
-                        /* BUFFER */
-
-                        maxBufferLength: 35,
-
-                        maxMaxBufferLength: 60,
-
-                        maxBufferSize:
-                            60 * 1000 * 1000,
-
-                        backBufferLength: 30,
-
-
-                        /* NETWORK */
-
-                        maxLoadingDelay: 4,
-
-                        maxFragLookUpTolerance:
-                            0.2,
-
-
-                        /* RETRIES */
-
-                        manifestLoadingMaxRetry: 4,
-
-                        levelLoadingMaxRetry: 4,
-
-                        fragLoadingMaxRetry: 5,
-
-                        manifestLoadingRetryDelay:
-                            1000,
-
-                        levelLoadingRetryDelay:
-                            1000,
-
-                        fragLoadingRetryDelay:
-                            1000,
-
-
-                        /* PERFORMANCE */
-
-                        capLevelToPlayerSize: true,
-
-                        abrBandWidthFactor:
-                            0.85,
-
-                        abrBandWidthUpFactor:
-                            0.70
-
-                    });
-
-
-                hls.loadSource(
-                    fileUrl
-                );
-
-
-                hls.attachMedia(
-                    player
-                );
-
-
-                hls.on(
-                    Hls.Events.MANIFEST_PARSED,
-                    function () {
-
-                        retryCount = 0;
-
-                        hideLoader();
+                        return;
 
                     }
-                );
 
 
-                hls.on(
-                    Hls.Events.FRAG_BUFFERED,
-                    function () {
-
-                        hideLoader();
-
-                    }
-                );
+                    hlsErrors++;
 
 
-                /* ============================
-                   HLS ERROR RECOVERY
-                ============================ */
+                    /*
+                    NETWORK ERROR
+                    */
 
-                hls.on(
-                    Hls.Events.ERROR,
-                    function (event, data) {
+                    if(
+                        data.type ===
+                        Hls.ErrorTypes.NETWORK_ERROR
+                    ){
 
-                        if (!data.fatal)
-                            return;
+                        if(
+                            hlsErrors <= 3
+                        ){
 
+                            showLoader(
+                                "Reconnecting..."
+                            );
 
-                        console.warn(
-                            "HLS Error:",
-                            data.type,
-                            data.details
-                        );
+                            toast(
+                                "Network issue — reconnecting"
+                            );
 
-
-                        switch (data.type) {
-
-
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-
-                                retryCount++;
-
-                                showLoader(
-                                    "Reconnecting..."
-                                );
+                            clearTimeout(
+                                retryTimer
+                            );
 
 
-                                if (
-                                    retryCount <= 5
-                                ) {
+                            retryTimer =
+                            setTimeout(
+                                ()=>{
+                                    if(hls){
+                                        hls.startLoad(-1);
+                                    }
+                                },
+                                1000
+                            );
 
-                                    setTimeout(
-                                        function () {
+                        }
+                        else{
 
-                                            if (hls) {
-
-                                                hls.startLoad();
-
-                                            }
-
-                                        },
-                                        Math.min(
-                                            retryCount * 1000,
-                                            5000
-                                        )
-                                    );
-
-                                } else {
-
-                                    hideLoader();
-
-                                    showPlayerError();
-
-                                }
-
-                                break;
-
-
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-
-                                retryCount++;
-
-                                showLoader(
-                                    "Recovering video..."
-                                );
-
-
-                                if (
-                                    retryCount <= 3
-                                ) {
-
-                                    hls.recoverMediaError();
-
-                                } else {
-
-                                    hideLoader();
-
-                                    showPlayerError();
-
-                                }
-
-                                break;
-
-
-                            default:
-
-                                hideLoader();
-
-                                showPlayerError();
-
-                                break;
+                            showError(
+                                "Network connection failed."
+                            );
 
                         }
 
                     }
-                );
 
 
-            }
+                    /*
+                    MEDIA ERROR
+                    */
+
+                    else if(
+                        data.type ===
+                        Hls.ErrorTypes.MEDIA_ERROR
+                    ){
+
+                        if(
+                            hlsErrors <= 3
+                        ){
+
+                            toast(
+                                "Recovering video..."
+                            );
+
+                            hls.recoverMediaError();
+
+                        }
+                        else{
+
+                            showError(
+                                "Browser could not decode this stream."
+                            );
+
+                        }
+
+                    }
 
 
-            /* ============================
-               NORMAL MP4 / WEBM
-            ============================ */
+                    /*
+                    OTHER FATAL ERROR
+                    */
 
-            else {
+                    else{
 
-                player.src =
-                    fileUrl;
-
-
-                player.addEventListener(
-                    "loadedmetadata",
-                    function () {
-
-                        hideLoader();
-
-                    },
-                    { once: true }
-                );
-
-            }
-
-        }
-
-
-        /* =====================================
-           PLAYER EVENTS
-        ===================================== */
-
-        function initPlayerEvents() {
-
-            if (!player)
-                return;
-
-
-            player.addEventListener(
-                "waiting",
-                function () {
-
-                    showLoader(
-                        "Buffering..."
-                    );
-
-                }
-            );
-
-
-            player.addEventListener(
-                "stalled",
-                function () {
-
-                    showLoader(
-                        "Reconnecting..."
-                    );
-
-                }
-            );
-
-
-            player.addEventListener(
-                "playing",
-                function () {
-
-                    hideLoader();
-
-                    retryCount = 0;
-
-                }
-            );
-
-
-            player.addEventListener(
-                "canplay",
-                function () {
-
-                    hideLoader();
-
-                }
-            );
-
-
-            player.addEventListener(
-                "error",
-                function () {
-
-                    hideLoader();
-
-                }
-            );
-
-
-            /* ============================
-               SAVE PROGRESS
-            ============================ */
-
-            player.addEventListener(
-                "timeupdate",
-                function () {
-
-                    const now =
-                        Date.now();
-
-
-                    if (
-                        player.currentTime > 5 &&
-                        now - lastSave > 3000
-                    ) {
-
-                        saveProgress();
-
-                        lastSave =
-                            now;
+                        showError(
+                            "This stream is not supported."
+                        );
 
                     }
 
@@ -1652,705 +1447,689 @@
             );
 
 
-            window.addEventListener(
-                "beforeunload",
-                saveProgress
+            status(
+                "HLS player starting"
             );
 
-
-            document.addEventListener(
-                "visibilitychange",
-                function () {
-
-                    if (
-                        document.hidden
-                    ) {
-
-                        saveProgress();
-
-                    }
-
-                }
-            );
-
-
-            player.addEventListener(
-                "ended",
-                function () {
-
-                    localStorage.removeItem(
-                        storageKey
-                    );
-
-                }
-            );
+            return;
 
         }
 
 
-        /* =====================================
-           RESUME SYSTEM
-        ===================================== */
-
-        function initResume() {
-
-            if (!player)
-                return;
-
-
-            player.addEventListener(
-                "loadedmetadata",
-                function () {
-
-                    const stored =
-                        localStorage.getItem(
-                            storageKey
-                        );
-
-
-                    if (!stored)
-                        return;
-
-
-                    const time =
-                        parseFloat(stored);
-
-
-                    if (
-                        !isFinite(time) ||
-                        time < 10 ||
-                        !player.duration ||
-                        time >=
-                        player.duration - 15
-                    ) {
-
-                        return;
-
-                    }
-
-
-                    savedTime =
-                        time;
-
-
-                    const modal =
-                        document.getElementById(
-                            "resumeModal"
-                        );
-
-
-                    const timeText =
-                        document.getElementById(
-                            "resumeTimeText"
-                        );
-
-
-                    if (timeText) {
-
-                        timeText.innerText =
-                            formatTime(time);
-
-                    }
-
-
-                    if (
-                        modal &&
-                        !resumeShown
-                    ) {
-
-                        resumeShown =
-                            true;
-
-                        modal.classList.remove(
-                            "hidden"
-                        );
-
-                    }
-
-                },
-                { once: true }
-            );
-
-        }
-
-
-        /* =====================================
-           RESUME
-        ===================================== */
-
-        function confirmResume() {
-
-            const modal =
-                document.getElementById(
-                    "resumeModal"
-                );
-
-
-            if (modal) {
-
-                modal.classList.add(
-                    "hidden"
-                );
-
-            }
-
-
-            if (
-                player &&
-                isFinite(savedTime)
-            ) {
-
-                try {
-
-                    player.currentTime =
-                        savedTime;
-
-                } catch (e) {}
-
-
-                tryPlay();
-
-            }
-
-        }
-
-
-        /* =====================================
-           RESTART
-        ===================================== */
-
-        function confirmRestart() {
-
-            const modal =
-                document.getElementById(
-                    "resumeModal"
-                );
-
-
-            if (modal) {
-
-                modal.classList.add(
-                    "hidden"
-                );
-
-            }
-
-
-            localStorage.removeItem(
-                storageKey
-            );
-
-
-            savedTime = 0;
-
-
-            try {
-
-                player.currentTime =
-                    0;
-
-            } catch (e) {}
-
-
-            tryPlay();
-
-        }
-
-
-        /* =====================================
-           TRY PLAY
-        ===================================== */
-
-        function tryPlay() {
-
-            if (!player)
-                return;
-
-
-            const promise =
-                player.play();
-
-
-            if (
-                promise &&
-                promise.catch
-            ) {
-
-                promise.catch(
-                    function () {}
-                );
-
-            }
-
-        }
-
-
-        /* =====================================
-           SAVE PROGRESS
-        ===================================== */
-
-        function saveProgress() {
-
-            if (
-                !player ||
-                !isFinite(
-                    player.currentTime
-                ) ||
-                player.currentTime <= 5
-            ) {
-
-                return;
-
-            }
-
-
-            try {
-
-                localStorage.setItem(
-                    storageKey,
-                    player.currentTime.toString()
-                );
-
-            } catch (e) {}
-
-        }
-
-
-        /* =====================================
-           FORMAT TIME
-        ===================================== */
-
-        function formatTime(seconds) {
-
-            seconds =
-                Math.floor(
-                    seconds || 0
-                );
-
-
-            const hours =
-                Math.floor(
-                    seconds / 3600
-                );
-
-
-            const minutes =
-                Math.floor(
-                    (seconds % 3600) / 60
-                );
-
-
-            const secs =
-                seconds % 60;
-
-
-            const pad =
-                function (n) {
-
-                    return String(n)
-                        .padStart(2, "0");
-
-                };
-
-
-            return (
-                pad(hours) +
-                ":" +
-                pad(minutes) +
-                ":" +
-                pad(secs)
-            );
-
-        }
-
-
-        /* =====================================
-           LOADER
-        ===================================== */
-
-        function showLoader(
-            text = "Loading..."
-        ) {
-
-            const loader =
-                document.getElementById(
-                    "playerLoader"
-                );
-
-
-            const textElement =
-                document.getElementById(
-                    "loaderText"
-                );
-
-
-            if (textElement) {
-
-                textElement.innerText =
-                    text;
-
-            }
-
-
-            if (loader) {
-
-                loader.classList.add(
-                    "show"
-                );
-
-            }
-
-        }
-
-
-        function hideLoader() {
-
-            const loader =
-                document.getElementById(
-                    "playerLoader"
-                );
-
-
-            if (loader) {
-
-                loader.classList.remove(
-                    "show"
-                );
-
-            }
-
-        }
-
-
-        /* =====================================
-           PLAYER ERROR
-        ===================================== */
-
-        function showPlayerError() {
-
-            const error =
-                document.getElementById(
-                    "playerError"
-                );
-
-
-            if (error) {
-
-                error.classList.add(
-                    "show"
-                );
-
-            }
-
-        }
-
-
-        function retryPlayer() {
-
-            const error =
-                document.getElementById(
-                    "playerError"
-                );
-
-
-            if (error) {
-
-                error.classList.remove(
-                    "show"
-                );
-
-            }
-
-
-            retryCount = 0;
-
-
-            showLoader(
-                "Retrying..."
-            );
-
-
-            if (hls) {
-
-                try {
-
-                    hls.stopLoad();
-
-                    hls.startLoad();
-
-                } catch (e) {}
-
-            } else {
-
-                try {
-
-                    player.load();
-
-                    player.play()
-                        .catch(
-                            function () {}
-                        );
-
-                } catch (e) {}
-
-            }
-
-        }
-
-
-        /* =====================================
-           TOAST
-        ===================================== */
-
-        function showToast(
-            message
-        ) {
-
-            const toast =
-                document.getElementById(
-                    "toast"
-                );
-
-
-            const toastMsg =
-                document.getElementById(
-                    "toastMsg"
-                );
-
-
-            if (
-                !toast ||
-                !toastMsg
-            ) return;
-
-
-            toastMsg.innerText =
-                message;
-
-
-            toast.classList.add(
-                "show"
-            );
-
-
-            clearTimeout(
-                window.toastTimer
-            );
-
-
-            window.toastTimer =
-                setTimeout(
-                    function () {
-
-                        toast.classList.remove(
-                            "show"
-                        );
-
-                    },
-                    3000
-                );
-
-        }
-
-
-        /* =====================================
-           COPY LINK
-        ===================================== */
-
-        async function copyStreamLink() {
-
-            try {
-
-                await navigator.clipboard
-                    .writeText(fileUrl);
-
-
-                showToast(
-                    "Stream Link Copied!"
-                );
-
-
-            } catch (e) {
-
-                const input =
-                    document.createElement(
-                        "textarea"
-                    );
-
-
-                input.value =
-                    fileUrl;
-
-
-                input.style.position =
-                    "fixed";
-
-
-                input.style.opacity =
-                    "0";
-
-
-                document.body.appendChild(
-                    input
-                );
-
-
-                input.select();
-
-
-                try {
-
-                    document.execCommand(
-                        "copy"
-                    );
-
-
-                    showToast(
-                        "Stream Link Copied!"
-                    );
-
-                } catch (err) {
-
-                    showToast(
-                        "Failed to Copy Link!"
-                    );
-
-                }
-
-
-                input.remove();
-
-            }
-
-        }
-
-
-        /* =====================================
-           VLC
-        ===================================== */
-
-        function vlc_player() {
-
-            if (!fileUrl)
-                return;
-
-
-            window.location.href =
-                "intent:" +
-                encodeURI(fileUrl) +
-                "#Intent;" +
-                "package=org.videolan.vlc;" +
-                "type=video/*;" +
-                "end;";
-
-        }
-
-
-        /* =====================================
-           MX PLAYER
-        ===================================== */
-
-        function mx_player() {
-
-            if (!fileUrl)
-                return;
-
-
-            window.location.href =
-                "intent:" +
-                encodeURI(fileUrl) +
-                "#Intent;" +
-                "package=com.mxtech.videoplayer.ad;" +
-                "type=video/*;" +
-                "end;";
-
-        }
-
-
-        /* =====================================
-           DOWNLOAD
-        ===================================== */
-
-        function bisalDownload() {
-
-            if (!fileUrl) {
-
-                showToast(
-                    "Invalid Video Link!"
-                );
-
-                return;
-
-            }
-
-
-            const a =
-                document.createElement(
-                    "a"
-                );
-
-
-            a.href =
-                fileUrl;
-
-
-            a.download =
-                fileName ||
-                "video.mp4";
-
-
-            a.target =
-                "_blank";
-
-
-            a.rel =
-                "noopener";
-
-
-            document.body.appendChild(
-                a
-            );
-
-
-            a.click();
-
-
-            a.remove();
-
-
-            showToast(
-                "Download Started!"
-            );
-
-        }
-
-
-        /* =====================================
-           CLEANUP
-        ===================================== */
-
-        window.addEventListener(
-            "pagehide",
-            function () {
-
-                saveProgress();
-
-
-                if (hls) {
-
-                    try {
-
-                        hls.destroy();
-
-                    } catch (e) {}
-
-                }
-
-            }
+        /*
+        Browser has no native HLS
+        and HLS.js is unavailable.
+        */
+
+        showError(
+            "This browser does not support HLS playback."
         );
 
-    </script>
+        return;
+
+    }
+
+
+    /*
+    ============================================
+    NORMAL VIDEO
+    ============================================
+    */
+
+    destroyHLS();
+
+    player.src=fileUrl;
+
+    player.load();
+
+    status(
+        "Direct video playback"
+    );
+
+}
+
+
+/* =========================================================
+   PLAYER EVENTS
+========================================================= */
+
+player.addEventListener(
+    "loadstart",
+    ()=>{
+        showLoader("Loading video...");
+    }
+);
+
+
+player.addEventListener(
+    "loadedmetadata",
+    ()=>{
+        hideLoader();
+
+        status(
+            "Video loaded"
+        );
+
+        checkResume();
+    }
+);
+
+
+player.addEventListener(
+    "canplay",
+    ()=>{
+        hideLoader();
+
+        status(
+            "Ready to play"
+        );
+    }
+);
+
+
+player.addEventListener(
+    "playing",
+    ()=>{
+        hideLoader();
+
+        hideError();
+
+        status(
+            "Playing"
+        );
+    }
+);
+
+
+player.addEventListener(
+    "waiting",
+    ()=>{
+
+        showLoader(
+            "Buffering..."
+        );
+
+    }
+);
+
+
+player.addEventListener(
+    "stalled",
+    ()=>{
+
+        showLoader(
+            "Connection interrupted..."
+        );
+
+
+        /*
+        Ask HLS.js to continue loading.
+        */
+
+        if(hls){
+
+            try{
+
+                hls.startLoad(-1);
+
+            }
+            catch(e){
+
+                console.warn(e);
+
+            }
+
+        }
+
+    }
+);
+
+
+player.addEventListener(
+    "pause",
+    ()=>{
+        saveProgress();
+    }
+);
+
+
+player.addEventListener(
+    "ended",
+    ()=>{
+
+        hideLoader();
+
+        clearProgress();
+
+        status(
+            "Playback finished"
+        );
+
+    }
+);
+
+
+player.addEventListener(
+    "error",
+    ()=>{
+
+        if(
+            player.error
+        ){
+
+            showError(
+                "Video playback failed."
+            );
+
+        }
+
+    }
+);
+
+
+/* =========================================================
+   RESUME SYSTEM
+========================================================= */
+
+function saveProgress(){
+
+    if(
+        !player ||
+        !Number.isFinite(player.currentTime) ||
+        player.currentTime < 10
+    ){
+
+        return;
+
+    }
+
+
+    if(
+        Math.abs(
+            player.currentTime -
+            lastSavedTime
+        ) < 2
+    ){
+
+        return;
+
+    }
+
+
+    try{
+
+        localStorage.setItem(
+            storageKey,
+            JSON.stringify({
+
+                time:
+                player.currentTime,
+
+                duration:
+                Number.isFinite(
+                    player.duration
+                )
+                ?
+                player.duration
+                :
+                0,
+
+                saved:
+                Date.now()
+
+            })
+        );
+
+
+        lastSavedTime =
+        player.currentTime;
+
+    }
+    catch(e){
+
+        console.warn(
+            "Progress save failed",
+            e
+        );
+
+    }
+
+}
+
+
+function clearProgress(){
+
+    try{
+
+        localStorage.removeItem(
+            storageKey
+        );
+
+    }
+    catch(e){}
+
+}
+
+
+function checkResume(){
+
+    if(
+        !Number.isFinite(
+            player.duration
+        )
+    ){
+
+        return;
+
+    }
+
+
+    let data=null;
+
+
+    try{
+
+        data =
+        JSON.parse(
+            localStorage.getItem(
+                storageKey
+            )
+        );
+
+    }
+    catch(e){
+
+        return;
+
+    }
+
+
+    if(
+        !data ||
+        !Number.isFinite(data.time)
+    ){
+
+        return;
+
+    }
+
+
+    const time =
+    Number(data.time);
+
+    const duration =
+    Number(player.duration);
+
+
+    /*
+    Don't show resume if:
+    - less than 10 sec watched
+    - almost finished
+    */
+
+    if(
+        time < 10 ||
+        time >= duration - 10
+    ){
+
+        return;
+
+    }
+
+
+    resumeTime=time;
+
+    resumeModal.classList.add("show");
+
+}
+
+
+document
+.getElementById("resumeBtn")
+.addEventListener(
+    "click",
+    ()=>{
+
+        player.currentTime =
+        resumeTime;
+
+        resumeModal.classList.remove(
+            "show"
+        );
+
+        player.play()
+        .catch(
+            ()=>{}
+        );
+
+    }
+);
+
+
+document
+.getElementById("restartBtn")
+.addEventListener(
+    "click",
+    ()=>{
+
+        clearProgress();
+
+        player.currentTime=0;
+
+        resumeModal.classList.remove(
+            "show"
+        );
+
+    }
+);
+
+
+/*
+Save every 3 seconds.
+*/
+
+setInterval(
+    saveProgress,
+    3000
+);
+
+
+window.addEventListener(
+    "pagehide",
+    saveProgress
+);
+
+
+document.addEventListener(
+    "visibilitychange",
+    ()=>{
+        if(document.hidden){
+            saveProgress();
+        }
+    }
+);
+
+
+/* =========================================================
+   COPY LINK
+========================================================= */
+
+async function copyStreamLink(){
+
+    try{
+
+        if(
+            navigator.clipboard &&
+            window.isSecureContext
+        ){
+
+            await navigator.clipboard.writeText(
+                fileUrl
+            );
+
+        }
+        else{
+
+            const textarea =
+            document.createElement("textarea");
+
+            textarea.value=fileUrl;
+
+            textarea.style.position="fixed";
+            textarea.style.opacity="0";
+
+            document.body.appendChild(
+                textarea
+            );
+
+            textarea.focus();
+            textarea.select();
+
+            document.execCommand(
+                "copy"
+            );
+
+            textarea.remove();
+
+        }
+
+
+        toast(
+            "Stream link copied"
+        );
+
+    }
+    catch(e){
+
+        toast(
+            "Unable to copy link"
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   VLC
+========================================================= */
+
+function openVLC(){
+
+    if(!fileUrl){
+
+        return;
+
+    }
+
+    const intent =
+    "vlc://" +
+    fileUrl;
+
+    window.location.href=intent;
+
+}
+
+
+/* =========================================================
+   MX PLAYER
+========================================================= */
+
+function openMX(){
+
+    if(!fileUrl){
+
+        return;
+
+    }
+
+
+    const url =
+    "intent:" +
+    fileUrl +
+    "#Intent;" +
+    "package=com.mxtech.videoplayer.ad;" +
+    "type=video/*;" +
+    "end";
+
+
+    window.location.href=url;
+
+}
+
+
+/* =========================================================
+   DOWNLOAD
+========================================================= */
+
+function downloadVideo(){
+
+    if(!fileUrl){
+
+        return;
+
+    }
+
+
+    /*
+    Browser cannot directly convert
+    an HLS .m3u8 stream into MP4.
+
+    So HLS is opened directly.
+    */
+
+    if(isHLS()){
+
+        window.open(
+            fileUrl,
+            "_blank",
+            "noopener,noreferrer"
+        );
+
+        toast(
+            "HLS stream opened"
+        );
+
+        return;
+
+    }
+
+
+    const a =
+    document.createElement("a");
+
+    a.href=fileUrl;
+
+    a.download=fileName ||
+    "video";
+
+    a.target="_blank";
+
+    a.rel="noopener";
+
+    document.body.appendChild(a);
+
+    a.click();
+
+    a.remove();
+
+}
+
+
+/* =========================================================
+   RETRY
+========================================================= */
+
+function retryStream(){
+
+    hideError();
+
+    showLoader(
+        "Retrying stream..."
+    );
+
+    hlsErrors=0;
+
+
+    const currentTime =
+    Number.isFinite(
+        player.currentTime
+    )
+    ?
+    player.currentTime
+    :
+    0;
+
+
+    startPlayer();
+
+
+    /*
+    Restore position after
+    metadata becomes available.
+    */
+
+    const restore =
+    function(){
+
+        if(
+            currentTime > 5 &&
+            Number.isFinite(
+                player.duration
+            )
+        ){
+
+            try{
+
+                player.currentTime =
+                Math.min(
+                    currentTime,
+                    player.duration - 2
+                );
+
+            }
+            catch(e){}
+
+        }
+
+        player.removeEventListener(
+            "loadedmetadata",
+            restore
+        );
+
+    };
+
+
+    player.addEventListener(
+        "loadedmetadata",
+        restore
+    );
+
+}
+
+
+/* =========================================================
+   MEDIA SESSION
+========================================================= */
+
+if(
+    "mediaSession" in navigator
+){
+
+    try{
+
+        navigator.mediaSession.metadata =
+        new MediaMetadata({
+
+            title:
+            fileName,
+
+            artist:
+            "HD PRO SEARCH BOT",
+
+            album:
+            "HD Streaming"
+
+        });
+
+    }
+    catch(e){}
+
+}
+
+
+/* =========================================================
+   START
+========================================================= */
+
+document.addEventListener(
+    "DOMContentLoaded",
+    ()=>{
+        startPlayer();
+    }
+);
+
+</script>
 
 </body>
-
 </html>
