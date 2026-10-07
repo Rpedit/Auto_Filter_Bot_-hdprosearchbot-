@@ -1,22 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>HD PRO SEARCH BOT</title>
+<meta
+name="viewport"
+content="width=device-width, initial-scale=1.0">
 
-<meta name="theme-color" content="#080808">
+<title>HD PRO SEARCH BOT | {{file_name}}</title>
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta
+name="theme-color"
+content="#080808">
 
-<link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link
+rel="preconnect"
+href="https://fonts.googleapis.com">
 
-<link rel="stylesheet"
+<link
+rel="preconnect"
+href="https://fonts.gstatic.com"
+crossorigin>
+
+<link
+href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@400;500;600;700&display=swap"
+rel="stylesheet">
+
+<link
+rel="stylesheet"
 href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 
-<script src="https://cdn.tailwindcss.com"></script>
+<!-- GOOGLE CAST -->
+
+<script
+src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1">
+</script>
+
+<!-- HLS.JS -->
+
+<script
+src="https://cdn.jsdelivr.net/npm/hls.js@latest">
+</script>
+
+<script
+src="https://cdn.tailwindcss.com">
+</script>
+
 
 <style>
 
@@ -25,99 +56,419 @@ href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
 }
 
 body{
+
     margin:0;
+
     min-height:100vh;
+
     color:#fff;
+
     font-family:"Josefin Sans",sans-serif;
 
     background:
-    radial-gradient(circle at top,rgba(150,0,0,.25),transparent 38%),
-    linear-gradient(180deg,#070707,#0c0c0c);
+    radial-gradient(
+        circle at top,
+        rgba(150,0,0,.23),
+        transparent 38%
+    ),
+    linear-gradient(
+        180deg,
+        #070707,
+        #0d0d0d
+    );
 }
+
 
 .glass{
-    background:rgba(20,20,20,.78);
-    border:1px solid rgba(255,255,255,.08);
-    box-shadow:0 15px 45px rgba(0,0,0,.4);
-    backdrop-filter:blur(15px);
-    -webkit-backdrop-filter:blur(15px);
+
+    background:
+    rgba(20,20,20,.78);
+
+    border:
+    1px solid
+    rgba(255,255,255,.08);
+
+    box-shadow:
+    0 15px 45px
+    rgba(0,0,0,.4);
+
+    backdrop-filter:
+    blur(15px);
+
+    -webkit-backdrop-filter:
+    blur(15px);
 }
 
+
 .logo{
-    background:linear-gradient(90deg,#ff2020,#ff7a00,#ffd000);
+
+    background:
+    linear-gradient(
+        90deg,
+        #ff2020,
+        #ff7a00,
+        #ffd000
+    );
+
     -webkit-background-clip:text;
+
     background-clip:text;
+
     color:transparent;
 }
 
+
 .header{
+
     position:sticky;
+
     top:0;
+
     z-index:100;
-    background:rgba(5,5,5,.9);
-    border-bottom:1px solid rgba(255,255,255,.07);
-    backdrop-filter:blur(15px);
+
+    background:
+    rgba(5,5,5,.9);
+
+    border-bottom:
+    1px solid
+    rgba(255,255,255,.07);
+
+    backdrop-filter:
+    blur(15px);
 }
 
-.search-box{
+
+.player-box{
+
+    position:relative;
+
+    overflow:hidden;
+
+    background:#000;
+
+    border-radius:18px;
+
+    border:
+    1px solid
+    rgba(255,255,255,.08);
+
+    box-shadow:
+    0 20px 55px
+    rgba(0,0,0,.5);
+}
+
+
+video{
+
+    display:block;
+
     width:100%;
-    background:#111;
-    border:1px solid rgba(255,255,255,.1);
-    outline:none;
-    color:white;
+
+    height:auto;
+
+    min-height:220px;
+
+    background:#000;
+}
+
+
+.loader{
+
+    position:absolute;
+
+    inset:0;
+
+    z-index:5;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    background:
+    rgba(0,0,0,.58);
+
+    pointer-events:none;
+
     transition:.2s;
 }
 
-.search-box:focus{
-    border-color:#ef2020;
-    box-shadow:0 0 0 3px rgba(239,32,32,.1);
+
+.loader.hide{
+
+    opacity:0;
+
+    visibility:hidden;
 }
 
-.search-btn{
-    background:linear-gradient(90deg,#e50914,#ff3b00);
-    transition:.2s;
+
+.spinner{
+
+    width:42px;
+
+    height:42px;
+
+    border-radius:50%;
+
+    border:
+    4px solid
+    rgba(255,255,255,.15);
+
+    border-top-color:#ff3030;
+
+    animation:
+    spin .8s linear infinite;
 }
 
-.search-btn:hover{
-    transform:translateY(-1px);
-    filter:brightness(1.1);
+
+@keyframes spin{
+
+    to{
+        transform:rotate(360deg);
+    }
+
 }
+
+
+.error-box{
+
+    position:absolute;
+
+    z-index:10;
+
+    left:50%;
+
+    top:50%;
+
+    transform:
+    translate(-50%,-50%);
+
+    width:min(90%,420px);
+
+    padding:20px;
+
+    text-align:center;
+
+    border-radius:16px;
+
+    background:
+    rgba(15,15,15,.96);
+
+    border:
+    1px solid
+    rgba(255,60,60,.3);
+}
+
+
+.error-box.hidden{
+
+    display:none;
+}
+
+
+.retry{
+
+    border:0;
+
+    margin-top:12px;
+
+    padding:9px 18px;
+
+    border-radius:9px;
+
+    color:#fff;
+
+    background:#e50914;
+
+    font-weight:700;
+
+    cursor:pointer;
+}
+
+
+.retry:hover{
+
+    background:#ff1825;
+}
+
 
 .ad-label{
+
     color:#666;
+
     font-size:9px;
+
     letter-spacing:1.5px;
+
     text-align:center;
+
     margin-bottom:5px;
 }
 
+
 .ad-slot{
+
     width:100%;
+
     overflow:hidden;
+
     border-radius:10px;
 }
 
-.result-card{
-    transition:.2s;
+
+.info{
+
+    border-radius:16px;
+
+    padding:18px;
 }
 
-.result-card:hover{
-    transform:translateY(-2px);
-    border-color:rgba(255,50,50,.3);
+
+.action{
+
+    transition:
+    transform .18s ease,
+    border-color .18s ease;
 }
+
+
+.action:hover{
+
+    transform:
+    translateY(-2px);
+
+    border-color:
+    rgba(255,50,50,.3);
+}
+
+
+.action:active{
+
+    transform:
+    scale(.97);
+}
+
+
+.modal{
+
+    position:fixed;
+
+    inset:0;
+
+    z-index:999;
+
+    display:none;
+
+    align-items:center;
+
+    justify-content:center;
+
+    padding:20px;
+
+    background:
+    rgba(0,0,0,.8);
+
+    backdrop-filter:
+    blur(8px);
+}
+
+
+.modal.show{
+
+    display:flex;
+}
+
+
+.modal-box{
+
+    width:min(100%,420px);
+
+    padding:24px;
+
+    border-radius:20px;
+}
+
+
+.toast{
+
+    position:fixed;
+
+    z-index:1000;
+
+    left:50%;
+
+    bottom:25px;
+
+    transform:
+    translate(-50%,20px);
+
+    opacity:0;
+
+    pointer-events:none;
+
+    transition:.25s;
+
+    padding:11px 17px;
+
+    border-radius:10px;
+
+    background:
+    rgba(25,25,25,.96);
+
+    border:
+    1px solid
+    rgba(255,255,255,.1);
+}
+
+
+.toast.show{
+
+    opacity:1;
+
+    transform:
+    translate(-50%,0);
+}
+
 
 footer{
-    border-top:1px solid rgba(255,255,255,.07);
+
+    border-top:
+    1px solid
+    rgba(255,255,255,.07);
+}
+
+
+@media(max-width:640px){
+
+    .player-box{
+        border-radius:12px;
+    }
+
+    video{
+        min-height:200px;
+    }
+
+    .info{
+        padding:14px;
+    }
+
 }
 
 </style>
+
 </head>
+
 
 <body>
 
+
+<!-- HEADER -->
+
 <header class="header">
 
-<div class="max-w-6xl mx-auto px-4 py-4
+<div
+class="max-w-6xl mx-auto px-4 py-4
 flex items-center justify-between gap-4">
 
 <div>
@@ -127,19 +478,22 @@ HD PRO SEARCH BOT
 </div>
 
 <div class="text-xs text-gray-500 mt-1">
-Search • Stream • Download
+Fast • Secure • HD Streaming
 </div>
 
 </div>
+
 
 <a
 href="https://t.me/+sIOgiCYLtBxhNGI1"
 target="_blank"
 rel="noopener noreferrer"
-class="bg-red-600 hover:bg-red-700 px-4 py-2
-rounded-lg text-sm font-semibold">
+class="bg-red-600 hover:bg-red-700
+px-4 py-2 rounded-lg
+text-sm font-semibold">
 
 <i class="fa-brands fa-telegram mr-1"></i>
+
 Telegram
 
 </a>
@@ -149,11 +503,14 @@ Telegram
 </header>
 
 
-<main class="max-w-4xl mx-auto px-4 py-8">
+
+<main
+class="max-w-6xl mx-auto px-4 py-5">
+
 
 <!-- TOP AD -->
 
-<div class="mb-6">
+<div class="mb-5">
 
 <div class="ad-label">
 ADVERTISEMENT
@@ -170,104 +527,349 @@ PASTE YOUR REAL AD NETWORK CODE HERE
 </div>
 
 
-<!-- SEARCH -->
 
-<section class="glass rounded-2xl p-5 sm:p-7">
+<!-- TITLE -->
 
-<div class="text-center mb-6">
+<section class="mb-4">
 
-<div class="w-16 h-16 mx-auto rounded-2xl
-bg-red-600/10 flex items-center justify-center">
+<h1
+id="movieTitle"
+class="text-xl sm:text-2xl
+font-bold break-words">
 
-<i class="fa-solid fa-magnifying-glass
-text-red-500 text-2xl"></i>
+{{file_name}}
 
-</div>
-
-<h1 class="text-2xl sm:text-3xl font-bold mt-4">
-Search Movies
 </h1>
 
-<p class="text-gray-500 text-sm mt-2">
-Enter movie or series name to search
-</p>
+
+<div
+class="text-xs text-gray-500 mt-1">
+
+<i class="
+fa-solid fa-circle-play
+text-red-500 mr-1"></i>
+
+HD Streaming Player
+
+</div>
+
+</section>
+
+
+
+<!-- PLAYER -->
+
+<section class="player-box">
+
+
+<video
+id="player"
+playsinline
+controls
+crossorigin="anonymous"
+preload="metadata"
+x-webkit-airplay="allow">
+</video>
+
+
+<!-- LOADER -->
+
+<div
+id="loader"
+class="loader">
+
+<div class="text-center">
+
+<div class="spinner mx-auto"></div>
+
+<div
+id="loaderText"
+class="text-sm text-gray-300 mt-3">
+
+Loading video...
+
+</div>
+
+</div>
 
 </div>
 
 
-<form id="searchForm">
+<!-- ERROR -->
 
-<div class="flex flex-col sm:flex-row gap-3">
+<div
+id="errorBox"
+class="error-box hidden">
 
-<input
-id="searchInput"
-class="search-box rounded-xl px-5 py-4"
-type="search"
-autocomplete="off"
-placeholder="Search movie name..."
-required
->
+<div
+class="text-red-400
+text-3xl mb-2">
+
+<i class="
+fa-solid
+fa-triangle-exclamation">
+</i>
+
+</div>
+
+
+<div class="font-bold text-lg">
+Unable to play video
+</div>
+
+
+<div
+id="errorText"
+class="text-gray-400 text-sm mt-1">
+
+The stream may be temporarily unavailable.
+
+</div>
+
 
 <button
-type="submit"
-class="search-btn rounded-xl px-7 py-4
-font-bold">
+onclick="retryStream()"
+class="retry">
 
-<i class="fa-solid fa-search mr-2"></i>
-Search
+<i class="
+fa-solid fa-rotate-right mr-1">
+</i>
+
+Retry
 
 </button>
 
 </div>
 
-</form>
-
 </section>
 
 
-<!-- RESULTS -->
 
-<section id="resultsSection" class="mt-6 hidden">
-
-<div class="flex items-center justify-between mb-3">
-
-<h2 class="font-bold text-lg">
-Search Results
-</h2>
-
-<span id="resultCount"
-class="text-xs text-gray-500">
-</span>
-
-</div>
-
-<div id="results"
-class="space-y-3">
-</div>
-
-</section>
-
-
-<!-- MESSAGE -->
+<!-- STATUS -->
 
 <div
-id="message"
-class="hidden glass rounded-xl p-5 text-center mt-6">
+class="flex flex-wrap
+justify-between gap-2
+mt-3 text-xs text-gray-500">
 
-<i id="messageIcon"
-class="fa-solid fa-info-circle
-text-red-500 text-2xl"></i>
+<div id="playerStatus">
 
-<div id="messageText"
-class="text-gray-400 mt-2 text-sm">
+<i class="
+fa-solid fa-circle-notch mr-1">
+</i>
+
+Preparing player...
+
+</div>
+
+
+<div id="streamType">
+Detecting...
 </div>
 
 </div>
+
+
+
+<!-- RESUME MODAL -->
+
+<div
+id="resumeModal"
+class="modal">
+
+<div class="modal-box glass">
+
+<div class="text-2xl font-bold">
+Continue watching?
+</div>
+
+
+<p class="text-gray-400 text-sm mt-2">
+
+You have already watched part
+of this video.
+
+</p>
+
+
+<div class="flex gap-3 mt-5">
+
+<button
+id="resumeBtn"
+class="
+flex-1 bg-red-600
+hover:bg-red-700
+rounded-lg py-3
+font-semibold">
+
+Resume
+
+</button>
+
+
+<button
+id="restartBtn"
+class="
+flex-1 bg-gray-800
+hover:bg-gray-700
+rounded-lg py-3
+font-semibold">
+
+Start Over
+
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+
+
+<!-- FILE INFO -->
+
+<section class="glass info mt-5">
+
+<div class="flex gap-3 items-start">
+
+<div
+class="
+w-11 h-11 shrink-0
+rounded-xl
+bg-red-600/10
+flex items-center justify-center">
+
+<i class="
+fa-solid fa-film
+text-red-500 text-xl">
+</i>
+
+</div>
+
+
+<div class="min-w-0">
+
+<div
+class="
+text-xs text-gray-500
+uppercase tracking-wider">
+
+File
+
+</div>
+
+
+<div
+id="fileName"
+class="
+font-semibold
+break-words mt-1">
+
+{{file_name}}
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+
+
+<!-- ACTIONS -->
+
+<section
+class="
+grid grid-cols-2
+sm:grid-cols-4
+gap-3 mt-5">
+
+
+<!-- COPY -->
+
+<button
+onclick="copyStreamLink()"
+class="action glass rounded-xl p-4">
+
+<i
+class="
+fa-solid fa-copy
+text-blue-400 text-xl">
+</i>
+
+<div class="text-sm font-semibold mt-2">
+Copy Link
+</div>
+
+</button>
+
+
+
+<!-- VLC -->
+
+<button
+onclick="openVLC()"
+class="action glass rounded-xl p-4">
+
+<img
+src="https://i.postimg.cc/15TQ4y7B/vlc.png"
+alt="VLC"
+class="w-8 h-8 mx-auto object-contain">
+
+<div class="text-sm font-semibold mt-2">
+VLC Player
+</div>
+
+</button>
+
+
+
+<!-- MX -->
+
+<button
+onclick="openMX()"
+class="action glass rounded-xl p-4">
+
+<img
+src="https://i.postimg.cc/sx4Msv4T/mx.png"
+alt="MX Player"
+class="w-8 h-8 mx-auto object-contain">
+
+<div class="text-sm font-semibold mt-2">
+MX Player
+</div>
+
+</button>
+
+
+
+<!-- DOWNLOAD -->
+
+<button
+onclick="downloadVideo()"
+class="action glass rounded-xl p-4">
+
+<img
+src="https://i.postimg.cc/Zncc9YLq/Pngtree-download-icon-3581467.png"
+alt="Download"
+class="w-8 h-8 mx-auto object-contain">
+
+<div class="text-sm font-semibold mt-2">
+Download
+</div>
+
+</button>
+
+
+</section>
+
 
 
 <!-- BOTTOM AD -->
 
-<div class="mt-8">
+<div class="mt-7">
 
 <div class="ad-label">
 ADVERTISEMENT
@@ -281,294 +883,1251 @@ ADVERTISEMENT
 
 </div>
 
+
+
+<!-- INFO -->
+
+<section class="glass info mt-5">
+
+<div class="flex items-center gap-2 mb-3">
+
+<i
+class="
+fa-solid fa-circle-info
+text-yellow-500">
+</i>
+
+<h2 class="font-bold text-lg">
+Player Information
+</h2>
+
+</div>
+
+
+<div
+class="
+text-sm text-gray-400
+leading-6">
+
+<p>
+The player automatically selects
+the best playback method supported
+by your browser.
+</p>
+
+
+<p class="mt-2">
+HLS streams use native browser HLS
+when available and HLS.js as fallback.
+</p>
+
+
+<p class="mt-2">
+Network and media errors are
+automatically recovered when possible.
+</p>
+
+</div>
+
+</section>
+
+
 </main>
 
 
-<footer class="mt-10 py-6 text-center text-gray-600 text-sm">
+
+<footer
+class="
+mt-10 py-6
+text-center
+text-gray-600 text-sm">
 
 <div>
 HD PRO SEARCH BOT
 </div>
 
 <div class="mt-1">
-Made by <span class="text-gray-400">RPEDITZ</span>
+
+Made by
+<span class="text-gray-400">
+RPEDITZ
+</span>
+
 </div>
 
 </footer>
 
 
+
+<!-- TOAST -->
+
+<div id="toast" class="toast"></div>
+
+
+
 <script>
 
-/*
-=========================================================
-SEARCH CONFIG
-=========================================================
+/* =========================================================
+   STREAM DATA
+========================================================= */
 
-IMPORTANT:
+const fileUrl =
+"{{file_url}}";
 
-Agar tumhare Telegram bot/backend me already search API hai,
-sirf SEARCH_API ko apne existing endpoint se replace karo.
-
-Example:
-
-const SEARCH_API = "/search?q=";
-
-Ya:
-
-const SEARCH_API = "/api/search?q=";
-
-=========================================================
-*/
-
-const SEARCH_API = "/search?q=";
+const fileName =
+"{{file_name}}";
 
 
-/* ELEMENTS */
+/* =========================================================
+   ELEMENTS
+========================================================= */
 
-const searchForm =
-document.getElementById("searchForm");
+const player =
+document.getElementById("player");
 
-const searchInput =
-document.getElementById("searchInput");
+const loader =
+document.getElementById("loader");
 
-const resultsSection =
-document.getElementById("resultsSection");
+const loaderText =
+document.getElementById("loaderText");
 
-const results =
-document.getElementById("results");
+const errorBox =
+document.getElementById("errorBox");
 
-const resultCount =
-document.getElementById("resultCount");
+const errorText =
+document.getElementById("errorText");
 
-const message =
-document.getElementById("message");
+const playerStatus =
+document.getElementById("playerStatus");
 
-const messageText =
-document.getElementById("messageText");
+const streamType =
+document.getElementById("streamType");
 
-
-/* MESSAGE */
-
-function showMessage(text){
-
-    message.classList.remove("hidden");
-
-    messageText.textContent=text;
-
-}
-
-function hideMessage(){
-
-    message.classList.add("hidden");
-
-}
+const resumeModal =
+document.getElementById("resumeModal");
 
 
-/* SEARCH */
+/* =========================================================
+   GLOBALS
+========================================================= */
 
-searchForm.addEventListener("submit",async function(e){
+let hls = null;
 
-    e.preventDefault();
+let hlsErrors = 0;
 
-    const query =
-    searchInput.value.trim();
+let resumeTime = 0;
 
-    if(!query){
+let lastSavedTime = 0;
 
-        showMessage("Please enter a movie name.");
+let retryTimer = null;
 
-        return;
-    }
 
-    results.innerHTML="";
+/* =========================================================
+   SAFE HASH
+========================================================= */
 
-    resultsSection.classList.add("hidden");
+function hashString(str){
 
-    showMessage("Searching...");
+    let hash = 2166136261;
 
-    try{
+    for(let i=0;i<str.length;i++){
 
-        const response =
-        await fetch(
-            SEARCH_API+
-            encodeURIComponent(query),
-            {
-                method:"GET",
-                headers:{
-                    "Accept":"application/json"
-                },
-                cache:"no-store"
-            }
+        hash ^= str.charCodeAt(i);
+
+        hash =
+        Math.imul(
+            hash,
+            16777619
         );
 
-        if(!response.ok){
+    }
 
-            throw new Error(
-                "Search request failed"
+    return (hash>>>0).toString(16);
+}
+
+
+const storageKey =
+"hdpro_progress_" +
+hashString(fileUrl);
+
+
+/* =========================================================
+   HLS DETECTION
+========================================================= */
+
+function isHLS(){
+
+    if(!fileUrl)
+        return false;
+
+    const clean =
+    fileUrl
+    .toLowerCase()
+    .split("?")[0]
+    .split("#")[0];
+
+
+    return (
+        clean.endsWith(".m3u8") ||
+        /[?&]hls(?:=|&|$)/i.test(fileUrl)
+    );
+
+}
+
+
+/* =========================================================
+   UI
+========================================================= */
+
+function showLoader(text){
+
+    loaderText.textContent =
+    text || "Loading video...";
+
+    loader.classList.remove("hide");
+
+}
+
+
+function hideLoader(){
+
+    loader.classList.add("hide");
+
+}
+
+
+function showError(text){
+
+    hideLoader();
+
+    errorText.textContent =
+    text ||
+    "The stream may be temporarily unavailable.";
+
+    errorBox.classList.remove("hidden");
+
+    playerStatus.innerHTML =
+    '<i class="fa-solid fa-circle-xmark text-red-500 mr-1"></i> Playback error';
+
+}
+
+
+function hideError(){
+
+    errorBox.classList.add("hidden");
+
+}
+
+
+function status(text){
+
+    playerStatus.innerHTML =
+    '<i class="fa-solid fa-circle-play text-green-500 mr-1"></i> '+
+    text;
+
+}
+
+
+function toast(text){
+
+    const el =
+    document.getElementById("toast");
+
+    el.textContent=text;
+
+    el.classList.add("show");
+
+    clearTimeout(window.toastTimer);
+
+    window.toastTimer =
+    setTimeout(
+        ()=>{
+            el.classList.remove("show");
+        },
+        2500
+    );
+
+}
+
+
+/* =========================================================
+   STREAM TYPE
+========================================================= */
+
+function updateStreamType(){
+
+    if(isHLS()){
+
+        streamType.innerHTML =
+        '<i class="fa-solid fa-layer-group mr-1"></i> HLS';
+
+    }
+    else{
+
+        streamType.innerHTML =
+        '<i class="fa-solid fa-file-video mr-1"></i> Direct Video';
+
+    }
+
+}
+
+
+/* =========================================================
+   DESTROY HLS
+========================================================= */
+
+function destroyHLS(){
+
+    if(hls){
+
+        try{
+
+            hls.destroy();
+
+        }
+        catch(e){
+
+            console.warn(e);
+
+        }
+
+        hls=null;
+
+    }
+
+}
+
+
+/* =========================================================
+   START PLAYER
+========================================================= */
+
+function startPlayer(){
+
+    hideError();
+
+    showLoader(
+        "Connecting to video..."
+    );
+
+    updateStreamType();
+
+
+    if(!fileUrl){
+
+        showError(
+            "Video URL is missing."
+        );
+
+        return;
+
+    }
+
+
+    /*
+    ============================================
+    HLS STREAM
+    ============================================
+    */
+
+    if(isHLS()){
+
+
+        /*
+        Native HLS first.
+        Safari/iPhone/iPad.
+        */
+
+        if(
+            player.canPlayType(
+                "application/vnd.apple.mpegurl"
+            )
+        ){
+
+            destroyHLS();
+
+            player.src=fileUrl;
+
+            player.load();
+
+            status(
+                "Native HLS playback"
+            );
+
+            return;
+
+        }
+
+
+        /*
+        HLS.JS
+        */
+
+        if(
+            window.Hls &&
+            Hls.isSupported()
+        ){
+
+            destroyHLS();
+
+            hlsErrors=0;
+
+            hls =
+            new Hls({
+
+                enableWorker:true,
+
+                lowLatencyMode:false,
+
+                startLevel:-1,
+
+                capLevelToPlayerSize:true,
+
+                maxBufferLength:30,
+
+                maxMaxBufferLength:60,
+
+                maxBufferSize:
+                60*1024*1024,
+
+                backBufferLength:30,
+
+                maxBufferHole:.5,
+
+                maxFragLookUpTolerance:.2,
+
+                fragLoadingMaxRetry:5,
+
+                fragLoadingRetryDelay:1000,
+
+                fragLoadingMaxRetryTimeout:10000,
+
+                manifestLoadingMaxRetry:5,
+
+                manifestLoadingRetryDelay:1000,
+
+                manifestLoadingMaxRetryTimeout:10000,
+
+                levelLoadingMaxRetry:5,
+
+                levelLoadingRetryDelay:1000,
+
+                levelLoadingMaxRetryTimeout:10000,
+
+                appendErrorMaxRetry:3
+
+            });
+
+
+            hls.loadSource(fileUrl);
+
+            hls.attachMedia(player);
+
+
+            hls.on(
+                Hls.Events.MANIFEST_PARSED,
+                function(){
+
+                    status(
+                        "Stream connected"
+                    );
+
+                    hideError();
+
+                }
+            );
+
+
+            hls.on(
+                Hls.Events.ERROR,
+                function(event,data){
+
+                    if(!data.fatal){
+
+                        return;
+
+                    }
+
+
+                    hlsErrors++;
+
+
+                    /*
+                    NETWORK ERROR
+                    */
+
+                    if(
+                        data.type ===
+                        Hls.ErrorTypes.NETWORK_ERROR
+                    ){
+
+                        if(
+                            hlsErrors <= 3
+                        ){
+
+                            showLoader(
+                                "Reconnecting..."
+                            );
+
+                            toast(
+                                "Network issue — reconnecting"
+                            );
+
+                            clearTimeout(
+                                retryTimer
+                            );
+
+
+                            retryTimer =
+                            setTimeout(
+                                ()=>{
+                                    if(hls){
+                                        hls.startLoad(-1);
+                                    }
+                                },
+                                1000
+                            );
+
+                        }
+                        else{
+
+                            showError(
+                                "Network connection failed."
+                            );
+
+                        }
+
+                    }
+
+
+                    /*
+                    MEDIA ERROR
+                    */
+
+                    else if(
+                        data.type ===
+                        Hls.ErrorTypes.MEDIA_ERROR
+                    ){
+
+                        if(
+                            hlsErrors <= 3
+                        ){
+
+                            toast(
+                                "Recovering video..."
+                            );
+
+                            hls.recoverMediaError();
+
+                        }
+                        else{
+
+                            showError(
+                                "Browser could not decode this stream."
+                            );
+
+                        }
+
+                    }
+
+
+                    /*
+                    OTHER FATAL ERROR
+                    */
+
+                    else{
+
+                        showError(
+                            "This stream is not supported."
+                        );
+
+                    }
+
+                }
+            );
+
+
+            status(
+                "HLS player starting"
+            );
+
+            return;
+
+        }
+
+
+        /*
+        Browser has no native HLS
+        and HLS.js is unavailable.
+        */
+
+        showError(
+            "This browser does not support HLS playback."
+        );
+
+        return;
+
+    }
+
+
+    /*
+    ============================================
+    NORMAL VIDEO
+    ============================================
+    */
+
+    destroyHLS();
+
+    player.src=fileUrl;
+
+    player.load();
+
+    status(
+        "Direct video playback"
+    );
+
+}
+
+
+/* =========================================================
+   PLAYER EVENTS
+========================================================= */
+
+player.addEventListener(
+    "loadstart",
+    ()=>{
+        showLoader("Loading video...");
+    }
+);
+
+
+player.addEventListener(
+    "loadedmetadata",
+    ()=>{
+        hideLoader();
+
+        status(
+            "Video loaded"
+        );
+
+        checkResume();
+    }
+);
+
+
+player.addEventListener(
+    "canplay",
+    ()=>{
+        hideLoader();
+
+        status(
+            "Ready to play"
+        );
+    }
+);
+
+
+player.addEventListener(
+    "playing",
+    ()=>{
+        hideLoader();
+
+        hideError();
+
+        status(
+            "Playing"
+        );
+    }
+);
+
+
+player.addEventListener(
+    "waiting",
+    ()=>{
+
+        showLoader(
+            "Buffering..."
+        );
+
+    }
+);
+
+
+player.addEventListener(
+    "stalled",
+    ()=>{
+
+        showLoader(
+            "Connection interrupted..."
+        );
+
+
+        /*
+        Ask HLS.js to continue loading.
+        */
+
+        if(hls){
+
+            try{
+
+                hls.startLoad(-1);
+
+            }
+            catch(e){
+
+                console.warn(e);
+
+            }
+
+        }
+
+    }
+);
+
+
+player.addEventListener(
+    "pause",
+    ()=>{
+        saveProgress();
+    }
+);
+
+
+player.addEventListener(
+    "ended",
+    ()=>{
+
+        hideLoader();
+
+        clearProgress();
+
+        status(
+            "Playback finished"
+        );
+
+    }
+);
+
+
+player.addEventListener(
+    "error",
+    ()=>{
+
+        if(
+            player.error
+        ){
+
+            showError(
+                "Video playback failed."
             );
 
         }
 
-        const data =
-        await response.json();
+    }
+);
 
-        hideMessage();
 
-        renderResults(data);
+/* =========================================================
+   RESUME SYSTEM
+========================================================= */
+
+function saveProgress(){
+
+    if(
+        !player ||
+        !Number.isFinite(player.currentTime) ||
+        player.currentTime < 10
+    ){
+
+        return;
 
     }
-    catch(error){
 
-        console.error(error);
 
-        showMessage(
-            "Search service is currently unavailable."
+    if(
+        Math.abs(
+            player.currentTime -
+            lastSavedTime
+        ) < 2
+    ){
+
+        return;
+
+    }
+
+
+    try{
+
+        localStorage.setItem(
+            storageKey,
+            JSON.stringify({
+
+                time:
+                player.currentTime,
+
+                duration:
+                Number.isFinite(
+                    player.duration
+                )
+                ?
+                player.duration
+                :
+                0,
+
+                saved:
+                Date.now()
+
+            })
+        );
+
+
+        lastSavedTime =
+        player.currentTime;
+
+    }
+    catch(e){
+
+        console.warn(
+            "Progress save failed",
+            e
         );
 
     }
 
-});
+}
 
 
-/* RESULTS */
+function clearProgress(){
 
-function renderResults(data){
+    try{
 
-    let items=[];
-
-    /*
-    Supports:
-
-    [
-        {...},
-        {...}
-    ]
-
-    OR
-
-    {
-        results:[...]
-    }
-    */
-
-    if(Array.isArray(data)){
-
-        items=data;
+        localStorage.removeItem(
+            storageKey
+        );
 
     }
-    else if(
-        data &&
-        Array.isArray(data.results)
+    catch(e){}
+
+}
+
+
+function checkResume(){
+
+    if(
+        !Number.isFinite(
+            player.duration
+        )
     ){
 
-        items=data.results;
+        return;
 
     }
 
 
-    if(!items.length){
+    let data=null;
 
-        showMessage(
-            "No results found."
+
+    try{
+
+        data =
+        JSON.parse(
+            localStorage.getItem(
+                storageKey
+            )
+        );
+
+    }
+    catch(e){
+
+        return;
+
+    }
+
+
+    if(
+        !data ||
+        !Number.isFinite(data.time)
+    ){
+
+        return;
+
+    }
+
+
+    const time =
+    Number(data.time);
+
+    const duration =
+    Number(player.duration);
+
+
+    /*
+    Don't show resume if:
+    - less than 10 sec watched
+    - almost finished
+    */
+
+    if(
+        time < 10 ||
+        time >= duration - 10
+    ){
+
+        return;
+
+    }
+
+
+    resumeTime=time;
+
+    resumeModal.classList.add("show");
+
+}
+
+
+document
+.getElementById("resumeBtn")
+.addEventListener(
+    "click",
+    ()=>{
+
+        player.currentTime =
+        resumeTime;
+
+        resumeModal.classList.remove(
+            "show"
+        );
+
+        player.play()
+        .catch(
+            ()=>{}
+        );
+
+    }
+);
+
+
+document
+.getElementById("restartBtn")
+.addEventListener(
+    "click",
+    ()=>{
+
+        clearProgress();
+
+        player.currentTime=0;
+
+        resumeModal.classList.remove(
+            "show"
+        );
+
+    }
+);
+
+
+/*
+Save every 3 seconds.
+*/
+
+setInterval(
+    saveProgress,
+    3000
+);
+
+
+window.addEventListener(
+    "pagehide",
+    saveProgress
+);
+
+
+document.addEventListener(
+    "visibilitychange",
+    ()=>{
+        if(document.hidden){
+            saveProgress();
+        }
+    }
+);
+
+
+/* =========================================================
+   COPY LINK
+========================================================= */
+
+async function copyStreamLink(){
+
+    try{
+
+        if(
+            navigator.clipboard &&
+            window.isSecureContext
+        ){
+
+            await navigator.clipboard.writeText(
+                fileUrl
+            );
+
+        }
+        else{
+
+            const textarea =
+            document.createElement("textarea");
+
+            textarea.value=fileUrl;
+
+            textarea.style.position="fixed";
+            textarea.style.opacity="0";
+
+            document.body.appendChild(
+                textarea
+            );
+
+            textarea.focus();
+            textarea.select();
+
+            document.execCommand(
+                "copy"
+            );
+
+            textarea.remove();
+
+        }
+
+
+        toast(
+            "Stream link copied"
+        );
+
+    }
+    catch(e){
+
+        toast(
+            "Unable to copy link"
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   VLC
+========================================================= */
+
+function openVLC(){
+
+    if(!fileUrl){
+
+        return;
+
+    }
+
+    const intent =
+    "vlc://" +
+    fileUrl;
+
+    window.location.href=intent;
+
+}
+
+
+/* =========================================================
+   MX PLAYER
+========================================================= */
+
+function openMX(){
+
+    if(!fileUrl){
+
+        return;
+
+    }
+
+
+    const url =
+    "intent:" +
+    fileUrl +
+    "#Intent;" +
+    "package=com.mxtech.videoplayer.ad;" +
+    "type=video/*;" +
+    "end";
+
+
+    window.location.href=url;
+
+}
+
+
+/* =========================================================
+   DOWNLOAD
+========================================================= */
+
+function downloadVideo(){
+
+    if(!fileUrl){
+
+        return;
+
+    }
+
+
+    /*
+    Browser cannot directly convert
+    an HLS .m3u8 stream into MP4.
+
+    So HLS is opened directly.
+    */
+
+    if(isHLS()){
+
+        window.open(
+            fileUrl,
+            "_blank",
+            "noopener,noreferrer"
+        );
+
+        toast(
+            "HLS stream opened"
         );
 
         return;
+
     }
 
 
-    results.innerHTML="";
+    const a =
+    document.createElement("a");
 
-    resultCount.textContent=
-    items.length+" results";
+    a.href=fileUrl;
 
+    a.download=fileName ||
+    "video";
 
-    items.forEach((item,index)=>{
+    a.target="_blank";
 
-        const name =
-        item.name ||
-        item.title ||
-        item.file_name ||
-        "Movie";
+    a.rel="noopener";
 
+    document.body.appendChild(a);
 
-        const url =
-        item.url ||
-        item.link ||
-        item.file_url ||
-        "#";
+    a.click();
 
-
-        const card =
-        document.createElement("a");
-
-
-        card.href=url;
-
-        card.className=
-        "result-card glass rounded-xl p-4 flex gap-4 items-center";
-
-
-        card.innerHTML=`
-
-        <div class="
-        w-12 h-12 shrink-0 rounded-xl
-        bg-red-600/10
-        flex items-center justify-center">
-
-            <i class="
-            fa-solid fa-film
-            text-red-500 text-xl"></i>
-
-        </div>
-
-        <div class="min-w-0 flex-1">
-
-            <div class="
-            font-semibold
-            break-words">
-
-                ${escapeHTML(name)}
-
-            </div>
-
-            <div class="
-            text-xs text-gray-500 mt-1">
-
-                Click to watch
-
-            </div>
-
-        </div>
-
-        <i class="
-        fa-solid fa-chevron-right
-        text-gray-600"></i>
-
-        `;
-
-
-        results.appendChild(card);
-
-    });
-
-
-    resultsSection.classList.remove("hidden");
+    a.remove();
 
 }
 
 
-/* SAFE HTML */
+/* =========================================================
+   RETRY
+========================================================= */
 
-function escapeHTML(value){
+function retryStream(){
 
-    return String(value)
-    .replace(/&/g,"&amp;")
-    .replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;")
-    .replace(/"/g,"&quot;")
-    .replace(/'/g,"&#039;");
+    hideError();
+
+    showLoader(
+        "Retrying stream..."
+    );
+
+    hlsErrors=0;
+
+
+    const currentTime =
+    Number.isFinite(
+        player.currentTime
+    )
+    ?
+    player.currentTime
+    :
+    0;
+
+
+    startPlayer();
+
+
+    /*
+    Restore position after
+    metadata becomes available.
+    */
+
+    const restore =
+    function(){
+
+        if(
+            currentTime > 5 &&
+            Number.isFinite(
+                player.duration
+            )
+        ){
+
+            try{
+
+                player.currentTime =
+                Math.min(
+                    currentTime,
+                    player.duration - 2
+                );
+
+            }
+            catch(e){}
+
+        }
+
+        player.removeEventListener(
+            "loadedmetadata",
+            restore
+        );
+
+    };
+
+
+    player.addEventListener(
+        "loadedmetadata",
+        restore
+    );
 
 }
+
+
+/* =========================================================
+   MEDIA SESSION
+========================================================= */
+
+if(
+    "mediaSession" in navigator
+){
+
+    try{
+
+        navigator.mediaSession.metadata =
+        new MediaMetadata({
+
+            title:
+            fileName,
+
+            artist:
+            "HD PRO SEARCH BOT",
+
+            album:
+            "HD Streaming"
+
+        });
+
+    }
+    catch(e){}
+
+}
+
+
+/* =========================================================
+   START
+========================================================= */
+
+document.addEventListener(
+    "DOMContentLoaded",
+    ()=>{
+        startPlayer();
+    }
+);
 
 </script>
 
