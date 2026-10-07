@@ -1,39 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>HD PRO SEARCH BOT | {{file_name}}</title>
+    <title>HD PRO STREAM & DOWNLOAD | {{file_name}}</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,500;0,700;0,800;1,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
-    <!-- Google Cast Official Engine -->
-    <script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
-    
-    <!-- HLS.js Multi-Codec Engine -->
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    
-    <!-- Plyr Modern Video Player UI -->
+    <!-- Plyr Player CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
-    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.polyfilled.min.js"></script>
 
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.polyfilled.min.js"></script>
 
     <style>
         :root {
-            --brand-red: #E50914;
-            --brand-red-bright: #FF1E27;
-            --brand-orange: #FF5722;
-            --brand-gold: #FFB800;
             --plyr-color-main: #FF1E27;
+            --plyr-video-background: #000000;
+            --plyr-range-fill-background: #FF5722;
         }
 
         body {
-            background: radial-gradient(circle at 10% 10%, #2b0507 0%, #120305 45%, #080204 90%);
+            background: radial-gradient(circle at 15% 15%, #2b0507 0%, #120305 45%, #080204 95%);
             color: #f8fafc;
             font-family: 'Josefin Sans', sans-serif;
             overflow-x: hidden;
@@ -43,421 +35,319 @@
 
         .glass-card {
             background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.12);
-            border-top: 1px solid rgba(255, 255, 255, 0.22);
-            border-left: 1px solid rgba(255, 255, 255, 0.18);
+            border-top: 1px solid rgba(255, 255, 255, 0.25);
             border-radius: 20px;
-            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.65), inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
-            transform: translateZ(0);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65), inset 0 1px 1px rgba(255, 255, 255, 0.15);
         }
 
-        .glass-card-glow {
-            will-change: transform;
-            transform: translateZ(0);
-            box-shadow: 0 0 35px rgba(229, 9, 20, 0.18), 0 12px 40px rgba(0, 0, 0, 0.7);
+        .glass-glow {
+            box-shadow: 0 0 35px rgba(229, 9, 20, 0.22), 0 12px 40px rgba(0, 0, 0, 0.7);
         }
 
         .player-btn {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 10px;
             width: 100%;
-            padding: 12px 14px;
-            border-radius: 12px;
+            padding: 14px 18px;
+            border-radius: 14px;
             font-weight: 700;
-            letter-spacing: 0.6px;
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            letter-spacing: 0.8px;
+            transition: all 0.25s ease;
             text-transform: uppercase;
-            font-size: 0.8rem;
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
+            font-size: 0.85rem;
             position: relative;
             overflow: hidden;
-        }
-
-        .player-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: 0.4s;
-        }
-
-        .player-btn:hover::before {
-            left: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.15);
         }
 
         .player-btn:hover {
-            transform: translateY(-2px) scale(1.02);
+            transform: translateY(-2px);
             filter: brightness(1.15);
         }
 
-        /* Themes */
-        .btn-copy { 
-            background: linear-gradient(135deg, rgba(229, 9, 20, 0.9), rgba(180, 0, 10, 0.95)); 
-            color: #ffffff; 
-            border: 1px solid rgba(255, 30, 39, 0.4);
-            box-shadow: 0 4px 15px rgba(229, 9, 20, 0.3); 
-        }
-
-        .btn-vlc { 
-            background: linear-gradient(135deg, rgba(255, 87, 34, 0.9), rgba(216, 50, 0, 0.95)); 
-            color: #ffffff; 
-            border: 1px solid rgba(255, 110, 64, 0.4);
-            box-shadow: 0 4px 15px rgba(255, 87, 34, 0.3); 
-        }
-
-        .btn-mx { 
-            background: linear-gradient(135deg, rgba(255, 184, 0, 0.9), rgba(212, 147, 0, 0.95)); 
-            color: #0d0608; 
-            border: 1px solid rgba(255, 200, 50, 0.5);
-            box-shadow: 0 4px 15px rgba(255, 184, 0, 0.3); 
-        }
-
-        .btn-playit {
-            background: linear-gradient(135deg, #00C853, #009624);
-            color: #ffffff;
-            border: 1px solid rgba(0, 230, 118, 0.4);
-            box-shadow: 0 4px 15px rgba(0, 200, 83, 0.3);
-        }
-
-        .btn-splayer {
-            background: linear-gradient(135deg, #2979FF, #1565C0);
-            color: #ffffff;
-            border: 1px solid rgba(68, 138, 255, 0.4);
-            box-shadow: 0 4px 15px rgba(41, 121, 255, 0.3);
-        }
-
+        .btn-copy { background: linear-gradient(135deg, rgba(229, 9, 20, 0.95), rgba(180, 0, 10, 0.95)); color: #fff; }
+        .btn-vlc { background: linear-gradient(135deg, rgba(255, 87, 34, 0.95), rgba(216, 50, 0, 0.95)); color: #fff; }
+        .btn-mx { background: linear-gradient(135deg, rgba(255, 184, 0, 0.95), rgba(212, 147, 0, 0.95)); color: #0d0608; }
         .btn-download { 
             background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%); 
             color: #ffffff; 
             box-shadow: 0 8px 30px rgba(239, 35, 35, 0.45);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
         }
 
         .brand-gradient-text {
             background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            font-family: 'Josefin Sans', sans-serif;
             font-weight: 800;
         }
 
-        .brand-text-inline {
-            background: linear-gradient(135deg, #FF1E27 0%, #FF5722 50%, #FFB800 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-weight: 800;
-            display: inline-block;
-            white-space: nowrap;
-        }
-
-        /* Custom Plyr adjustments */
+        /* Plyr Glass Customization */
         .plyr {
-            border-radius: 16px;
+            border-radius: 18px;
             overflow: hidden;
-            background: #000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+        .plyr--video .plyr__controls {
+            background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0.85)) !important;
+            padding: 16px !important;
         }
 
         #toast {
             position: fixed;
-            bottom: 25px;
+            bottom: 30px;
             left: 50%;
             transform: translateX(-50%) translateY(100px);
             opacity: 0;
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 1000;
         }
-
         #toast.show {
             transform: translateX(-50%) translateY(0);
             opacity: 1;
         }
-
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #080204; }
-        ::-webkit-scrollbar-thumb { background: rgba(255, 87, 34, 0.3); border-radius: 10px; }
     </style>
 </head>
 
 <body>
-
+    <!-- Navbar -->
     <nav class="sticky top-0 z-50 glass-card mx-3 my-3 px-4 py-3 max-w-7xl md:mx-auto flex justify-center items-center">
-        <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="inline-flex items-center justify-center">
-            <h3 class="text-xl sm:text-2xl font-extrabold brand-gradient-text tracking-wide text-center uppercase flex items-center justify-center gap-1.5">
-                <span>HD PRO SEARCH BOT</span>
-                <span style="-webkit-text-fill-color: initial;" class="inline-block leading-none">🔍</span>
+        <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="flex items-center gap-2">
+            <h3 class="text-xl sm:text-2xl font-extrabold brand-gradient-text uppercase tracking-wide">
+                HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span>
             </h3>
         </a>
     </nav>
 
-    <div class="outer max-w-5xl mx-auto px-3 sm:px-4 mt-4">
-        <div class="inner">
-            <div class="main" id="main">
+    <div class="max-w-5xl mx-auto px-3 sm:px-4 mt-4">
+        <!-- Video Container -->
+        <div id="playerContainer" class="w-full rounded-2xl overflow-hidden glass-card glass-glow relative p-1">
+            <video id="player" playsinline controls preload="metadata" class="w-full aspect-video">
+                Your browser does not support HTML5 video streaming.
+            </video>
 
-                <!-- Video Player Container with Plyr -->
-                <div id="playerContainer" class="w-full rounded-2xl overflow-hidden shadow-2xl bg-black/80 backdrop-blur-2xl border border-white/10 relative glass-card-glow">
-                    <video id="player" class="w-full aspect-video" playsinline controls crossorigin="anonymous" preload="metadata">
-                        Your browser does not support video playback.
-                    </video>
-
-                    <!-- Resume Modal -->
-                    <div id="resumeModal" class="hidden absolute inset-0 bg-black/90 flex items-center justify-center p-3 z-30 transition-all duration-300">
-                        <div class="bg-black/90 text-slate-100 rounded-xl py-5 px-4 sm:px-6 max-w-sm sm:max-w-md w-11/12 text-center shadow-2xl border border-[#FF5722]/40 backdrop-blur-xl">
-                            <p class="text-xs sm:text-sm font-normal text-slate-300 mb-4 leading-snug">
-                                You were watching this video at <span id="resumeTimeText" class="font-bold text-[#FFB800]">00:00:00</span>. Do you want to resume?
-                            </p>
-                            <div class="flex flex-row gap-2.5 justify-center items-center">
-                                <button onclick="confirmResume()" class="bg-[#FF1E27] hover:bg-[#E50914] text-white font-bold py-2 px-4 rounded-lg text-xs sm:text-sm transition active:scale-95 shadow-lg shadow-red-900/40">
-                                    Resume
-                                </button>
-                                <button onclick="confirmRestart()" class="bg-zinc-800 hover:bg-zinc-700 text-slate-200 font-bold py-2 px-4 rounded-lg text-xs sm:text-sm transition active:scale-95 border border-white/10">
-                                    Start Over
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- File Info Card -->
-                <div class="file-name my-5 p-4 glass-card text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-3">
-                    <div class="flex items-center gap-3 w-full">
-                        <i class="fa-solid fa-film text-[#FF1E27] text-xl shrink-0"></i>
-                        <p id="myDiv" class="break-all text-slate-100 text-sm md:text-base font-bold tracking-wide"></p>
-                    </div>
-                </div>
-
-                <!-- Multi-Player Options Grid -->
-                <div class="downloadBtn grid grid-cols-2 sm:grid-cols-5 gap-3 my-6">
-                    <button class="player-btn btn-copy" onclick="copyStreamLink()">
-                        <i class="fa-solid fa-copy text-base"></i> Copy Link
-                    </button>
-
-                    <button class="player-btn btn-vlc" onclick="vlc_player()">
-                        <img src="https://i.postimg.cc/15TQ4y7B/vlc.png" class="w-4 h-4 object-contain" alt="VLC"> VLC
-                    </button>
-
-                    <button class="player-btn btn-mx" onclick="mx_player()">
-                        <img src="https://i.postimg.cc/sx4Msv4T/mx.png" class="w-4 h-4 object-contain" alt="MX"> MX Player
-                    </button>
-
-                    <button class="player-btn btn-playit" onclick="playit_player()">
-                        <i class="fa-solid fa-circle-play text-base"></i> PlayIt
-                    </button>
-
-                    <button class="player-btn btn-splayer col-span-2 sm:col-span-1" onclick="splayer()">
-                        <i class="fa-solid fa-play text-base"></i> SPlayer
-                    </button>
-
-                    <button class="player-btn btn-download col-span-2 sm:col-span-5 py-3.5 text-base font-extrabold mt-2" onclick="bisalDownload()">
-                        <i class="fa-solid fa-cloud-arrow-down text-lg mr-1"></i> Download Video
-                    </button>
-                </div>
-            </div>
-
-            <div class="abt space-y-8 my-10">
-                <div class="about glass-card p-6 md:p-8 text-center">
-                    <h1 class="text-xl md:text-2xl font-black mb-3 uppercase tracking-wide leading-normal">
-                        WELCOME TO <span class="brand-text-inline">HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span></span>
-                    </h1>
-                    <p class="max-w-xl mx-auto text-slate-300 text-xs md:text-sm leading-relaxed">
-                        Enjoy bufferless high-speed video playback, subtitle support, and external Android & iOS media player integration.
+            <!-- Resume Modal -->
+            <div id="resumeModal" class="hidden absolute inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 z-30">
+                <div class="glass-card text-slate-100 py-6 px-6 max-w-sm w-11/12 text-center border border-[#FF5722]/40">
+                    <p class="text-sm font-normal text-slate-300 mb-4 leading-relaxed">
+                        Aapne is video ko <span id="resumeTimeText" class="font-bold text-[#FFB800]">00:00:00</span> par chhora tha. Resume karna chahte hain?
                     </p>
+                    <div class="flex gap-3 justify-center">
+                        <button onclick="confirmResume()" class="bg-[#FF1E27] hover:bg-[#E50914] text-white font-bold py-2 px-5 rounded-xl text-xs sm:text-sm shadow-lg transition active:scale-95">
+                            Resume
+                        </button>
+                        <button onclick="confirmRestart()" class="bg-zinc-800 hover:bg-zinc-700 text-slate-200 font-bold py-2 px-5 rounded-xl text-xs sm:text-sm border border-white/10 transition active:scale-95">
+                            Restart
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <footer class="mt-10 border-t border-white/10 pt-6 pb-8 text-center">
-            <div class="copyright text-xs text-slate-400 space-y-3">
-                <h5 class="flex items-center justify-center gap-1 flex-wrap font-semibold">
-                    <span>Copyright © 2026</span> 
-                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="brand-text-inline">
-                        HD PRO SEARCH BOT <span style="-webkit-text-fill-color: initial;">🔍</span>
-                    </a>. 
-                    <span>All Rights Reserved.</span>
-                </h5>
-                
-                <div class="icons flex justify-center py-1">
-                    <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="text-[#FF5722] hover:text-[#FFB800] transition inline-flex items-center justify-center p-2 rounded-full bg-white/5 border border-white/10">
-                        <i class="fa-brands fa-telegram text-lg"></i>
-                    </a>
+        <!-- File Name Display -->
+        <div class="my-5 p-4 glass-card text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-3 w-full overflow-hidden">
+                <div class="p-3 bg-red-600/20 text-[#FF1E27] rounded-xl flex-shrink-0">
+                    <i class="fa-solid fa-film text-xl"></i>
                 </div>
-
-                <h4 class="font-bold">This Page Is Made By <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="font-extrabold text-[#FF1E27]">RPEDITZ</a></h4>
+                <p id="cleanTitle" class="truncate text-slate-100 text-sm md:text-base font-bold tracking-wide w-full"></p>
             </div>
+            <span class="text-xs bg-white/10 px-3 py-1.5 rounded-full border border-white/10 whitespace-nowrap text-slate-300 font-mono">Fast Stream</span>
+        </div>
+
+        <!-- External Player Buttons -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 my-6">
+            <button class="player-btn btn-copy" onclick="copyStreamLink()">
+                <i class="fa-solid fa-link text-base"></i> Copy Stream Link
+            </button>
+            <button class="player-btn btn-vlc" onclick="openVLC()">
+                <i class="fa-solid fa-play-circle text-base"></i> VLC Player
+            </button>
+            <button class="player-btn btn-mx" onclick="openMX()">
+                <i class="fa-solid fa-circle-play text-base"></i> MX Player
+            </button>
+            <button class="player-btn btn-download sm:col-span-3 py-4 text-base font-extrabold" onclick="startDownload()">
+                <i class="fa-solid fa-cloud-arrow-down text-xl"></i> Direct Download File
+            </button>
+        </div>
+
+        <!-- Telegram Promotion Card -->
+        <div class="glass-card p-6 md:p-8 text-center my-8">
+            <h2 class="text-xl md:text-2xl font-black mb-2 uppercase brand-gradient-text">
+                JOIN OFFICIAL TELEGRAM CHANNEL
+            </h2>
+            <p class="max-w-md mx-auto text-slate-300 text-xs md:text-sm mb-4">
+                Latest updates, movie direct searches aur fast link access pane ke liye judiye.
+            </p>
+            <a href="https://t.me/+sIOgiCYLtBxhNGI1" class="inline-flex items-center gap-2 bg-[#FF5722] hover:bg-[#FF1E27] px-6 py-2.5 rounded-xl font-bold text-sm tracking-wide transition shadow-lg">
+                <i class="fa-brands fa-telegram text-lg"></i> Join Channel
+            </a>
+        </div>
+
+        <footer class="mt-8 border-t border-white/10 py-6 text-center text-xs text-slate-400 space-y-2">
+            <p>Copyright © 2026 <span class="brand-gradient-text font-bold">HD PRO SEARCH BOT</span>. All Rights Reserved.</p>
         </footer>
     </div>
 
-    <!-- Toast Popup -->
-    <div id="toast" class="glass-card px-5 py-3 text-xs font-bold text-slate-100 border border-[#FF5722]/50 shadow-2xl flex items-center gap-2">
+    <!-- Toast Notification -->
+    <div id="toast" class="glass-card px-5 py-3 text-xs font-bold text-slate-100 border border-[#FF5722]/50 flex items-center gap-2">
         <i class="fa-solid fa-circle-check text-[#FFB800] text-base"></i>
-        <span id="toastMsg">Action completed!</span>
+        <span id="toastMsg">Action Done!</span>
     </div>
 
     <script>
         const fileUrl = "{{file_url}}";
         const fileName = "{{file_name}}";
-        const storageKey = "watch_progress_" + btoa(fileUrl || "stream").replace(/=/g, '');
+        
+        // UTF-8 Safe Hash Generator for Storage Key
+        function hashKey(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0;
+            }
+            return "stream_progress_" + Math.abs(hash);
+        }
+
+        const storageKey = hashKey(fileUrl);
         let savedTime = 0;
         let plyrInstance = null;
 
-        window.addEventListener("DOMContentLoaded", function() {
-            document.getElementById("myDiv").innerText = cleanMovieName(fileName);
-            initModernPlayer();
-            initAutoResumeModal();
+        window.addEventListener("DOMContentLoaded", () => {
+            document.getElementById("cleanTitle").innerText = cleanMovieName(fileName);
+            initVideoPlayer();
         });
 
         function cleanMovieName(rawName) {
-            if (!rawName) return "Movie Stream";
-            let clean = rawName.replace(/\.(mkv|mp4|webm|avi|flv|mov)$/i, "");
-            const pattern = /[\.\_\s\(-](480p|720p|1080p|2160p|4k|2k|360p|hd|sd|bluray|web-dl|web|webrip|hdr|hdrip|hevc|x264|x265|h264|h265|10bit|ds4k|dvdrip|cam|camrip|nf|amzn|esub|sub|hindi|english|telugu|tamil|kannada|malayalam|bengali|marathi|gujarati|punjabi|dubbed|dual|multi|aac|ac3|dts|2\.0|5\.1|7\.1).*$/i;
+            if (!rawName) return "Video Stream";
+            let clean = rawName.replace(/\.(mkv|mp4|webm|avi|flv|mov|m4v)$/i, "");
+            const pattern = /[\.\_\s\(-](480p|720p|1080p|2160p|4k|2k|360p|hd|bluray|web-dl|webrip|hdr|hevc|x264|x265|hindi|dual).*$/i;
             clean = clean.split(pattern)[0];
-            clean = clean.replace(/[\._]/g, " ").trim();
-            return clean || rawName;
+            return clean.replace(/[\._]/g, " ").trim() || rawName;
         }
 
-        function initModernPlayer() {
-            const videoElem = document.getElementById("player");
+        function initVideoPlayer() {
+            const video = document.getElementById("player");
 
-            // Attach HLS if available
+            // Setup Plyr Controls
+            plyrInstance = new Plyr(video, {
+                controls: ['play-large', 'restart', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'captions', 'settings', 'pip', 'airplay', 'fullscreen'],
+                settings: ['quality', 'speed'],
+                speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
+                tooltips: { controls: true, seek: true }
+            });
+
+            // Stream Source Handling (HLS vs Direct Stream)
             if (Hls.isSupported() && (fileUrl.includes('.m3u8') || fileUrl.includes('hls'))) {
                 const hls = new Hls({
                     enableWorker: true,
                     lowLatencyMode: true,
                     maxBufferLength: 20,
-                    maxMaxBufferLength: 45,
-                    maxBufferSize: 40 * 1024 * 1024,
-                    startFragPrefetch: true
+                    maxMaxBufferLength: 40
                 });
                 hls.loadSource(fileUrl);
-                hls.attachMedia(videoElem);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+                        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+                        else { hls.destroy(); video.src = fileUrl; }
+                    }
+                });
             } else {
-                videoElem.src = fileUrl;
+                video.src = fileUrl;
             }
 
-            // Initialize Plyr Custom Controls
-            plyrInstance = new Plyr(videoElem, {
-                controls: [
-                    'play-large', 'play', 'progress', 'current-time', 'duration',
-                    'mute', 'volume', 'settings', 'pip', 'airplay', 'fullscreen'
-                ],
-                settings: ['speed', 'quality'],
-                speed: { selected: 1, options: [0.75, 1, 1.25, 1.5, 2] }
-            });
+            setupResume(video);
         }
 
-        function formatTime(seconds) {
-            const sec = Math.floor(seconds);
-            const hrs = Math.floor(sec / 3600);
-            const mins = Math.floor((sec % 3600) / 60);
-            const s = sec % 60;
-            const pad = (n) => n.toString().padStart(2, '0');
-            return `${pad(hrs)}:${pad(mins)}:${pad(s)}`;
-        }
-
-        function initAutoResumeModal() {
-            const video = document.getElementById("player");
+        function setupResume(video) {
             const modal = document.getElementById("resumeModal");
             const timeText = document.getElementById("resumeTimeText");
 
-            video.addEventListener("loadedmetadata", function() {
-                const storedVal = localStorage.getItem(storageKey);
-                if (storedVal && parseFloat(storedVal) > 5) {
-                    savedTime = parseFloat(storedVal);
+            video.addEventListener("loadedmetadata", () => {
+                const stored = localStorage.getItem(storageKey);
+                if (stored && parseFloat(stored) > 8) {
+                    savedTime = parseFloat(stored);
                     timeText.innerText = formatTime(savedTime);
                     modal.classList.remove("hidden");
                 }
             });
 
-            let lastSaveTime = 0;
-            video.addEventListener("timeupdate", function() {
+            let lastSaved = 0;
+            video.addEventListener("timeupdate", () => {
                 const now = Date.now();
-                if (video.currentTime > 0 && (now - lastSaveTime > 2500)) {
+                if (video.currentTime > 0 && (now - lastSaved > 2500)) {
                     localStorage.setItem(storageKey, video.currentTime);
-                    lastSaveTime = now;
+                    lastSaved = now;
                 }
             });
 
-            video.addEventListener("ended", function() {
+            video.addEventListener("ended", () => {
                 localStorage.removeItem(storageKey);
             });
         }
 
+        function formatTime(sec) {
+            const s = Math.floor(sec);
+            const hrs = Math.floor(s / 3600);
+            const mins = Math.floor((s % 3600) / 60);
+            const secs = s % 60;
+            const pad = (n) => n.toString().padStart(2, '0');
+            return hrs > 0 ? `${pad(hrs)}:${pad(mins)}:${pad(secs)}` : `${pad(mins)}:${pad(secs)}`;
+        }
+
         function confirmResume() {
-            const video = document.getElementById("player");
             document.getElementById("resumeModal").classList.add("hidden");
             if (plyrInstance) {
                 plyrInstance.currentTime = savedTime;
-                plyrInstance.play().catch(() => {});
-            } else {
-                video.currentTime = savedTime;
-                video.play().catch(() => {});
+                plyrInstance.play();
             }
         }
 
         function confirmRestart() {
-            const video = document.getElementById("player");
             document.getElementById("resumeModal").classList.add("hidden");
             localStorage.removeItem(storageKey);
             if (plyrInstance) {
                 plyrInstance.currentTime = 0;
-                plyrInstance.play().catch(() => {});
-            } else {
-                video.currentTime = 0;
-                video.play().catch(() => {});
+                plyrInstance.play();
             }
         }
 
-        function showToast(message) {
+        function showToast(msg) {
             const toast = document.getElementById("toast");
-            const toastMsg = document.getElementById("toastMsg");
-            toastMsg.innerText = message;
+            document.getElementById("toastMsg").innerText = msg;
             toast.classList.add("show");
-            setTimeout(() => {
-                toast.classList.remove("show");
-            }, 3000);
+            setTimeout(() => toast.classList.remove("show"), 2800);
         }
 
         function copyStreamLink() {
-            navigator.clipboard.writeText(fileUrl).then(() => {
-                showToast("Stream link copied!");
-            }).catch(() => {
-                showToast("Failed to copy link!");
-            });
+            navigator.clipboard.writeText(fileUrl)
+                .then(() => showToast("Stream Link Copied!"))
+                .catch(() => showToast("Clipboard permission denied"));
         }
 
-        /* External Players Intents */
-        function vlc_player() { 
-            window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=org.videolan.vlc;type=video/*;end;"; 
+        function openVLC() {
+            window.location.href = `intent:${encodeURI(fileUrl)}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;end;`;
         }
 
-        function mx_player() { 
-            window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end;"; 
+        function openMX() {
+            window.location.href = `intent:${encodeURI(fileUrl)}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.mxtech.videoplayer.ad;end;`;
         }
 
-        function playit_player() {
-            window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=com.playit.videoplayer;type=video/*;end;";
-        }
-
-        function splayer() {
-            window.location.href = "intent:" + encodeURI(fileUrl) + "#Intent;package=com.vanced.android.youtube;action=android.intent.action.VIEW;type=video/*;end;";
-        }
-
-        function bisalDownload() {
+        function startDownload() {
             const a = document.createElement('a');
             a.href = fileUrl;
-            a.download = fileName || 'video.mp4';
+            a.setAttribute('download', fileName || 'video.mp4');
+            a.setAttribute('target', '_blank');
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            showToast("Download Started!");
+            showToast("Direct Download Started!");
         }
     </script>
 </body>
