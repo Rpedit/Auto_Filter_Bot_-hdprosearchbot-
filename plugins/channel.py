@@ -127,7 +127,7 @@ RES_ORDER = {
 }
 
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
-NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
+NORMALIZE_PATTERN = re.compile(r"[\s._\-]+|[()\[\]{}:;'–!,.?_]")
 
 RESOLUTION_PATTERN = re.compile(r"\b(?:2160p|4K|1440p|1080p|720p|540p|480p|360p|240p|140p)\b", re.IGNORECASE)
 SOURCE_PATTERN = re.compile(
@@ -186,7 +186,7 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     f_raw = YEAR_PATTERN.sub('', found_title).strip()
 
     def clean_words(s: str):
-        # Season / Part tokens ko clean karo taaki 'Bigg Boss Season 20' vs 'Bigg Boss' match fail na kare
+        # Season / Part tokens strip karo taaki 'Bigg Boss Season 20' vs 'Bigg Boss' match fail na kare
         s = re.sub(r'\b(?:Season\s*\d+|S\d{1,2}|Part\s*\d+|Episode\s*\d+|Ep\s*\d+)\b', ' ', s, flags=re.IGNORECASE)
         s = re.sub(r'\(?\b(?:full\s*movie|full\s*series|full\s*film|hd|rip|dubbed)\b\)?', ' ', s, flags=re.IGNORECASE)
         s = re.sub(r'^(the|a|an)\s+', ' ', s, flags=re.IGNORECASE)
@@ -470,6 +470,43 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
     return best_fallback
 
 
+async def fetch_third_party_meta(url: str) -> dict:
+    data = {"rating": None, "genres": None}
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        )
+    }
+    timeout = aiohttp.ClientTimeout(total=8)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    html = await resp.text()
+                    soup = BeautifulSoup(html, "html.parser")
+                    text = soup.get_text(" ", strip=True)
+
+                    # Extract Rating (e.g. 7.5/10, IMDb: 8.1, Rating: 6.9)
+                    r_match = re.search(r'(?:imdb|rating|score)?\s*[:\-]?\s*([1-9](?:\.\d)?)\s*(?:/10|\s*out of 10)?', text, re.IGNORECASE)
+                    if r_match:
+                        val = float(r_match.group(1))
+                        if 1.0 <= val <= 10.0:
+                            data["rating"] = f"{val}/10"
+
+                    # Extract Genres (e.g. Genres: Action, Thriller, Drama)
+                    g_match = re.search(r'(?:genres?|category)\s*[:\-]\s*([A-Za-z,\s\-]+?)(?:\n|\r|\||release|audio|quality|language|stars|director|$)', text, re.IGNORECASE)
+                    if g_match:
+                        raw_g = g_match.group(1).strip()
+                        genres_list = [g.strip().title() for g in re.split(r'[,|/]', raw_g) if 2 <= len(g.strip()) <= 20]
+                        if genres_list:
+                            data["genres"] = ", ".join(genres_list[:5])
+    except Exception as e:
+        logger.warning(f"Error scraping third-party URL '{url}': {e}")
+
+    return data
+
+
 async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
     try:
         blog_url = "https://tmdbimdbhdhub4u.blogspot.com"
@@ -498,7 +535,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
         if not target_core:
             return None, None
 
-        # Stop words filter out karo taaki generic 'Season 1' kisi aur post ko match na kar le
         stop_words = {"season", "series", "complete", "part", "episode", "the", "and", "hindi", "dubbed"}
         words = [w.lower() for w in re.split(r'[\s\-:_.()]+', base_name) if len(w) >= 3 and not w.isdigit() and w.lower() not in stop_words]
         
@@ -509,7 +545,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
         candidate_urls = []
 
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            # 1. Search page specific keyword se
+            # 1. Search page direct keyword se
             if simple_search:
                 search_page_url = f"{blog_url}/search?q={simple_search}"
                 try:
@@ -522,14 +558,13 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                                 title_attr = (a_elem.get("title") or a_elem.get_text() or "").strip()
                                 if h.startswith(blog_url) and h.endswith(".html"):
                                     p_text = clean_core(h) + " " + clean_core(title_attr)
-                                    # Target ka primary main title word hona compulsory hai (e.g. 'punisher')
                                     if words and any(w in p_text for w in words):
                                         if h not in candidate_urls:
                                             candidate_urls.append(h)
                 except Exception as se:
                     logger.warning(f"Error fetching Blogger search page: {se}")
 
-            # 2. Feed fallback ONLY IF primary title match ho
+            # 2. Feed fallback ONLY IF primary title match kare
             if not candidate_urls:
                 feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
                 try:
@@ -552,7 +587,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                 logger.warning(f"Blogger me koi matching post nahi mili target: '{base_name}' ke liye")
                 return None, None
 
-            # 3. Post Open karke Poster + Hyperlink Extract Karo
+            # 3. Post Open karke Poster + Link extract karein
             for post_url in candidate_urls:
                 try:
                     async with session.get(post_url) as p_resp:
@@ -564,7 +599,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                         img_url = None
                         target_url = None
 
-                        # Check 1: Image ke upar wrap hua hyperlink
+                        # Check 1: Image ke upar wrap hua link (IMDb, TMDb, OTT, ya Third-Party)
                         for a_tag in post_soup.find_all("a", href=True):
                             href = a_tag["href"].strip()
                             inner_img = a_tag.find("img")
@@ -572,11 +607,11 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                                 src = inner_img.get("src") or inner_img.get("data-src")
                                 if src and not any(x in src.lower() for x in ["icon", "avatar", "blank.gif"]):
                                     img_url = src.strip()
-                                    if re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE):
+                                    if href.startswith("http") and not any(x in href for x in ["blogger.com", "blogspot.com", "googleusercontent"]):
                                         target_url = href
                                         break
 
-                        # Check 2: Standalone <img>
+                        # Check 2: Standalone <img> agar <a> ke bahar ho
                         if not img_url:
                             for im in post_soup.find_all("img"):
                                 src = im.get("src") or im.get("data-src")
@@ -584,11 +619,11 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                                     img_url = src.strip()
                                     break
 
-                        # Check 3: Post body me link
+                        # Check 3: Post body me external link search
                         if not target_url:
                             for a_tag in post_soup.find_all("a", href=True):
                                 href = a_tag["href"].strip()
-                                if re.search(r'imdb\.com/title/(tt\d+)', href, re.IGNORECASE) or re.search(r'themoviedb\.org/(?:movie|tv)/\d+', href, re.IGNORECASE):
+                                if href.startswith("http") and not any(x in href for x in ["blogger.com", "blogspot.com", "googleusercontent"]):
                                     target_url = href
                                     break
 
@@ -676,6 +711,7 @@ def schedule_update(bot, base_name, delay=8):
 
 def extract_media_info(filename: str, caption: str):
     filename_clean = clean_mentions_links(filename)
+    filename_clean = re.sub(r'(?<=\d)[.\-_]+(?=\d)', ' ', filename_clean)
     filename = normalize(filename_clean.title())
     caption_clean = clean_mentions_links(caption).lower() if caption else ""
     unified = f"{caption_clean} {filename.lower()}".strip()
@@ -1028,10 +1064,12 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
+        # STEP 1: Blogger check
         blogger_poster_url, blogger_info_url = await get_blogger_data(base_name, media_info.get("year"))
 
         blogger_is_imdb = False
         blogger_is_tmdb = False
+        blogger_is_external = False
         blogger_imdb_id = None
         blogger_tmdb_id = None
 
@@ -1044,9 +1082,13 @@ async def _process_with_lock(
             elif m_tmdb:
                 blogger_is_tmdb = True
                 blogger_tmdb_id = m_tmdb.group(1)
+            else:
+                # OTT ya Third-party movie site link
+                blogger_is_external = True
 
         imdb_details = {}
         tmdb_details = {}
+        third_party_data = {}
 
         if blogger_is_imdb and blogger_imdb_id:
             try:
@@ -1065,6 +1107,12 @@ async def _process_with_lock(
                 or base_name
             )
             imdb_id = tmdb_details.get("imdb_id")
+
+        elif blogger_is_external and blogger_info_url:
+            # Third party web page se details scan karo
+            third_party_data = await fetch_third_party_meta(blogger_info_url)
+            official_search_title = base_name
+            imdb_id = None
 
         else:
             imdb_details = await fetch_imdb_safely(
@@ -1106,8 +1154,11 @@ async def _process_with_lock(
             )
             is_backdrop = bool(imdb_details.get("backdrop_url"))
 
+        # EXACT RATING ASSIGNMENT
         rating = "x/10"
-        if blogger_is_tmdb and tmdb_details.get("rating"):
+        if blogger_is_external and third_party_data.get("rating"):
+            rating = third_party_data["rating"]
+        elif blogger_is_tmdb and tmdb_details.get("rating"):
             rating = str(tmdb_details.get("rating")).strip()
         elif blogger_is_imdb and imdb_details.get("rating"):
             rating = str(imdb_details.get("rating")).strip()
@@ -1119,6 +1170,7 @@ async def _process_with_lock(
             elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
                 rating = str(imdb_rate).strip()
 
+        # EXACT TARGET URL ASSIGNMENT
         imdb_url = ""
         if blogger_info_url:
             imdb_url = blogger_info_url.strip()
@@ -1131,10 +1183,13 @@ async def _process_with_lock(
             elif tmdb_details.get("id"):
                 imdb_url = f"https://www.themoviedb.org/movie/{tmdb_details.get('id')}"
 
+        # EXACT GENRES ASSIGNMENT
         genre_list = []
         raw_genres = None
 
-        if blogger_is_tmdb:
+        if blogger_is_external and third_party_data.get("genres"):
+            raw_genres = third_party_data["genres"]
+        elif blogger_is_tmdb:
             raw_genres = tmdb_details.get("genres")
         elif blogger_is_imdb:
             raw_genres = imdb_details.get("genres")
