@@ -126,6 +126,13 @@ RES_ORDER = {
     "2160p": 2160, "4k": 2160
 }
 
+VALID_GENRES_SET = {
+    "Action", "Adventure", "Animation", "Biography", "Comedy", "Crime",
+    "Documentary", "Drama", "Family", "Fantasy", "Film-Noir", "History",
+    "Horror", "Music", "Musical", "Mystery", "Romance", "Sci-Fi", "Short",
+    "Sport", "Thriller", "War", "Western", "Anime"
+}
+
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
 NORMALIZE_PATTERN = re.compile(r"[\s._\-]+|[()\[\]{}:;'–!,.?_]")
 
@@ -186,7 +193,7 @@ def is_good_title_match(query: str, found_title: str) -> bool:
     f_raw = YEAR_PATTERN.sub('', found_title).strip()
 
     def clean_words(s: str):
-        # Ignore season / series keywords for title matching loop fix
+        # Season / Part tokens strip karo taaki 'Bigg Boss Season 20' vs 'Bigg Boss' match fail na kare
         s = re.sub(r'\b(?:Season\s*\d+|S\d{1,2}|Part\s*\d+|Episode\s*\d+|Ep\s*\d+)\b', ' ', s, flags=re.IGNORECASE)
         s = re.sub(r'\(?\b(?:full\s*movie|full\s*series|full\s*film|hd|rip|dubbed)\b\)?', ' ', s, flags=re.IGNORECASE)
         s = re.sub(r'^(the|a|an)\s+', ' ', s, flags=re.IGNORECASE)
@@ -470,6 +477,7 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
     return best_fallback
 
 
+# HDHub4u / Website Scraper for Rating & Genres
 async def fetch_third_party_meta(url: str) -> dict:
     data = {"rating": None, "genres": None}
     headers = {
@@ -487,7 +495,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                     soup = BeautifulSoup(html, "html.parser")
                     text = soup.get_text(" ", strip=True)
 
-                    # 1. Exact Website Rating Scraper (e.g. IMDb: 7.5, Rating: 8.2/10, 6.8/10)
+                    # 1. Rating Scraper (e.g. IMDb Rating: 7.5, Rating: 8.2/10, 6.8/10)
                     r_match = re.search(r'(?:imdb|rating|score)\s*[:\-]?\s*([1-9](?:\.\d)?)\s*(?:/10|\s*out of 10)?', text, re.IGNORECASE)
                     if not r_match:
                         r_match = re.search(r'\b([1-9]\.\d)\s*/\s*10\b', text)
@@ -497,15 +505,20 @@ async def fetch_third_party_meta(url: str) -> dict:
                         if 1.0 <= val <= 10.0:
                             data["rating"] = f"{val}/10"
 
-                    # 2. Exact Website Genres Scraper
-                    g_match = re.search(r'(?:genres?|category)\s*[:\-]\s*([A-Za-z,\s\-]+?)(?:\n|\r|\||release|audio|quality|language|stars|director|$)', text, re.IGNORECASE)
-                    if g_match:
-                        raw_g = g_match.group(1).strip()
-                        genres_list = [g.strip().title() for g in re.split(r'[,|/]', raw_g) if 2 <= len(g.strip()) <= 20 and not any(d.isdigit() for d in g)]
-                        if genres_list:
-                            data["genres"] = ", ".join(genres_list[:5])
+                    # 2. Genres Scraper (Strict Filter)
+                    extracted_genres = []
+                    g_section = re.search(r'(?:genres?|category)\s*[:\-]\s*([^\n\r\|<]+)', text, re.IGNORECASE)
+                    target_text = g_section.group(1) if g_section else text
+
+                    for genre in VALID_GENRES_SET:
+                        if re.search(rf'\b{re.escape(genre)}\b', target_text, re.IGNORECASE):
+                            if genre not in extracted_genres:
+                                extracted_genres.append(genre)
+
+                    if extracted_genres:
+                        data["genres"] = ", ".join(sorted(extracted_genres))
     except Exception as e:
-        logger.warning(f"Error scraping third-party website '{url}': {e}")
+        logger.warning(f"Error scraping website '{url}': {e}")
 
     return data
 
@@ -548,7 +561,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
         candidate_urls = []
 
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            # 1. Search page via specific core keywords
+            # 1. Search page specific keyword se
             if simple_search:
                 search_page_url = f"{blog_url}/search?q={simple_search}"
                 try:
@@ -567,7 +580,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                 except Exception as se:
                     logger.warning(f"Error fetching Blogger search page: {se}")
 
-            # 2. Feed fallback only if title core word strictly matches
+            # 2. Feed fallback ONLY IF primary title match ho
             if not candidate_urls:
                 feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
                 try:
@@ -590,7 +603,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                 logger.warning(f"Blogger me koi matching post nahi mili target: '{base_name}' ke liye")
                 return None, None
 
-            # 3. Post Open karke Poster + URL Extraction
+            # 3. Post Open karke Poster + Link extract karo (IMDb, TMDb, ya HDHub4u/Websites)
             for post_url in candidate_urls:
                 try:
                     async with session.get(post_url) as p_resp:
@@ -602,7 +615,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                         img_url = None
                         target_url = None
 
-                        # Check 1: <a> tag jisme <img> wrap ho
+                        # Check 1: Image ke upar wrap hua link
                         for a_tag in post_soup.find_all("a", href=True):
                             href = a_tag["href"].strip()
                             inner_img = a_tag.find("img")
@@ -1086,6 +1099,7 @@ async def _process_with_lock(
                 blogger_is_tmdb = True
                 blogger_tmdb_id = m_tmdb.group(1)
             else:
+                # HDHub4u / Third-Party Website
                 blogger_is_external = True
 
         imdb_details = {}
@@ -1111,7 +1125,7 @@ async def _process_with_lock(
             imdb_id = tmdb_details.get("imdb_id")
 
         elif blogger_is_external and blogger_info_url:
-            # Third-Party Movie Web Page Scraping
+            # Scrape HDHub4u / Website URL directly
             third_party_data = await fetch_third_party_meta(blogger_info_url)
             official_search_title = base_name
             imdb_id = None
@@ -1156,7 +1170,7 @@ async def _process_with_lock(
             )
             is_backdrop = bool(imdb_details.get("backdrop_url"))
 
-        # STRICT RATING LOGIC (Valid Rating OR 'x/10')
+        # RATING LOGIC
         rating = "x/10"
         if blogger_is_external:
             if third_party_data.get("rating"):
@@ -1177,7 +1191,7 @@ async def _process_with_lock(
             elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
                 rating = str(imdb_rate).strip()
 
-        # TARGET URL FOR HYPERLINK
+        # TARGET URL ASSIGNMENT
         imdb_url = ""
         if blogger_info_url:
             imdb_url = blogger_info_url.strip()
@@ -1190,7 +1204,7 @@ async def _process_with_lock(
             elif tmdb_details.get("id"):
                 imdb_url = f"https://www.themoviedb.org/movie/{tmdb_details.get('id')}"
 
-        # GENRES PARSING
+        # GENRES LOGIC
         genre_list = []
         raw_genres = None
 
@@ -1709,7 +1723,6 @@ def generate_movie_message(movie_doc, base_name):
     raw_rating = str(movie_doc.get("rating", "x/10")).strip()
     imdb_url = movie_doc.get("imdb_url", "")
 
-    # Clean formatting for x/10 vs real rating
     if raw_rating.lower() in ("x/10", "x", "n/a", "-", "none", "", "0", "0.0", "null"):
         rating_display = "<small>x/10</small>"
     else:
