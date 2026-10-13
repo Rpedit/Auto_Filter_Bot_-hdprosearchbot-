@@ -477,7 +477,6 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
     return best_fallback
 
 
-# HDHub4u Scraper: Exact Multi-Genres + Exact Rating
 async def fetch_third_party_meta(url: str) -> dict:
     data = {"rating": None, "genres": None}
     headers = {
@@ -495,7 +494,6 @@ async def fetch_third_party_meta(url: str) -> dict:
                     soup = BeautifulSoup(html, "html.parser")
                     text = soup.get_text(" ", strip=True)
 
-                    # 1. Rating Scraper (e.g. IMDb Rating: 7.2/10, 6.8/10)
                     r_match = re.search(r'(?:imdb|rating|score)\s*[:\-]?\s*([1-9](?:\.\d)?)\s*(?:/10|\s*out of 10)?', text, re.IGNORECASE)
                     if not r_match:
                         r_match = re.search(r'\b([1-9]\.\d)\s*/\s*10\b', text)
@@ -505,7 +503,6 @@ async def fetch_third_party_meta(url: str) -> dict:
                         if 1.0 <= val <= 10.0:
                             data["rating"] = f"{val}/10"
 
-                    # 2. Multi-Genre Scraper (Pipe '|', Comma ',' dono capture honge)
                     extracted_genres = []
                     g_section = re.search(
                         r'(?:genres?|category)\s*[:\-]\s*(.*?)(?=(?:\b(?:audio|quality|language|release|stars?|director|format|size|cast|story)\b|\n|\r|$))',
@@ -529,7 +526,7 @@ async def fetch_third_party_meta(url: str) -> dict:
     return data
 
 
-async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
+async def get_blogger_data(base_name: str, year: Optional[str] = None, season: Optional[int] = None) -> Tuple[Optional[str], Optional[str]]:
     try:
         blog_url = "https://tmdbimdbhdhub4u.blogspot.com"
         if hasattr(db, 'db'):
@@ -545,25 +542,32 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
         }
         timeout = aiohttp.ClientTimeout(total=10)
 
+        if not season:
+            s_match = re.search(r'\b(?:Season|S)\s*0*(\d{1,2})\b', base_name, re.IGNORECASE)
+            if s_match:
+                season = int(s_match.group(1))
+
         def clean_core(s):
             if not s:
                 return ""
             s = re.sub(r'[\(\)\[\]#\-:_.]', ' ', s)
-            s = re.sub(r'\b(?:Season\s*\d+|S\d{1,2}|Complete|Part\s*\d+)\b', ' ', s, flags=re.IGNORECASE)
             s = re.sub(r'\b(19|20)\d{2}\b', ' ', s)
             return re.sub(r'[^a-zA-Z0-9]', '', s).lower().strip()
 
-        target_core = clean_core(base_name)
-        if not target_core:
-            return None, None
-
-        stop_words = {"season", "series", "complete", "part", "episode", "the", "and", "hindi", "dubbed"}
-        words = [w.lower() for w in re.split(r'[\s\-:_.()]+', base_name) if len(w) >= 3 and not w.isdigit() and w.lower() not in stop_words]
+        stop_words = {"series", "complete", "part", "episode", "the", "and", "hindi", "dubbed"}
+        words = [
+            w.lower() for w in re.split(r'[\s\-:_.()]+', base_name)
+            if len(w) >= 3 and not w.isdigit() and w.lower() not in stop_words and not w.lower().startswith("season")
+        ]
         
         if not words:
             words = [w.lower() for w in re.split(r'[\s\-:_.()]+', base_name) if len(w) >= 3 and not w.isdigit()]
 
-        simple_search = "+".join(words[:2]) if words else target_core
+        search_terms = list(words[:2])
+        if season:
+            search_terms.append(f"season+{season}")
+        simple_search = "+".join(search_terms)
+
         candidate_urls = []
 
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
@@ -577,12 +581,21 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                             s_soup = BeautifulSoup(s_html, "html.parser")
                             for a_elem in s_soup.find_all("a", href=True):
                                 h = a_elem["href"].split("?")[0]
-                                title_attr = (a_elem.get("title") or a_elem.get_text() or "").strip()
+                                title_attr = (a_elem.get("title") or a_elem.get_text() or "").strip().lower()
                                 if h.startswith(blog_url) and h.endswith(".html"):
-                                    p_text = clean_core(h) + " " + clean_core(title_attr)
-                                    if words and any(w in p_text for w in words):
-                                        if h not in candidate_urls:
+                                    if season:
+                                        has_target_season = (
+                                            f"season-{season}" in h.lower() or 
+                                            f"season{season}" in h.lower() or 
+                                            f"season {season}" in title_attr or 
+                                            f"(season {season})" in title_attr
+                                        )
+                                        if has_target_season and h not in candidate_urls:
                                             candidate_urls.append(h)
+                                    else:
+                                        if words and any(w in (h.lower() + " " + title_attr) for w in words):
+                                            if h not in candidate_urls:
+                                                candidate_urls.append(h)
                 except Exception as se:
                     logger.warning(f"Error fetching Blogger search page: {se}")
 
@@ -595,21 +608,27 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                             f_text = await f_resp.text()
                             f_data = json.loads(f_text)
                             for entry in f_data.get("feed", {}).get("entry", []):
-                                p_title = entry.get("title", {}).get("$t", "")
-                                p_core = clean_core(p_title)
-                                if words and any(w in p_core for w in words):
-                                    for l in entry.get("link", []):
-                                        if l.get("rel") == "alternate":
-                                            candidate_urls.append(l.get("href"))
-                                            break
+                                p_title = entry.get("title", {}).get("$t", "").lower()
+                                if words and any(w in p_title for w in words):
+                                    if season:
+                                        if f"season {season}" in p_title or f"season-{season}" in p_title:
+                                            for l in entry.get("link", []):
+                                                if l.get("rel") == "alternate":
+                                                    candidate_urls.append(l.get("href"))
+                                                    break
+                                    else:
+                                        for l in entry.get("link", []):
+                                            if l.get("rel") == "alternate":
+                                                candidate_urls.append(l.get("href"))
+                                                break
                 except Exception as fe:
                     logger.warning(f"Error fetching Blogger feed: {fe}")
 
             if not candidate_urls:
-                logger.warning(f"Blogger me koi matching post nahi mili target: '{base_name}' ke liye")
+                logger.warning(f"Blogger me koi matching post nahi mili target: '{base_name}' (Season {season}) ke liye")
                 return None, None
 
-            # 3. Post Parse (Poster Image + External Hyperlink)
+            # 3. Post Parse
             for post_url in candidate_urls:
                 try:
                     async with session.get(post_url) as p_resp:
@@ -621,7 +640,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                         img_url = None
                         target_url = None
 
-                        # Check 1: <a> jisme <img> wrap ho
                         for a_tag in post_soup.find_all("a", href=True):
                             href = a_tag["href"].strip()
                             inner_img = a_tag.find("img")
@@ -629,12 +647,10 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                                 src = inner_img.get("src") or inner_img.get("data-src")
                                 if src and not any(x in src.lower() for x in ["icon", "avatar", "blank.gif"]):
                                     img_url = src.strip()
-                                    # Target link: IMDb, TMDb ya Third-Party
                                     if href.startswith("http") and not any(x in href for x in ["blogger.com", "blogspot.com", "googleusercontent"]):
                                         target_url = href
                                         break
 
-                        # Check 2: Standalone <img>
                         if not img_url:
                             for im in post_soup.find_all("img"):
                                 src = im.get("src") or im.get("data-src")
@@ -642,7 +658,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None) -> Tuple[
                                     img_url = src.strip()
                                     break
 
-                        # Check 3: Post body me external hyperlink
                         if not target_url:
                             for a_tag in post_soup.find_all("a", href=True):
                                 href = a_tag["href"].strip()
@@ -1087,8 +1102,12 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
-        # STEP 1: Blogger check
-        blogger_poster_url, blogger_info_url = await get_blogger_data(base_name, media_info.get("year"))
+        # STEP 1: Blogger check with season passed
+        blogger_poster_url, blogger_info_url = await get_blogger_data(
+            base_name,
+            media_info.get("year"),
+            season=media_info.get("season")
+        )
 
         blogger_is_imdb = False
         blogger_is_tmdb = False
@@ -1132,7 +1151,6 @@ async def _process_with_lock(
             imdb_id = tmdb_details.get("imdb_id")
 
         elif blogger_is_external and blogger_info_url:
-            # HDHub4u Scraper
             third_party_data = await fetch_third_party_meta(blogger_info_url)
             official_search_title = base_name
             imdb_id = None
@@ -1177,7 +1195,6 @@ async def _process_with_lock(
             )
             is_backdrop = bool(imdb_details.get("backdrop_url"))
 
-        # EXACT RATING LOGIC
         rating = "x/10"
         if blogger_is_external:
             if third_party_data.get("rating"):
@@ -1198,7 +1215,6 @@ async def _process_with_lock(
             elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
                 rating = str(imdb_rate).strip()
 
-        # TARGET URL LOGIC
         imdb_url = ""
         if blogger_info_url:
             imdb_url = blogger_info_url.strip()
@@ -1211,7 +1227,6 @@ async def _process_with_lock(
             elif tmdb_details.get("id"):
                 imdb_url = f"https://www.themoviedb.org/movie/{tmdb_details.get('id')}"
 
-        # GENRES LOGIC
         genre_list = []
         raw_genres = None
 
