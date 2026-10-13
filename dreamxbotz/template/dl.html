@@ -121,7 +121,7 @@ footer{
   <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
     <div>
       <div class="logo font-bold text-xl sm:text-2xl">HD PRO SEARCH BOT</div>
-      <div class="text-xs text-gray-500 mt-1">Fast • External App Streaming</div>
+      <div class="text-xs text-gray-500 mt-1">Fast • Direct App Streaming</div>
     </div>
     <a href="https://t.me/+sIOgiCYLtBxhNGI1" target="_blank" rel="noopener noreferrer" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-semibold">
       <i class="fa-brands fa-telegram mr-1"></i> Telegram
@@ -135,7 +135,7 @@ footer{
   <div class="mb-5">
     <div class="ad-label">ADVERTISEMENT</div>
     <div id="ad-slot-top" class="ad-slot">
-      <!-- AD CODE -->
+      <!-- PASTE TOP AD CODE HERE -->
     </div>
   </div>
 
@@ -146,7 +146,7 @@ footer{
         <i class="fa-solid fa-clapperboard"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-xs uppercase tracking-widest text-red-400 font-semibold mb-1">Now Playing / Stream Ready</div>
+        <div class="text-xs uppercase tracking-widest text-red-400 font-semibold mb-1">Ready to Stream</div>
         <h1 id="movieTitle" class="text-lg sm:text-xl font-bold break-words leading-snug">
           {{file_name}}
         </h1>
@@ -154,12 +154,27 @@ footer{
     </div>
   </section>
 
+  <!-- QUICK CHOOSE / ANY PLAYER -->
+  <div onclick="openAnyPlayer()" class="action-card glass flex-row gap-4 py-4 px-5 mb-5 border-red-500/30 bg-red-950/20 hover:border-red-500/60">
+    <div class="w-11 h-11 rounded-xl bg-red-600 text-white flex items-center justify-center text-xl shrink-0">
+      <i class="fa-solid fa-bolt"></i>
+    </div>
+    <div class="text-left flex-1 min-w-0">
+      <div class="text-base font-bold text-white flex items-center gap-2">
+        Auto Play (Recommended)
+        <span class="text-[10px] bg-red-600/40 text-red-300 px-2 py-0.5 rounded-full uppercase tracking-wider">Fast</span>
+      </div>
+      <div class="text-xs text-gray-400 mt-0.5">Device ke default ya installed player me direct play karega</div>
+    </div>
+    <i class="fa-solid fa-chevron-right text-gray-500 text-sm"></i>
+  </div>
+
   <!-- SELECT PLAYER TITLE -->
   <div class="flex items-center justify-between mb-4">
     <h2 class="text-sm font-semibold tracking-wider uppercase text-gray-400 flex items-center gap-2">
-      <i class="fa-solid fa-play text-red-500 text-xs"></i> Select Media Player
+      <i class="fa-solid fa-play text-red-500 text-xs"></i> Select External Player
     </h2>
-    <span class="text-xs text-gray-500">Tap to stream instantly</span>
+    <span class="text-xs text-gray-500">Tap to start video</span>
   </div>
 
   <!-- PLAYERS GRID -->
@@ -176,16 +191,16 @@ footer{
     <div onclick="openMX()" class="action-card glass">
       <img src="https://i.postimg.cc/sx4Msv4T/mx.png" alt="MX Player" class="w-10 h-10 object-contain mb-2">
       <div class="font-bold text-sm">MX Player</div>
-      <div class="text-[11px] text-gray-400 mt-0.5">HW+ Decoder</div>
+      <div class="text-[11px] text-gray-400 mt-0.5">Hardware Decoder</div>
     </div>
 
-    <!-- PLAYIT -->
+    <!-- PLAYIT PLAYER -->
     <div onclick="openPlayIt()" class="action-card glass">
       <div class="w-10 h-10 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center text-xl mb-2 border border-purple-500/30">
         <i class="fa-solid fa-circle-play"></i>
       </div>
-      <div class="font-bold text-sm">PLAYit Player</div>
-      <div class="text-[11px] text-gray-400 mt-0.5">All Format</div>
+      <div class="font-bold text-sm">PLAYit</div>
+      <div class="text-[11px] text-gray-400 mt-0.5">All Formats</div>
     </div>
 
     <!-- JUST PLAYER (EXOPLAYER) -->
@@ -203,10 +218,10 @@ footer{
         <i class="fa-solid fa-play"></i>
       </div>
       <div class="font-bold text-sm">KMPlayer</div>
-      <div class="text-[11px] text-gray-400 mt-0.5">HD Playback</div>
+      <div class="text-[11px] text-gray-400 mt-0.5">High Bitrate</div>
     </div>
 
-    <!-- NPLAYER (IOS / ANDROID) -->
+    <!-- NPLAYER -->
     <div onclick="opennPlayer()" class="action-card glass">
       <div class="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center text-xl mb-2 border border-blue-500/30">
         <i class="fa-solid fa-circle-nodes"></i>
@@ -218,13 +233,13 @@ footer{
   </section>
 
   <!-- UTILITY ACTIONS -->
-  <section class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+  <section class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
     <!-- COPY LINK -->
     <button onclick="copyStreamLink()" class="action-card glass flex-row gap-3 py-3.5">
       <i class="fa-solid fa-copy text-blue-400 text-lg"></i>
       <div class="text-left">
         <div class="text-sm font-semibold">Copy Stream Link</div>
-        <div class="text-[11px] text-gray-400">Paste in any media player manual URL</div>
+        <div class="text-[11px] text-gray-400">Manual network stream URL ke liye</div>
       </div>
     </button>
 
@@ -233,7 +248,7 @@ footer{
       <i class="fa-solid fa-circle-down text-emerald-400 text-lg"></i>
       <div class="text-left">
         <div class="text-sm font-semibold">Direct Download</div>
-        <div class="text-[11px] text-gray-400">Save file to device storage</div>
+        <div class="text-[11px] text-gray-400">File ko device me save karein</div>
       </div>
     </button>
   </section>
@@ -242,7 +257,7 @@ footer{
   <div class="mt-7">
     <div class="ad-label">ADVERTISEMENT</div>
     <div id="ad-slot-bottom" class="ad-slot">
-      <!-- AD CODE -->
+      <!-- PASTE BOTTOM AD CODE HERE -->
     </div>
   </div>
 
@@ -259,7 +274,7 @@ footer{
 const fileUrl = "{{file_url}}";
 const fileName = "{{file_name}}";
 
-/* TOAST UTILITY */
+/* TOAST MESSAGE */
 function toast(msg){
     const el = document.getElementById("toast");
     el.textContent = msg;
@@ -268,59 +283,72 @@ function toast(msg){
     window.toastTimer = setTimeout(()=>{ el.classList.remove("show"); }, 2500);
 }
 
-/* VLC PLAYER (vlc:// URI + Android Intent fallback) */
+/* 1. AUTO / ANY INSTALLED PLAYER (CHOOSER INTENT) */
+function openAnyPlayer(){
+    if(!fileUrl) return;
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    if(isAndroid){
+        const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;S.title=${encodeURIComponent(fileName)};end`;
+        window.location.href = intent;
+    } else {
+        window.location.href = fileUrl;
+    }
+}
+
+/* 2. VLC PLAYER (Cross-Platform) */
 function openVLC(){
     if(!fileUrl) return;
     const isAndroid = /Android/i.test(navigator.userAgent);
     if(isAndroid){
-        const intent = `intent:${fileUrl}#Intent;package=org.videolan.vlc;type=video/*;title=${encodeURIComponent(fileName)};end`;
+        const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;S.title=${encodeURIComponent(fileName)};end`;
         window.location.href = intent;
     } else {
         window.location.href = `vlc://${fileUrl}`;
     }
 }
 
-/* MX PLAYER */
+/* 3. MX PLAYER (Supports Free + Pro APKs) */
 function openMX(){
     if(!fileUrl) return;
-    const url = `intent:${fileUrl}#Intent;package=com.mxtech.videoplayer.ad;type=video/*;title=${encodeURIComponent(fileName)};end`;
-    window.location.href = url;
+    // Standard Free MX package
+    const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.mxtech.videoplayer.ad;S.title=${encodeURIComponent(fileName)};end`;
+    window.location.href = intent;
 }
 
-/* PLAYIT PLAYER */
+/* 4. PLAYIT PLAYER */
 function openPlayIt(){
     if(!fileUrl) return;
-    const url = `intent:${fileUrl}#Intent;package=com.playit.videoplayer;type=video/*;title=${encodeURIComponent(fileName)};end`;
-    window.location.href = url;
+    const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.playit.videoplayer;S.title=${encodeURIComponent(fileName)};end`;
+    window.location.href = intent;
 }
 
-/* JUST PLAYER */
+/* 5. JUST PLAYER */
 function openJustPlayer(){
     if(!fileUrl) return;
-    const url = `intent:${fileUrl}#Intent;package=com.brouken.player;type=video/*;title=${encodeURIComponent(fileName)};end`;
-    window.location.href = url;
+    const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.brouken.player;S.title=${encodeURIComponent(fileName)};end`;
+    window.location.href = intent;
 }
 
-/* KMPLAYER */
+/* 6. KMPLAYER */
 function openKMPlayer(){
     if(!fileUrl) return;
-    const url = `intent:${fileUrl}#Intent;package=com.kmplayer;type=video/*;title=${encodeURIComponent(fileName)};end`;
-    window.location.href = url;
+    const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.kmplayer;S.title=${encodeURIComponent(fileName)};end`;
+    window.location.href = intent;
 }
 
-/* NPLAYER (iOS & Android) */
+/* 7. NPLAYER (iOS & Android) */
 function opennPlayer(){
     if(!fileUrl) return;
     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
     if(isIOS){
         window.location.href = `nplayer-${fileUrl}`;
     } else {
-        const url = `intent:${fileUrl}#Intent;package=com.newin.nplayer.pro;type=video/*;title=${encodeURIComponent(fileName)};end`;
-        window.location.href = url;
+        const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.newin.nplayer.pro;S.title=${encodeURIComponent(fileName)};end`;
+        window.location.href = intent;
     }
 }
 
-/* COPY LINK */
+/* COPY LINK FUNCTION */
 async function copyStreamLink(){
     try{
         if(navigator.clipboard && window.isSecureContext){
@@ -335,9 +363,9 @@ async function copyStreamLink(){
             document.execCommand("copy");
             ta.remove();
         }
-        toast("Stream link copied");
+        toast("Stream link copied!");
     }catch(e){
-        toast("Unable to copy link");
+        toast("Copy failed, link manually copy karein");
     }
 }
 
