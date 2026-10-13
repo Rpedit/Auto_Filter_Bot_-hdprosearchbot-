@@ -14,9 +14,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 
 <style>
-*{
-    box-sizing:border-box;
-}
+*{ box-sizing:border-box; }
 
 body{
     margin:0;
@@ -53,17 +51,24 @@ body{
 }
 
 .ad-label{
-    color:#666;
+    color:#777;
     font-size:9px;
     letter-spacing:1.5px;
     text-align:center;
-    margin-bottom:5px;
+    margin-bottom:6px;
 }
 
-.ad-slot{
+.ad-container{
     width:100%;
+    min-height:70px;
+    border-radius:12px;
+    background:rgba(12,12,12,.8);
+    border:1px dashed rgba(255,255,255,.12);
+    display:flex;
+    align-items:center;
+    justify-content:center;
     overflow:hidden;
-    border-radius:10px;
+    transition:opacity .3s ease;
 }
 
 .action-card{
@@ -76,7 +81,7 @@ body{
     cursor:pointer;
     text-decoration:none;
     color:#fff;
-    transition:transform .18s ease, border-color .18s ease, background .18s ease;
+    transition:transform .18s ease, border-color .18s ease;
 }
 
 .action-card:hover{
@@ -131,11 +136,11 @@ footer{
 
 <main class="max-w-4xl mx-auto px-4 py-6">
 
-  <!-- TOP AD -->
+  <!-- TOP AD SLOT WITH AUTO REFRESH -->
   <div class="mb-5">
-    <div class="ad-label">ADVERTISEMENT</div>
-    <div id="ad-slot-top" class="ad-slot">
-      <!-- PASTE TOP AD CODE HERE -->
+    <div class="ad-label">SPONSORED / ADVERTISEMENT</div>
+    <div id="ad-top-wrapper" class="ad-container">
+      <!-- AD CONTENT LOADS DYNAMICALLY HERE -->
     </div>
   </div>
 
@@ -146,7 +151,7 @@ footer{
         <i class="fa-solid fa-clapperboard"></i>
       </div>
       <div class="min-w-0">
-        <div class="text-xs uppercase tracking-widest text-red-400 font-semibold mb-1">Ready to Stream</div>
+        <div class="text-xs uppercase tracking-widest text-red-400 font-semibold mb-1">Direct Stream</div>
         <h1 id="movieTitle" class="text-lg sm:text-xl font-bold break-words leading-snug">
           {{file_name}}
         </h1>
@@ -154,27 +159,27 @@ footer{
     </div>
   </section>
 
-  <!-- QUICK CHOOSE / ANY PLAYER -->
+  <!-- AUTO PLAY (CHOOSER INTENT) -->
   <div onclick="openAnyPlayer()" class="action-card glass flex-row gap-4 py-4 px-5 mb-5 border-red-500/30 bg-red-950/20 hover:border-red-500/60">
     <div class="w-11 h-11 rounded-xl bg-red-600 text-white flex items-center justify-center text-xl shrink-0">
       <i class="fa-solid fa-bolt"></i>
     </div>
     <div class="text-left flex-1 min-w-0">
       <div class="text-base font-bold text-white flex items-center gap-2">
-        Auto Play (Recommended)
-        <span class="text-[10px] bg-red-600/40 text-red-300 px-2 py-0.5 rounded-full uppercase tracking-wider">Fast</span>
+        Instant Auto Play
+        <span class="text-[10px] bg-red-600/40 text-red-300 px-2 py-0.5 rounded-full uppercase tracking-wider">Zero Buffer</span>
       </div>
-      <div class="text-xs text-gray-400 mt-0.5">Device ke default ya installed player me direct play karega</div>
+      <div class="text-xs text-gray-400 mt-0.5">Phone ke best player me bypass headers ke sath start karega</div>
     </div>
     <i class="fa-solid fa-chevron-right text-gray-500 text-sm"></i>
   </div>
 
-  <!-- SELECT PLAYER TITLE -->
+  <!-- SELECT EXTERNAL PLAYER -->
   <div class="flex items-center justify-between mb-4">
     <h2 class="text-sm font-semibold tracking-wider uppercase text-gray-400 flex items-center gap-2">
-      <i class="fa-solid fa-play text-red-500 text-xs"></i> Select External Player
+      <i class="fa-solid fa-play text-red-500 text-xs"></i> Select Media App
     </h2>
-    <span class="text-xs text-gray-500">Tap to start video</span>
+    <span class="text-xs text-gray-500">Tap to play</span>
   </div>
 
   <!-- PLAYERS GRID -->
@@ -184,26 +189,26 @@ footer{
     <div onclick="openVLC()" class="action-card glass">
       <img src="https://i.postimg.cc/15TQ4y7B/vlc.png" alt="VLC" class="w-10 h-10 object-contain mb-2">
       <div class="font-bold text-sm">VLC Player</div>
-      <div class="text-[11px] text-gray-400 mt-0.5">Android / PC / iOS</div>
+      <div class="text-[11px] text-gray-400 mt-0.5">Direct Stream</div>
     </div>
 
     <!-- MX PLAYER -->
     <div onclick="openMX()" class="action-card glass">
       <img src="https://i.postimg.cc/sx4Msv4T/mx.png" alt="MX Player" class="w-10 h-10 object-contain mb-2">
       <div class="font-bold text-sm">MX Player</div>
-      <div class="text-[11px] text-gray-400 mt-0.5">Hardware Decoder</div>
+      <div class="text-[11px] text-gray-400 mt-0.5">Headers Attached</div>
     </div>
 
-    <!-- PLAYIT PLAYER -->
+    <!-- PLAYIT -->
     <div onclick="openPlayIt()" class="action-card glass">
       <div class="w-10 h-10 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center text-xl mb-2 border border-purple-500/30">
         <i class="fa-solid fa-circle-play"></i>
       </div>
       <div class="font-bold text-sm">PLAYit</div>
-      <div class="text-[11px] text-gray-400 mt-0.5">All Formats</div>
+      <div class="text-[11px] text-gray-400 mt-0.5">Online Network</div>
     </div>
 
-    <!-- JUST PLAYER (EXOPLAYER) -->
+    <!-- JUST PLAYER -->
     <div onclick="openJustPlayer()" class="action-card glass">
       <div class="w-10 h-10 rounded-xl bg-emerald-600/20 text-emerald-400 flex items-center justify-center text-xl mb-2 border border-emerald-500/30">
         <i class="fa-solid fa-film"></i>
@@ -218,7 +223,7 @@ footer{
         <i class="fa-solid fa-play"></i>
       </div>
       <div class="font-bold text-sm">KMPlayer</div>
-      <div class="text-[11px] text-gray-400 mt-0.5">High Bitrate</div>
+      <div class="text-[11px] text-gray-400 mt-0.5">HD Playback</div>
     </div>
 
     <!-- NPLAYER -->
@@ -234,30 +239,28 @@ footer{
 
   <!-- UTILITY ACTIONS -->
   <section class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
-    <!-- COPY LINK -->
     <button onclick="copyStreamLink()" class="action-card glass flex-row gap-3 py-3.5">
       <i class="fa-solid fa-copy text-blue-400 text-lg"></i>
       <div class="text-left">
         <div class="text-sm font-semibold">Copy Stream Link</div>
-        <div class="text-[11px] text-gray-400">Manual network stream URL ke liye</div>
+        <div class="text-[11px] text-gray-400">Manual URL paste ke liye</div>
       </div>
     </button>
 
-    <!-- DIRECT DOWNLOAD -->
     <button onclick="downloadVideo()" class="action-card glass flex-row gap-3 py-3.5">
       <i class="fa-solid fa-circle-down text-emerald-400 text-lg"></i>
       <div class="text-left">
         <div class="text-sm font-semibold">Direct Download</div>
-        <div class="text-[11px] text-gray-400">File ko device me save karein</div>
+        <div class="text-[11px] text-gray-400">Save file to device</div>
       </div>
     </button>
   </section>
 
-  <!-- BOTTOM AD -->
+  <!-- BOTTOM AD SLOT WITH AUTO REFRESH -->
   <div class="mt-7">
-    <div class="ad-label">ADVERTISEMENT</div>
-    <div id="ad-slot-bottom" class="ad-slot">
-      <!-- PASTE BOTTOM AD CODE HERE -->
+    <div class="ad-label">SPONSORED / ADVERTISEMENT</div>
+    <div id="ad-bottom-wrapper" class="ad-container">
+      <!-- AD CONTENT LOADS DYNAMICALLY HERE -->
     </div>
   </div>
 
@@ -274,7 +277,7 @@ footer{
 const fileUrl = "{{file_url}}";
 const fileName = "{{file_name}}";
 
-/* TOAST MESSAGE */
+/* TOAST UTILITY */
 function toast(msg){
     const el = document.getElementById("toast");
     el.textContent = msg;
@@ -283,60 +286,62 @@ function toast(msg){
     window.toastTimer = setTimeout(()=>{ el.classList.remove("show"); }, 2500);
 }
 
-/* 1. AUTO / ANY INSTALLED PLAYER (CHOOSER INTENT) */
+/* =========================================================
+   WORKING STREAM INTENTS (BUFFERING & HEADER BYPASS FIX)
+========================================================= */
+
+// User Agent header jo server block ko bypass karta hai
+const userAgentHeader = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
+
 function openAnyPlayer(){
     if(!fileUrl) return;
     const isAndroid = /Android/i.test(navigator.userAgent);
     if(isAndroid){
-        const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;S.title=${encodeURIComponent(fileName)};end`;
+        // Chooser intent with explicit video stream action
+        const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;S.title=${encodeURIComponent(fileName)};S.User-Agent=${encodeURIComponent(userAgentHeader)};end`;
         window.location.href = intent;
     } else {
         window.location.href = fileUrl;
     }
 }
 
-/* 2. VLC PLAYER (Cross-Platform) */
 function openVLC(){
     if(!fileUrl) return;
     const isAndroid = /Android/i.test(navigator.userAgent);
     if(isAndroid){
-        const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;S.title=${encodeURIComponent(fileName)};end`;
+        // VLC with custom headers & title
+        const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=org.videolan.vlc;S.title=${encodeURIComponent(fileName)};S.User-Agent=${encodeURIComponent(userAgentHeader)};end`;
         window.location.href = intent;
     } else {
         window.location.href = `vlc://${fileUrl}`;
     }
 }
 
-/* 3. MX PLAYER (Supports Free + Pro APKs) */
 function openMX(){
     if(!fileUrl) return;
-    // Standard Free MX package
-    const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.mxtech.videoplayer.ad;S.title=${encodeURIComponent(fileName)};end`;
+    // MX Player specific decode headers (Fixes infinite buffering)
+    const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.mxtech.videoplayer.ad;S.title=${encodeURIComponent(fileName)};S.headers=User-Agent:${encodeURIComponent(userAgentHeader)};end`;
     window.location.href = intent;
 }
 
-/* 4. PLAYIT PLAYER */
 function openPlayIt(){
     if(!fileUrl) return;
     const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.playit.videoplayer;S.title=${encodeURIComponent(fileName)};end`;
     window.location.href = intent;
 }
 
-/* 5. JUST PLAYER */
 function openJustPlayer(){
     if(!fileUrl) return;
     const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.brouken.player;S.title=${encodeURIComponent(fileName)};end`;
     window.location.href = intent;
 }
 
-/* 6. KMPLAYER */
 function openKMPlayer(){
     if(!fileUrl) return;
     const intent = `intent:${fileUrl}#Intent;action=android.intent.action.VIEW;type=video/*;package=com.kmplayer;S.title=${encodeURIComponent(fileName)};end`;
     window.location.href = intent;
 }
 
-/* 7. NPLAYER (iOS & Android) */
 function opennPlayer(){
     if(!fileUrl) return;
     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -348,7 +353,7 @@ function opennPlayer(){
     }
 }
 
-/* COPY LINK FUNCTION */
+/* COPY & DOWNLOAD */
 async function copyStreamLink(){
     try{
         if(navigator.clipboard && window.isSecureContext){
@@ -369,7 +374,6 @@ async function copyStreamLink(){
     }
 }
 
-/* DIRECT DOWNLOAD */
 function downloadVideo(){
     if(!fileUrl) return;
     const a = document.createElement("a");
@@ -381,6 +385,77 @@ function downloadVideo(){
     a.click();
     a.remove();
 }
+
+/* =========================================================
+   AUTOMATIC AD ROTATION / REFRESH ENGINE (EVERY 25 SECONDS)
+========================================================= */
+
+// Sample Dynamic Ads (Tum yahan apne Monetag / Adsterra / Direct Link banners daal sakte ho)
+const adInventory = [
+    {
+        html: `<a href="https://t.me/+sIOgiCYLtBxhNGI1" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;text-decoration:none;padding:10px 15px;">
+                 <div style="background:#ff2020;padding:8px;border-radius:10px;color:#fff;"><i class="fa-solid fa-fire"></i></div>
+                 <div>
+                   <div style="font-size:13px;font-weight:bold;color:#fff;">Latest 4K Movies & Series</div>
+                   <div style="font-size:11px;color:#aaa;">Join our official Telegram VIP Channel</div>
+                 </div>
+               </a>`
+    },
+    {
+        html: `<a href="https://t.me/+sIOgiCYLtBxhNGI1" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;text-decoration:none;padding:10px 15px;">
+                 <div style="background:#3b82f6;padding:8px;border-radius:10px;color:#fff;"><i class="fa-solid fa-bolt"></i></div>
+                 <div>
+                   <div style="font-size:13px;font-weight:bold;color:#fff;">High Speed Direct Download Servers</div>
+                   <div style="font-size:11px;color:#aaa;">Fastest cloud leeching & streaming bot</div>
+                 </div>
+               </a>`
+    },
+    {
+        html: `<a href="https://t.me/+sIOgiCYLtBxhNGI1" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;text-decoration:none;padding:10px 15px;">
+                 <div style="background:#10b981;padding:8px;border-radius:10px;color:#fff;"><i class="fa-solid fa-gift"></i></div>
+                 <div>
+                   <div style="font-size:13px;font-weight:bold;color:#fff;">Unlock Ultra HD 60FPS Streams</div>
+                   <div style="font-size:11px;color:#aaa;">Check daily updates in bot community</div>
+                 </div>
+               </a>`
+    }
+];
+
+let currentAdIndex = 0;
+
+function rotateAds(){
+    const topSlot = document.getElementById("ad-top-wrapper");
+    const bottomSlot = document.getElementById("ad-bottom-wrapper");
+    
+    if(!topSlot || !bottomSlot) return;
+
+    // Smooth fade out
+    topSlot.style.opacity = "0";
+    bottomSlot.style.opacity = "0";
+
+    setTimeout(()=>{
+        // Top Slot me current ad
+        topSlot.innerHTML = adInventory[currentAdIndex].html;
+        
+        // Bottom slot me next ad
+        const nextIndex = (currentAdIndex + 1) % adInventory.length;
+        bottomSlot.innerHTML = adInventory[nextIndex].html;
+        
+        // Fade in
+        topSlot.style.opacity = "1";
+        bottomSlot.style.opacity = "1";
+
+        // Increment pointer
+        currentAdIndex = (currentAdIndex + 1) % adInventory.length;
+    }, 300);
+}
+
+// Page load par pehla ad load karo
+document.addEventListener("DOMContentLoaded", ()=>{
+    rotateAds();
+    // Har 25 second me automatic naya ad aayega
+    setInterval(rotateAds, 25000);
+});
 </script>
 
 </body>
