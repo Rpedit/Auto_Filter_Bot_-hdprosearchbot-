@@ -477,6 +477,7 @@ async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) ->
     return best_fallback
 
 
+# HDHub4u Scraper: Exact Multi-Genres + Exact Rating
 async def fetch_third_party_meta(url: str) -> dict:
     data = {"rating": None, "genres": None}
     headers = {
@@ -494,6 +495,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                     soup = BeautifulSoup(html, "html.parser")
                     text = soup.get_text(" ", strip=True)
 
+                    # 1. Rating Scraper (e.g. IMDb Rating: 7.2/10, 6.8/10)
                     r_match = re.search(r'(?:imdb|rating|score)\s*[:\-]?\s*([1-9](?:\.\d)?)\s*(?:/10|\s*out of 10)?', text, re.IGNORECASE)
                     if not r_match:
                         r_match = re.search(r'\b([1-9]\.\d)\s*/\s*10\b', text)
@@ -503,6 +505,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                         if 1.0 <= val <= 10.0:
                             data["rating"] = f"{val}/10"
 
+                    # 2. Multi-Genre Scraper (Pipe '|', Comma ',' dono capture honge)
                     extracted_genres = []
                     g_section = re.search(
                         r'(?:genres?|category)\s*[:\-]\s*(.*?)(?=(?:\b(?:audio|quality|language|release|stars?|director|format|size|cast|story)\b|\n|\r|$))',
@@ -555,13 +558,15 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
             return re.sub(r'[^a-zA-Z0-9]', '', s).lower().strip()
 
         stop_words = {"series", "complete", "part", "episode", "the", "and", "hindi", "dubbed"}
+        
+        # FIX: len(w) >= 2 allow karo taaki 'DC', 'PK', 'UP' jaise 2-letter movie words filter na hon!
         words = [
             w.lower() for w in re.split(r'[\s\-:_.()]+', base_name)
-            if len(w) >= 3 and not w.isdigit() and w.lower() not in stop_words and not w.lower().startswith("season")
+            if len(w) >= 2 and not w.isdigit() and w.lower() not in stop_words and not w.lower().startswith("season")
         ]
         
         if not words:
-            words = [w.lower() for w in re.split(r'[\s\-:_.()]+', base_name) if len(w) >= 3 and not w.isdigit()]
+            words = [w.lower() for w in re.split(r'[\s\-:_.()]+', base_name) if len(w) >= 2 and not w.isdigit()]
 
         search_terms = list(words[:2])
         if season:
@@ -647,7 +652,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
                                 src = inner_img.get("src") or inner_img.get("data-src")
                                 if src and not any(x in src.lower() for x in ["icon", "avatar", "blank.gif"]):
                                     img_url = src.strip()
-                                    if href.startswith("http") and not any(x in href for x in ["blogger.com", "blogspot.com", "googleusercontent"]):
+                                    if href.startswith("http") and not any(x in href for x in ["blogger.com", "blogspot.com"]):
                                         target_url = href
                                         break
 
@@ -661,15 +666,20 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
                         if not target_url:
                             for a_tag in post_soup.find_all("a", href=True):
                                 href = a_tag["href"].strip()
-                                if href.startswith("http") and not any(x in href for x in ["blogger.com", "blogspot.com", "googleusercontent"]):
+                                if href.startswith("http") and not any(x in href for x in ["blogger.com", "blogspot.com"]):
                                     target_url = href
                                     break
 
+                        # FIX: Google CDN images ke liye 404 fix (=s0 original resolution)
                         if img_url:
-                            img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
-                            img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s1600/', img_url)
-                            img_url = re.sub(r'=s\d+(-c)?', '=s1600', img_url)
-                            img_url = re.sub(r'=w\d+-h\d+(-c)?', '=s1600', img_url)
+                            if "googleusercontent.com" in img_url:
+                                img_url = re.sub(r'=w\d+-h\d+.*$', '=s0', img_url)
+                                img_url = re.sub(r'=s\d+.*$', '=s0', img_url)
+                                if "=s0" not in img_url and "=" in img_url:
+                                    img_url = img_url.split("=")[0] + "=s0"
+                            else:
+                                img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
+                                img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s1600/', img_url)
 
                             logger.info(f"Blogger Exact Matched! URL: '{post_url}' | Poster: {bool(img_url)} | Target URL: {target_url}")
                             return img_url, target_url
@@ -1102,7 +1112,7 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
-        # STEP 1: Blogger check with season passed
+        # STEP 1: Blogger check
         blogger_poster_url, blogger_info_url = await get_blogger_data(
             base_name,
             media_info.get("year"),
@@ -1151,11 +1161,13 @@ async def _process_with_lock(
             imdb_id = tmdb_details.get("imdb_id")
 
         elif blogger_is_external and blogger_info_url:
+            # HDHub4u ya Koi Bhi Website Link
             third_party_data = await fetch_third_party_meta(blogger_info_url)
             official_search_title = base_name
             imdb_id = None
 
         else:
+            # Fallback ONLY when NO Blogger Link is given
             imdb_details = await fetch_imdb_safely(
                 base_name,
                 is_series=is_series,
@@ -1171,6 +1183,7 @@ async def _process_with_lock(
         if not tmdb_details or tmdb_details.get("error"):
             error_tmdb = True
 
+        # STRICT POSTER PRIORITY: Blogger Poster First & Always!
         poster_url = ""
         is_backdrop = False
 
@@ -1195,6 +1208,7 @@ async def _process_with_lock(
             )
             is_backdrop = bool(imdb_details.get("backdrop_url"))
 
+        # EXACT RATING LOGIC
         rating = "x/10"
         if blogger_is_external:
             if third_party_data.get("rating"):
@@ -1215,6 +1229,7 @@ async def _process_with_lock(
             elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
                 rating = str(imdb_rate).strip()
 
+        # TARGET URL LOGIC
         imdb_url = ""
         if blogger_info_url:
             imdb_url = blogger_info_url.strip()
@@ -1227,6 +1242,7 @@ async def _process_with_lock(
             elif tmdb_details.get("id"):
                 imdb_url = f"https://www.themoviedb.org/movie/{tmdb_details.get('id')}"
 
+        # GENRES LOGIC
         genre_list = []
         raw_genres = None
 
