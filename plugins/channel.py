@@ -415,7 +415,7 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
         return f"{total_mins}m"
 
 
-# Pura real web scraper: IMDb, HDHub4u aur any other website se original genres & ratings
+# Pura real web scraper: IMDb, TMDb, HDHub4u aur any other website se original visible genres & ratings
 async def fetch_third_party_meta(url: str) -> dict:
     data = {"rating": None, "genres": None}
     headers = {
@@ -443,11 +443,11 @@ async def fetch_third_party_meta(url: str) -> dict:
                         if 1.0 <= val <= 10.0:
                             data["rating"] = f"{val}/10"
 
-                    # 2. Case A: IMDb Direct URL scrape for exact primary genres
+                    # 2. Case A: IMDb Direct URL scrape (Exact Primary Visible Genres only)
                     if "imdb.com" in url.lower():
                         imdb_genres = []
                         # IMDb ke main visible genre chip buttons
-                        for a in soup.select('a[href*="/search/title/?genres="], a[href*="/search/title?genres="]'):
+                        for a in soup.select('div[data-testid="genres"] a, a[href*="/search/title/?genres="], a[href*="/search/title?genres="]'):
                             g_text = a.get_text(strip=True).title()
                             if g_text and g_text not in imdb_genres and len(g_text) > 2 and not g_text.isdigit():
                                 imdb_genres.append(g_text)
@@ -455,7 +455,17 @@ async def fetch_third_party_meta(url: str) -> dict:
                         if imdb_genres:
                             data["genres"] = ", ".join(imdb_genres)
 
-                    # 3. Case B: HDHub4u / Third-party websites
+                    # 3. Case B: TMDb Direct Web URL scrape (Primary genre badges)
+                    elif "themoviedb.org" in url.lower():
+                        tmdb_genres = []
+                        for a in soup.select('span.genres a, a[href*="/genre/"]'):
+                            g_text = a.get_text(strip=True).title()
+                            if g_text and g_text not in tmdb_genres and len(g_text) > 2:
+                                tmdb_genres.append(g_text)
+                        if tmdb_genres:
+                            data["genres"] = ", ".join(tmdb_genres)
+
+                    # 4. Case C: HDHub4u / Any Third-party websites
                     if not data["genres"]:
                         g_section = re.search(
                             r'(?:genres?|category)\s*[:\-]\s*(.*?)(?=(?:\b(?:audio|quality|language|release|stars?|director|format|size|cast|story)\b|\n|\r|$))',
@@ -1080,7 +1090,7 @@ async def _process_with_lock(
         tmdb_details = {}
         third_party_data = {}
 
-        # Agar Blogger link diya hai toh sabse pehle exact URL scraping se primary details uthao
+        # Agar Blogger link diya hai toh direct URL scraping se primary details uthao
         if blogger_info_url:
             third_party_data = await fetch_third_party_meta(blogger_info_url)
 
@@ -1152,7 +1162,7 @@ async def _process_with_lock(
         # STRICT TARGET LINK: Blogger poster ka URL aayega
         imdb_url = blogger_info_url.strip() if blogger_info_url else ""
 
-        # GENRES: Exact Original Genres from Link
+        # GENRES: Exact Original Visible Genres from the Link
         genres = "N/A"
         if third_party_data.get("genres"):
             genres = str(third_party_data["genres"]).strip()
@@ -1173,10 +1183,12 @@ async def _process_with_lock(
             raw_genres = imdb_details.get("genres")
             if isinstance(raw_genres, list):
                 genre_list = [str(g).strip().title() for g in raw_genres if str(g).strip()]
+                # Primary visible genres only
                 if genre_list:
-                    genres = ", ".join(genre_list)
+                    genres = ", ".join(genre_list[:5])
             elif isinstance(raw_genres, str) and raw_genres.strip() and raw_genres.upper() != "N/A":
-                genres = raw_genres.strip()
+                parts = [p.strip().title() for p in raw_genres.split(",") if p.strip()]
+                genres = ", ".join(parts[:5])
 
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
