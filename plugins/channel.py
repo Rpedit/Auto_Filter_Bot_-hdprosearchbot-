@@ -82,7 +82,6 @@ CAPTION_LANGUAGES = {
 }
 
 OTT_PLATFORMS = {
-    # Mainstream Global & Indian OTTs
     "nf": "Netflix", "netflix": "Netflix",
     "sonyliv": "SonyLiv", "sony": "SonyLiv", "sliv": "SonyLiv",
     "amzn": "Amazon Prime Video", "prime": "Amazon Prime Video", "primevideo": "Amazon Prime Video",
@@ -97,8 +96,6 @@ OTT_PLATFORMS = {
     "hulu": "Hulu",
     "peacock": "Peacock",
     "lionsgate": "Lionsgate Play", "lionsgateplay": "Lionsgate Play",
-
-    # Desi / Web Series / Regional Platforms
     "ullu": "Ullu",
     "atrangii": "Atrangii", "atrangi": "Atrangii",
     "kooku": "Kooku",
@@ -141,14 +138,6 @@ RES_ORDER = {
     "540p": 540, "720p": 720, "1080p": 1080, "1440p": 1440,
     "2160p": 2160, "4k": 2160
 }
-
-VALID_GENRES_SET = {
-    "Action", "Adventure", "Animation", "Biography", "Comedy", "Crime",
-    "Documentary", "Drama", "Family", "Fantasy", "Film-Noir", "History",
-    "Horror", "Music", "Musical", "Mystery", "Romance", "Sci-Fi", "Short",
-    "Sport", "Thriller", "War", "Western", "Anime"
-}
-GENRE_LOOKUP = {g.lower(): g for g in VALID_GENRES_SET}
 
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
 NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
@@ -414,6 +403,7 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
         return f"{total_mins}m"
 
 
+# Direct scraping from Third-party page without any internal hardcoded genre dictionary
 async def fetch_third_party_meta(url: str) -> dict:
     data = {"rating": None, "genres": None}
     headers = {
@@ -440,23 +430,22 @@ async def fetch_third_party_meta(url: str) -> dict:
                         if 1.0 <= val <= 10.0:
                             data["rating"] = f"{val}/10"
 
-                    extracted_genres = []
+                    # Page text se Genres direct extract
                     g_section = re.search(
                         r'(?:genres?|category)\s*[:\-]\s*(.*?)(?=(?:\b(?:audio|quality|language|release|stars?|director|format|size|cast|story)\b|\n|\r|$))',
                         text,
                         re.IGNORECASE
                     )
-                    target_text = g_section.group(1) if g_section else text
-
-                    for word in re.findall(r'[A-Za-z\-]+', target_text):
-                        clean_w = word.strip().lower()
-                        if clean_w in GENRE_LOOKUP:
-                            canonical = GENRE_LOOKUP[clean_w]
-                            if canonical not in extracted_genres:
-                                extracted_genres.append(canonical)
-
-                    if extracted_genres:
-                        data["genres"] = ", ".join(extracted_genres)
+                    if g_section:
+                        raw_genre_str = g_section.group(1).strip()
+                        raw_parts = re.split(r'[,\|/]+', raw_genre_str)
+                        cleaned_genres = []
+                        for part in raw_parts:
+                            p = part.strip().title()
+                            if p and len(p) > 2 and p not in cleaned_genres and not p.isdigit():
+                                cleaned_genres.append(p)
+                        if cleaned_genres:
+                            data["genres"] = ", ".join(cleaned_genres)
     except Exception as e:
         logger.warning(f"Error scraping website '{url}': {e}")
 
@@ -1009,11 +998,6 @@ async def _process_with_lock(
 
     is_series = media_info["tag"] == "#SERIES"
 
-    is_mismatched = False
-    if movie_doc:
-        if not movie_doc.get("from_blogger"):
-            is_mismatched = True
-
     final_file_runtime = (
         f"{file_runtime_mins}"
         if file_runtime_mins
@@ -1033,14 +1017,19 @@ async def _process_with_lock(
         "runtime": final_file_runtime
     }
 
-    if not movie_doc or is_mismatched:
-        # STEP 1: Blogger check strictly
-        blogger_poster_url, blogger_info_url = await get_blogger_data(
-            base_name,
-            media_info.get("year"),
-            season=media_info.get("season")
-        )
+    # STEP 1: Blogger check strictly
+    blogger_poster_url, blogger_info_url = await get_blogger_data(
+        base_name,
+        media_info.get("year"),
+        season=media_info.get("season")
+    )
 
+    is_mismatched = False
+    if movie_doc:
+        if not movie_doc.get("from_blogger") and blogger_poster_url:
+            is_mismatched = True
+
+    if not movie_doc or is_mismatched:
         blogger_is_imdb = False
         blogger_is_tmdb = False
         blogger_is_external = False
@@ -1070,7 +1059,11 @@ async def _process_with_lock(
                 imdb_details = await get_movie_details(blogger_imdb_id) or {}
             except Exception:
                 pass
-            official_search_title = imdb_details.get("title", base_name)
+            cand_title = imdb_details.get("title")
+            if cand_title and is_good_title_match(base_name, cand_title):
+                official_search_title = cand_title
+            else:
+                official_search_title = base_name
             imdb_id = blogger_imdb_id
 
         # 2. Agar Blogger par TMDb Link add kiya hai
@@ -1087,12 +1080,15 @@ async def _process_with_lock(
             except Exception:
                 tmdb_details = {}
 
-            official_search_title = (
+            cand_title = (
                 tmdb_details.get("localized_title")
                 or tmdb_details.get("title")
                 or tmdb_details.get("name")
-                or base_name
             )
+            if cand_title and is_good_title_match(base_name, cand_title):
+                official_search_title = cand_title
+            else:
+                official_search_title = base_name
             imdb_id = tmdb_details.get("imdb_id")
 
         # 3. Agar Blogger par HDHub4u ya Website link add kiya hai
@@ -1101,7 +1097,7 @@ async def _process_with_lock(
             official_search_title = base_name
             imdb_id = None
 
-        # 4. Agar Blogger par koi link nahi hai, toh TITLE = EXACT BASE NAME (Koi random fetch nahi!)
+        # 4. Agar Blogger par koi link nahi hai
         else:
             official_search_title = base_name
             imdb_id = None
@@ -1127,8 +1123,8 @@ async def _process_with_lock(
         # STRICT TARGET LINK: Sirf Blogger poster ka URL aayega
         imdb_url = blogger_info_url.strip() if blogger_info_url else ""
 
-        # GENRES RULE: Link se parse honge
-        genre_list = []
+        # GENRES: Sirf aur sirf link se aayenge
+        genres = "N/A"
         raw_genres = None
 
         if blogger_is_external and third_party_data.get("genres"):
@@ -1139,15 +1135,16 @@ async def _process_with_lock(
             raw_genres = imdb_details.get("genres")
 
         if isinstance(raw_genres, list):
+            genre_list = []
             for g in raw_genres:
                 if isinstance(g, dict) and g.get("name"):
                     genre_list.append(str(g["name"]).strip().title())
                 elif isinstance(g, str):
                     genre_list.append(g.strip().title())
-        elif isinstance(raw_genres, str) and raw_genres != "N/A":
-            genre_list = [g.strip().title() for g in raw_genres.split(",") if g.strip()]
-
-        genres = ", ".join(genre_list) if genre_list else "N/A"
+            if genre_list:
+                genres = ", ".join(genre_list)
+        elif isinstance(raw_genres, str) and raw_genres.strip() and raw_genres.upper() != "N/A":
+            genres = raw_genres.strip()
 
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
