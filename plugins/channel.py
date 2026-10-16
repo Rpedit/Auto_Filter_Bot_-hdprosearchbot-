@@ -42,6 +42,8 @@ _BASE_IGNORE_WORDS = {
     "disney", "dnp", "lionsgate", "lionsgateplay", "peacock", "max", "alt",
     "altbalaji", "altt", "shemaroo", "shemaroome", "chaupal", "stage",
     "planetmarathi", "manorama", "manoramamax", "tubi",
+    "ullu", "atrangii", "atrangi", "kooku", "primeplay", "fliz", "flizmovies",
+    "jiocinema", "mx", "mxplayer", "hungama", "hungamaplay", "addatimes", "klikk", "gemplex", "cinemadosti",
     "5.1", "7.1", "2.0", "5.1ch", "7.1ch", "dd5.1", "ddp5.1", "dd", "ddp"
 }
 
@@ -80,12 +82,13 @@ CAPTION_LANGUAGES = {
 }
 
 OTT_PLATFORMS = {
+    # Mainstream Global & Indian OTTs
     "nf": "Netflix", "netflix": "Netflix",
     "sonyliv": "SonyLiv", "sony": "SonyLiv", "sliv": "SonyLiv",
     "amzn": "Amazon Prime Video", "prime": "Amazon Prime Video", "primevideo": "Amazon Prime Video",
     "hotstar": "Disney+ Hotstar", "disney": "Disney+", "dnp": "Disney+",
     "zee5": "Zee5",
-    "jio": "JioHotstar", "jhs": "JioHotstar",
+    "jio": "JioHotstar", "jhs": "JioHotstar", "jiocinema": "JioCinema",
     "aha": "Aha", "hbo": "HBO Max", "max": "Max",
     "paramount": "Paramount+",
     "apple": "Apple TV+", "atv": "Apple TV+", "atvp": "Apple TV+", "appletv": "Apple TV+",
@@ -94,13 +97,26 @@ OTT_PLATFORMS = {
     "hulu": "Hulu",
     "peacock": "Peacock",
     "lionsgate": "Lionsgate Play", "lionsgateplay": "Lionsgate Play",
+
+    # Desi / Web Series / Regional Platforms
+    "ullu": "Ullu",
+    "atrangii": "Atrangii", "atrangi": "Atrangii",
+    "kooku": "Kooku",
     "altbalaji": "ALTT", "alt": "ALTT", "altt": "ALTT",
+    "primeplay": "PrimePlay",
+    "fliz": "Fliz Movies", "flizmovies": "Fliz Movies",
     "shemaroo": "ShemarooMe", "shemaroome": "ShemarooMe",
     "chaupal": "Chaupal",
     "stage": "Stage",
     "planetmarathi": "Planet Marathi",
     "manorama": "ManoramaMAX", "manoramamax": "ManoramaMAX",
-    "tubi": "Tubi"
+    "tubi": "Tubi",
+    "mx": "MX Player", "mxplayer": "MX Player",
+    "hungama": "Hungama Play", "hungamaplay": "Hungama Play",
+    "addatimes": "Addatimes",
+    "klikk": "Klikk",
+    "gemplex": "Gemplex",
+    "cinemadosti": "Cinema Dosti", "dosti": "Cinema Dosti"
 }
 
 STANDARD_FORMATS = {
@@ -398,86 +414,6 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
         return f"{total_mins}m"
 
 
-async def fetch_imdb_safely(base_name: str, is_series: bool, year: Optional[str] = None) -> dict:
-    sig = inspect.signature(get_movie_details)
-    kwargs = {}
-    if "is_series" in sig.parameters:
-        kwargs["is_series"] = is_series
-    elif "media_type" in sig.parameters:
-        kwargs["media_type"] = "tv" if is_series else "movie"
-
-    queries = []
-    if is_series:
-        if year:
-            queries.append(f"{base_name} {year}")
-        queries.append(f"{base_name} Series")
-        queries.append(f"{base_name} TV")
-        queries.append(base_name)
-    else:
-        if year:
-            queries.append(f"{base_name} {year}")
-        queries.append(base_name)
-
-    best_fallback = {}
-    for q in queries:
-        try:
-            res = await get_movie_details(q, **kwargs) if kwargs else await get_movie_details(q)
-            if res and isinstance(res, dict):
-                title = res.get("title")
-                if title and is_good_title_match(base_name, title):
-                    return res
-                if not best_fallback and res:
-                    best_fallback = res
-        except Exception as e:
-            logger.warning(f"Error fetching IMDb details for '{q}': {e}")
-
-    return best_fallback
-
-
-async def fetch_tmdb_safely(tmdb_query: str, base_name: str, is_series: bool) -> dict:
-    if not TMDB_POSTER:
-        return {}
-
-    sig = inspect.signature(get_movie_detailsx)
-    kwargs = {}
-    if "is_series" in sig.parameters:
-        kwargs["is_series"] = is_series
-    elif "media_type" in sig.parameters:
-        kwargs["media_type"] = "tv" if is_series else "movie"
-
-    if tmdb_query:
-        if str(tmdb_query).startswith("tt") or str(tmdb_query).isdigit():
-            try:
-                res = await get_movie_detailsx(tmdb_query, **kwargs) if kwargs else await get_movie_detailsx(tmdb_query)
-                if res and not res.get("error"):
-                    return res
-            except Exception:
-                pass
-
-    queries = []
-    if is_series:
-        queries.append(f"{base_name} Series")
-        queries.append(base_name)
-    else:
-        queries.append(tmdb_query or base_name)
-
-    best_fallback = {}
-    for q in queries:
-        try:
-            res = await get_movie_detailsx(q, **kwargs) if kwargs else await get_movie_detailsx(q)
-            if res and not res.get("error"):
-                title = res.get("title") or res.get("name")
-                if title and is_good_title_match(base_name, title):
-                    return res
-                if not best_fallback:
-                    best_fallback = res
-        except Exception:
-            pass
-
-    return best_fallback
-
-
-# HDHub4u Scraper: Exact Multi-Genres + Exact Rating
 async def fetch_third_party_meta(url: str) -> dict:
     data = {"rating": None, "genres": None}
     headers = {
@@ -495,7 +431,6 @@ async def fetch_third_party_meta(url: str) -> dict:
                     soup = BeautifulSoup(html, "html.parser")
                     text = soup.get_text(" ", strip=True)
 
-                    # 1. Rating Scraper (e.g. IMDb Rating: 7.2/10, 6.8/10)
                     r_match = re.search(r'(?:imdb|rating|score)\s*[:\-]?\s*([1-9](?:\.\d)?)\s*(?:/10|\s*out of 10)?', text, re.IGNORECASE)
                     if not r_match:
                         r_match = re.search(r'\b([1-9]\.\d)\s*/\s*10\b', text)
@@ -505,7 +440,6 @@ async def fetch_third_party_meta(url: str) -> dict:
                         if 1.0 <= val <= 10.0:
                             data["rating"] = f"{val}/10"
 
-                    # 2. Multi-Genre Scraper (Pipe '|', Comma ',' dono capture honge)
                     extracted_genres = []
                     g_section = re.search(
                         r'(?:genres?|category)\s*[:\-]\s*(.*?)(?=(?:\b(?:audio|quality|language|release|stars?|director|format|size|cast|story)\b|\n|\r|$))',
@@ -559,7 +493,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
 
         stop_words = {"series", "complete", "part", "episode", "the", "and", "hindi", "dubbed"}
         
-        # FIX: len(w) >= 2 allow karo taaki 'DC', 'PK', 'UP' jaise 2-letter movie words filter na hon!
         words = [
             w.lower() for w in re.split(r'[\s\-:_.()]+', base_name)
             if len(w) >= 2 and not w.isdigit() and w.lower() not in stop_words and not w.lower().startswith("season")
@@ -576,7 +509,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
         candidate_urls = []
 
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            # 1. Search page by keyword
             if simple_search:
                 search_page_url = f"{blog_url}/search?q={simple_search}"
                 try:
@@ -604,7 +536,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
                 except Exception as se:
                     logger.warning(f"Error fetching Blogger search page: {se}")
 
-            # 2. Feed fallback
             if not candidate_urls:
                 feed_url = f"{blog_url}/feeds/posts/default?alt=json&max-results=50"
                 try:
@@ -633,7 +564,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
                 logger.warning(f"Blogger me koi matching post nahi mili target: '{base_name}' (Season {season}) ke liye")
                 return None, None
 
-            # 3. Post Parse
             for post_url in candidate_urls:
                 try:
                     async with session.get(post_url) as p_resp:
@@ -670,7 +600,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
                                     target_url = href
                                     break
 
-                        # FIX: Google CDN images ke liye 404 fix (=s0 original resolution)
                         if img_url:
                             if "googleusercontent.com" in img_url:
                                 img_url = re.sub(r'=w\d+-h\d+.*$', '=s0', img_url)
@@ -1082,15 +1011,8 @@ async def _process_with_lock(
 
     is_mismatched = False
     if movie_doc:
-        stored_title = movie_doc.get("title", "")
-        if stored_title and not is_good_title_match(base_name, stored_title):
-            logger.warning(f"Title mismatch detected: '{stored_title}' for '{base_name}'. Re-fetching!")
-            is_mismatched = True
-
         if not movie_doc.get("from_blogger"):
             is_mismatched = True
-
-    error_tmdb = False
 
     final_file_runtime = (
         f"{file_runtime_mins}"
@@ -1112,7 +1034,7 @@ async def _process_with_lock(
     }
 
     if not movie_doc or is_mismatched:
-        # STEP 1: Blogger check
+        # STEP 1: Blogger check strictly
         blogger_poster_url, blogger_info_url = await get_blogger_data(
             base_name,
             media_info.get("year"),
@@ -1142,6 +1064,7 @@ async def _process_with_lock(
         tmdb_details = {}
         third_party_data = {}
 
+        # 1. Agar Blogger par IMDb Link add kiya hai
         if blogger_is_imdb and blogger_imdb_id:
             try:
                 imdb_details = await get_movie_details(blogger_imdb_id) or {}
@@ -1150,8 +1073,20 @@ async def _process_with_lock(
             official_search_title = imdb_details.get("title", base_name)
             imdb_id = blogger_imdb_id
 
+        # 2. Agar Blogger par TMDb Link add kiya hai
         elif blogger_is_tmdb and blogger_tmdb_id:
-            tmdb_details = await fetch_tmdb_safely(blogger_tmdb_id, base_name, is_series) or {}
+            sig = inspect.signature(get_movie_detailsx)
+            kwargs = {}
+            if "is_series" in sig.parameters:
+                kwargs["is_series"] = is_series
+            elif "media_type" in sig.parameters:
+                kwargs["media_type"] = "tv" if is_series else "movie"
+
+            try:
+                tmdb_details = await get_movie_detailsx(blogger_tmdb_id, **kwargs) if kwargs else await get_movie_detailsx(blogger_tmdb_id)
+            except Exception:
+                tmdb_details = {}
+
             official_search_title = (
                 tmdb_details.get("localized_title")
                 or tmdb_details.get("title")
@@ -1160,55 +1095,22 @@ async def _process_with_lock(
             )
             imdb_id = tmdb_details.get("imdb_id")
 
+        # 3. Agar Blogger par HDHub4u ya Website link add kiya hai
         elif blogger_is_external and blogger_info_url:
-            # HDHub4u ya Koi Bhi Website Link
             third_party_data = await fetch_third_party_meta(blogger_info_url)
             official_search_title = base_name
             imdb_id = None
 
+        # 4. Agar Blogger par koi link nahi hai, toh TITLE = EXACT BASE NAME (Koi random fetch nahi!)
         else:
-            # Fallback ONLY when NO Blogger Link is given
-            imdb_details = await fetch_imdb_safely(
-                base_name,
-                is_series=is_series,
-                year=media_info.get("year")
-            ) or {}
+            official_search_title = base_name
+            imdb_id = None
 
-            official_search_title = imdb_details.get("title", base_name)
-            imdb_id = imdb_details.get("imdb_id")
+        # STRICT POSTER RULE: Sirf Blogger poster aayega
+        poster_url = blogger_poster_url or ""
+        is_backdrop = True
 
-            tmdb_query = imdb_id if (imdb_id and imdb_id.startswith("tt")) else official_search_title
-            tmdb_details = await fetch_tmdb_safely(tmdb_query, base_name, is_series)
-
-        if not tmdb_details or tmdb_details.get("error"):
-            error_tmdb = True
-
-        # STRICT POSTER PRIORITY: Blogger Poster First & Always!
-        poster_url = ""
-        is_backdrop = False
-
-        if blogger_poster_url:
-            poster_url = blogger_poster_url
-            is_backdrop = True
-        elif (
-            LANDSCAPE_POSTER
-            and TMDB_POSTER
-            and tmdb_details.get("backdrop_url")
-            and not error_tmdb
-        ):
-            poster_url = tmdb_details.get("backdrop_url")
-            is_backdrop = True
-        elif tmdb_details.get("poster_url") and not error_tmdb:
-            poster_url = tmdb_details.get("poster_url")
-            is_backdrop = False
-        else:
-            poster_url = (
-                imdb_details.get("poster_url")
-                or imdb_details.get("backdrop_url", "")
-            )
-            is_backdrop = bool(imdb_details.get("backdrop_url"))
-
-        # EXACT RATING LOGIC
+        # STRICT RATING RULE: Sirf link se aayegi
         rating = "x/10"
         if blogger_is_external:
             if third_party_data.get("rating"):
@@ -1221,28 +1123,11 @@ async def _process_with_lock(
             r = str(imdb_details.get("rating")).strip()
             if r.upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
                 rating = r
-        else:
-            imdb_rate = imdb_details.get("rating")
-            tmdb_rate = tmdb_details.get("rating")
-            if tmdb_rate and str(tmdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-                rating = str(tmdb_rate).strip()
-            elif imdb_rate and str(imdb_rate).strip().upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-                rating = str(imdb_rate).strip()
 
-        # TARGET URL LOGIC
-        imdb_url = ""
-        if blogger_info_url:
-            imdb_url = blogger_info_url.strip()
-        else:
-            final_imdb_id = imdb_id or (tmdb_details.get("imdb_id") if isinstance(tmdb_details, dict) else None)
-            if final_imdb_id and str(final_imdb_id).startswith("tt"):
-                imdb_url = f"https://www.imdb.com/title/{final_imdb_id}/"
-            elif is_series and tmdb_details.get("id"):
-                imdb_url = f"https://www.themoviedb.org/tv/{tmdb_details.get('id')}"
-            elif tmdb_details.get("id"):
-                imdb_url = f"https://www.themoviedb.org/movie/{tmdb_details.get('id')}"
+        # STRICT TARGET LINK: Sirf Blogger poster ka URL aayega
+        imdb_url = blogger_info_url.strip() if blogger_info_url else ""
 
-        # GENRES LOGIC
+        # GENRES RULE: Link se parse honge
         genre_list = []
         raw_genres = None
 
@@ -1252,8 +1137,6 @@ async def _process_with_lock(
             raw_genres = tmdb_details.get("genres")
         elif blogger_is_imdb:
             raw_genres = imdb_details.get("genres")
-        else:
-            raw_genres = tmdb_details.get("genres") or imdb_details.get("genres")
 
         if isinstance(raw_genres, list):
             for g in raw_genres:
@@ -1277,14 +1160,12 @@ async def _process_with_lock(
         if isinstance(tmdb_r, (list, tuple)) and tmdb_r:
             tmdb_r = tmdb_r[0]
 
-        if blogger_is_tmdb:
-            runtime = str(tmdb_r).strip() if (tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else final_file_runtime
-        elif blogger_is_imdb:
-            runtime = str(imdb_r).strip() if (imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else final_file_runtime
-        elif is_series:
-            runtime = str(tmdb_r).strip() if (tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else final_file_runtime
+        if blogger_is_tmdb and tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
+            runtime = str(tmdb_r).strip()
+        elif blogger_is_imdb and imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
+            runtime = str(imdb_r).strip()
         else:
-            runtime = str(imdb_r).strip() if (imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else (str(tmdb_r).strip() if (tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", "")) else final_file_runtime)
+            runtime = final_file_runtime
 
         certificates = (
             tmdb_details.get("certificates")
@@ -1296,11 +1177,7 @@ async def _process_with_lock(
             )
         )
 
-        movie_year = (
-            media_info.get("year")
-            or tmdb_details.get("year")
-            or imdb_details.get("year")
-        )
+        movie_year = media_info.get("year") or tmdb_details.get("year") or imdb_details.get("year")
 
         if is_mismatched and movie_doc:
             update_data = {
@@ -1315,7 +1192,7 @@ async def _process_with_lock(
                 "year": movie_year,
                 "tag": media_info["tag"],
                 "ott_platform": media_info["ott_platform"],
-                "error_tmdb": error_tmdb,
+                "error_tmdb": False,
                 "is_backdrop": is_backdrop,
                 "from_blogger": bool(blogger_poster_url)
             }
@@ -1345,7 +1222,7 @@ async def _process_with_lock(
             "ott_platform": media_info["ott_platform"],
             "message_id": None,
             "is_photo": False,
-            "error_tmdb": error_tmdb,
+            "error_tmdb": False,
             "is_backdrop": is_backdrop,
             "from_blogger": bool(blogger_poster_url)
         }
@@ -1389,13 +1266,6 @@ async def _process_with_lock(
         current_db_runtime = movie_doc.get("runtime")
         if (not current_db_runtime or str(current_db_runtime).strip().upper() in ("N/A", "NONE", "0", "")) and final_file_runtime != "N/A":
             update_fields.setdefault("$set", {})["runtime"] = final_file_runtime
-
-        current_db_genres = movie_doc.get("genres")
-        if not current_db_genres or str(current_db_genres).strip().upper() in ("N/A", "NONE", ""):
-            imdb_details = await fetch_imdb_safely(base_name, is_series=is_series, year=media_info.get("year")) or {}
-            raw_g = imdb_details.get("genres")
-            if raw_g and str(raw_g).strip().upper() not in ("N/A", "NONE", ""):
-                update_fields.setdefault("$set", {})["genres"] = str(raw_g).strip()
 
         await db.movie_updates.update_one(
             {"_id": base_name},
@@ -1460,11 +1330,7 @@ async def send_movie_update(bot, base_name):
                     ]]
                 )
 
-                if movie_doc.get("from_blogger") or (LANDSCAPE_POSTER and movie_doc.get("is_backdrop")):
-                    size = (2560, 1440)
-                else:
-                    size = (853, 1280)
-
+                size = (2560, 1440)
                 poster_url = movie_doc.get("poster_url")
                 is_photo = False
                 msg = None
@@ -1582,7 +1448,7 @@ async def update_movie_message(bot, base_name):
         try:
             if is_photo:
                 poster_url = movie_doc.get("poster_url")
-                size = (2560, 1440) if (movie_doc.get("from_blogger") or (LANDSCAPE_POSTER and movie_doc.get("is_backdrop"))) else (853, 1280)
+                size = (2560, 1440)
                 try:
                     resized = await fetch_image(poster_url, size) if poster_url else None
                     media_photo = resized or poster_url
