@@ -415,7 +415,7 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
         return f"{total_mins}m"
 
 
-# Pura real web scraper: IMDb, TMDb, HDHub4u aur any other website se original visible genres & ratings
+# Robust web scraper: JSON-LD, specific selectors and fallback for IMDb, TMDb & HDHub4u
 async def fetch_third_party_meta(url: str) -> dict:
     data = {"rating": None, "genres": None}
     headers = {
@@ -423,49 +423,93 @@ async def fetch_third_party_meta(url: str) -> dict:
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         ),
-        "Accept-Language": "en-US,en;q=0.9"
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.google.com/"
     }
-    timeout = aiohttp.ClientTimeout(total=8)
+    timeout = aiohttp.ClientTimeout(total=9)
     try:
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
             async with session.get(url) as resp:
                 if resp.status == 200:
                     html = await resp.text()
                     soup = BeautifulSoup(html, "html.parser")
+
+                    # 1. Primary Check: JSON-LD Schema (IMDb & standard websites include official rating here)
+                    for script_tag in soup.find_all("script", type="application/ld+json"):
+                        try:
+                            ld_content = script_tag.string or script_tag.get_text()
+                            if not ld_content:
+                                continue
+                            ld_data = json.loads(ld_content)
+                            if isinstance(ld_data, list):
+                                ld_data = ld_data[0]
+                            
+                            # Rating from JSON-LD
+                            agg_rating = ld_data.get("aggregateRating")
+                            if isinstance(agg_rating, dict) and agg_rating.get("ratingValue"):
+                                r_val = float(agg_rating["ratingValue"])
+                                if 1.0 <= r_val <= 10.0:
+                                    data["rating"] = f"{r_val}/10"
+
+                            # Genres from JSON-LD
+                            if not data["genres"] and ld_data.get("genre"):
+                                g_val = ld_data["genre"]
+                                if isinstance(g_val, list):
+                                    data["genres"] = ", ".join([str(x).strip().title() for x in g_val[:5]])
+                                elif isinstance(g_val, str):
+                                    data["genres"] = g_val.strip().title()
+                        except Exception:
+                            pass
+
+                    # 2. Specific Selectors for IMDb (if JSON-LD missed rating)
+                    if "imdb.com" in url.lower():
+                        if not data["rating"]:
+                            r_elem = soup.select_one('[data-testid="hero-rating-bar__aggregate-rating__score"] span')
+                            if r_elem:
+                                r_val = r_elem.get_text(strip=True)
+                                if re.match(r'^[1-9](\.\d)?$', r_val):
+                                    data["rating"] = f"{float(r_val)}/10"
+
+                        # IMDb Visible genres
+                        if not data["genres"]:
+                            imdb_genres = []
+                            for a in soup.select('div[data-testid="genres"] a, a[href*="/search/title/?genres="], a[href*="/search/title?genres="]'):
+                                g_text = a.get_text(strip=True).title()
+                                if g_text and g_text not in imdb_genres and len(g_text) > 2 and not g_text.isdigit():
+                                    imdb_genres.append(g_text)
+                            if imdb_genres:
+                                data["genres"] = ", ".join(imdb_genres[:5])
+
+                    # 3. TMDb Specific Selectors
+                    elif "themoviedb.org" in url.lower():
+                        if not data["rating"]:
+                            user_score = soup.select_one('.user_score_chart')
+                            if user_score and user_score.get("data-percent"):
+                                pct = float(user_score["data-percent"])
+                                if pct > 0:
+                                    data["rating"] = f"{round(pct / 10, 1)}/10"
+
+                        if not data["genres"]:
+                            tmdb_genres = []
+                            for a in soup.select('span.genres a, a[href*="/genre/"]'):
+                                g_text = a.get_text(strip=True).title()
+                                if g_text and g_text not in tmdb_genres and len(g_text) > 2:
+                                    tmdb_genres.append(g_text)
+                            if tmdb_genres:
+                                data["genres"] = ", ".join(tmdb_genres[:5])
+
+                    # 4. HDHub4u / Generic Websites Regex Scraping
                     text = soup.get_text(" ", strip=True)
 
-                    # 1. Rating extraction
-                    r_match = re.search(r'(?:imdb|rating|score)\s*[:\-]?\s*([1-9](?:\.\d)?)\s*(?:/10|\s*out of 10)?', text, re.IGNORECASE)
-                    if not r_match:
-                        r_match = re.search(r'\b([1-9]\.\d)\s*/\s*10\b', text)
-                    if r_match:
-                        val = float(r_match.group(1))
-                        if 1.0 <= val <= 10.0:
-                            data["rating"] = f"{val}/10"
+                    if not data["rating"]:
+                        r_match = re.search(r'(?:imdb|rating|score)\s*[:\-]?\s*([1-9](?:\.\d)?)\s*(?:/10|\s*out of 10)?', text, re.IGNORECASE)
+                        if not r_match:
+                            r_match = re.search(r'\b([1-9]\.\d)\s*/\s*10\b', text)
+                        if r_match:
+                            val = float(r_match.group(1))
+                            if 1.0 <= val <= 10.0:
+                                data["rating"] = f"{val}/10"
 
-                    # 2. Case A: IMDb Direct URL scrape (Exact Primary Visible Genres only)
-                    if "imdb.com" in url.lower():
-                        imdb_genres = []
-                        # IMDb ke main visible genre chip buttons
-                        for a in soup.select('div[data-testid="genres"] a, a[href*="/search/title/?genres="], a[href*="/search/title?genres="]'):
-                            g_text = a.get_text(strip=True).title()
-                            if g_text and g_text not in imdb_genres and len(g_text) > 2 and not g_text.isdigit():
-                                imdb_genres.append(g_text)
-                        
-                        if imdb_genres:
-                            data["genres"] = ", ".join(imdb_genres)
-
-                    # 3. Case B: TMDb Direct Web URL scrape (Primary genre badges)
-                    elif "themoviedb.org" in url.lower():
-                        tmdb_genres = []
-                        for a in soup.select('span.genres a, a[href*="/genre/"]'):
-                            g_text = a.get_text(strip=True).title()
-                            if g_text and g_text not in tmdb_genres and len(g_text) > 2:
-                                tmdb_genres.append(g_text)
-                        if tmdb_genres:
-                            data["genres"] = ", ".join(tmdb_genres)
-
-                    # 4. Case C: HDHub4u / Any Third-party websites
                     if not data["genres"]:
                         g_section = re.search(
                             r'(?:genres?|category)\s*[:\-]\s*(.*?)(?=(?:\b(?:audio|quality|language|release|stars?|director|format|size|cast|story)\b|\n|\r|$))',
@@ -481,7 +525,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                                 if p and len(p) > 2 and p not in cleaned_genres and not p.isdigit():
                                     cleaned_genres.append(p)
                             if cleaned_genres:
-                                data["genres"] = ", ".join(cleaned_genres)
+                                data["genres"] = ", ".join(cleaned_genres[:5])
 
     except Exception as e:
         logger.warning(f"Error scraping website '{url}': {e}")
@@ -510,15 +554,7 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
             if s_match:
                 season = int(s_match.group(1))
 
-        def clean_core(s):
-            if not s:
-                return ""
-            s = re.sub(r'[\(\)\[\]#\-:_.]', ' ', s)
-            s = re.sub(r'\b(19|20)\d{2}\b', ' ', s)
-            return re.sub(r'[^a-zA-Z0-9]', '', s).lower().strip()
-
         stop_words = {"series", "complete", "part", "episode", "the", "and", "hindi", "dubbed"}
-        
         words = [
             w.lower() for w in re.split(r'[\s\-:_.()]+', base_name)
             if len(w) >= 2 and not w.isdigit() and w.lower() not in stop_words and not w.lower().startswith("season")
@@ -1090,7 +1126,7 @@ async def _process_with_lock(
         tmdb_details = {}
         third_party_data = {}
 
-        # Agar Blogger link diya hai toh direct URL scraping se primary details uthao
+        # Direct Web Scraping First
         if blogger_info_url:
             third_party_data = await fetch_third_party_meta(blogger_info_url)
 
@@ -1132,7 +1168,7 @@ async def _process_with_lock(
                 official_search_title = base_name
             imdb_id = tmdb_details.get("imdb_id")
 
-        # 3. Third-party link / Koi external site
+        # 3. Third-party link
         elif blogger_is_external and blogger_info_url:
             official_search_title = base_name
             imdb_id = None
@@ -1146,18 +1182,26 @@ async def _process_with_lock(
         poster_url = blogger_poster_url or ""
         is_backdrop = True
 
-        # STRICT RATING RULE: Link se original rating
+        # STRICT RATING RULE: Web scraping -> IMDb API -> TMDb Fallback
         rating = "x/10"
+        
+        # Priority 1: Direct Webpage Scraping
         if third_party_data.get("rating"):
             rating = str(third_party_data["rating"]).strip()
-        elif blogger_is_tmdb and tmdb_details.get("rating"):
-            r = str(tmdb_details.get("rating")).strip()
-            if r.upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-                rating = r
-        elif blogger_is_imdb and imdb_details.get("rating"):
+        
+        # Priority 2: IMDb Details API Fallback (agar web scraping ko IMDb ne block kiya ho)
+        if (rating == "x/10" or not rating) and blogger_is_imdb and imdb_details.get("rating"):
             r = str(imdb_details.get("rating")).strip()
             if r.upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-                rating = r
+                clean_r = r.replace("/10", "").strip()
+                rating = f"{clean_r}/10"
+
+        # Priority 3: TMDb Details Fallback
+        if (rating == "x/10" or not rating) and blogger_is_tmdb and tmdb_details.get("rating"):
+            r = str(tmdb_details.get("rating")).strip()
+            if r.upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+                clean_r = r.replace("/10", "").strip()
+                rating = f"{clean_r}/10"
 
         # STRICT TARGET LINK: Blogger poster ka URL aayega
         imdb_url = blogger_info_url.strip() if blogger_info_url else ""
@@ -1166,6 +1210,15 @@ async def _process_with_lock(
         genres = "N/A"
         if third_party_data.get("genres"):
             genres = str(third_party_data["genres"]).strip()
+        elif blogger_is_imdb and imdb_details.get("genres"):
+            raw_genres = imdb_details.get("genres")
+            if isinstance(raw_genres, list):
+                genre_list = [str(g).strip().title() for g in raw_genres if str(g).strip()]
+                if genre_list:
+                    genres = ", ".join(genre_list[:5])
+            elif isinstance(raw_genres, str) and raw_genres.strip() and raw_genres.upper() != "N/A":
+                parts = [p.strip().title() for p in raw_genres.split(",") if p.strip()]
+                genres = ", ".join(parts[:5])
         elif blogger_is_tmdb and tmdb_details.get("genres"):
             raw_genres = tmdb_details.get("genres")
             if isinstance(raw_genres, list):
@@ -1176,19 +1229,9 @@ async def _process_with_lock(
                     elif isinstance(g, str):
                         genre_list.append(g.strip().title())
                 if genre_list:
-                    genres = ", ".join(genre_list)
-            elif isinstance(raw_genres, str) and raw_genres.strip() and raw_genres.upper() != "N/A":
-                genres = raw_genres.strip()
-        elif blogger_is_imdb and imdb_details.get("genres"):
-            raw_genres = imdb_details.get("genres")
-            if isinstance(raw_genres, list):
-                genre_list = [str(g).strip().title() for g in raw_genres if str(g).strip()]
-                # Primary visible genres only
-                if genre_list:
                     genres = ", ".join(genre_list[:5])
             elif isinstance(raw_genres, str) and raw_genres.strip() and raw_genres.upper() != "N/A":
-                parts = [p.strip().title() for p in raw_genres.split(",") if p.strip()]
-                genres = ", ".join(parts[:5])
+                genres = raw_genres.strip()
 
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
