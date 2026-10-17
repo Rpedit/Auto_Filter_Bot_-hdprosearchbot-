@@ -83,7 +83,6 @@ CAPTION_LANGUAGES = {
 }
 
 OTT_PLATFORMS = {
-    # Mainstream Global & Indian OTTs
     "nf": "Netflix", "netflix": "Netflix",
     "sonyliv": "SonyLiv", "sony": "SonyLiv", "sliv": "SonyLiv",
     "amzn": "Amazon Prime Video", "prime": "Amazon Prime Video", "primevideo": "Amazon Prime Video",
@@ -97,8 +96,6 @@ OTT_PLATFORMS = {
     "hulu": "Hulu",
     "peacock": "Peacock",
     "lionsgate": "Lionsgate Play", "lionsgateplay": "Lionsgate Play",
-
-    # Anime Streaming Platforms
     "cr": "Crunchyroll", "crunchyroll": "Crunchyroll",
     "hidive": "HIDIVE",
     "funimation": "Funimation", "funi": "Funimation",
@@ -106,8 +103,6 @@ OTT_PLATFORMS = {
     "muse": "Muse Asia", "museasia": "Muse Asia",
     "anione": "Ani-One Asia", "ani-one": "Ani-One Asia",
     "aniplus": "Aniplus",
-
-    # Regional & Web Series Platforms
     "ullu": "Ullu",
     "atrangii": "Atrangii", "atrangi": "Atrangii",
     "kooku": "Kooku",
@@ -451,11 +446,11 @@ async def fetch_third_party_meta(url: str) -> dict:
                                 if 1.0 <= r_val <= 10.0:
                                     data["rating"] = f"{r_val}/10"
 
-                            # Genres from JSON-LD
+                            # Genres from JSON-LD (Jitne bhi honge sabhi aayenge)
                             if not data["genres"] and ld_data.get("genre"):
                                 g_val = ld_data["genre"]
                                 if isinstance(g_val, list):
-                                    data["genres"] = ", ".join([str(x).strip().title() for x in g_val[:5]])
+                                    data["genres"] = ", ".join([str(x).strip().title() for x in g_val if str(x).strip()])
                                 elif isinstance(g_val, str):
                                     data["genres"] = g_val.strip().title()
                         except Exception:
@@ -470,7 +465,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                                 if re.match(r'^[1-9](\.\d)?$', r_val):
                                     data["rating"] = f"{float(r_val)}/10"
 
-                        # IMDb Visible genres
+                        # IMDb Visible genres (Sabhi visible genres bina limit ke)
                         if not data["genres"]:
                             imdb_genres = []
                             for a in soup.select('div[data-testid="genres"] a, a[href*="/search/title/?genres="], a[href*="/search/title?genres="]'):
@@ -478,7 +473,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                                 if g_text and g_text not in imdb_genres and len(g_text) > 2 and not g_text.isdigit():
                                     imdb_genres.append(g_text)
                             if imdb_genres:
-                                data["genres"] = ", ".join(imdb_genres[:5])
+                                data["genres"] = ", ".join(imdb_genres)
 
                     # 3. TMDb Specific Selectors
                     elif "themoviedb.org" in url.lower():
@@ -496,7 +491,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                                 if g_text and g_text not in tmdb_genres and len(g_text) > 2:
                                     tmdb_genres.append(g_text)
                             if tmdb_genres:
-                                data["genres"] = ", ".join(tmdb_genres[:5])
+                                data["genres"] = ", ".join(tmdb_genres)
 
                     # 4. HDHub4u / Generic Websites Regex Scraping
                     text = soup.get_text(" ", strip=True)
@@ -525,7 +520,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                                 if p and len(p) > 2 and p not in cleaned_genres and not p.isdigit():
                                     cleaned_genres.append(p)
                             if cleaned_genres:
-                                data["genres"] = ", ".join(cleaned_genres[:5])
+                                data["genres"] = ", ".join(cleaned_genres)
 
     except Exception as e:
         logger.warning(f"Error scraping website '{url}': {e}")
@@ -1206,7 +1201,7 @@ async def _process_with_lock(
         # STRICT TARGET LINK: Blogger poster ka URL aayega
         imdb_url = blogger_info_url.strip() if blogger_info_url else ""
 
-        # GENRES: Exact Original Visible Genres from the Link
+        # GENRES: Exact Original Visible Genres from the Link (Poore aayenge bina kisi limit ke)
         genres = "N/A"
         if third_party_data.get("genres"):
             genres = str(third_party_data["genres"]).strip()
@@ -1215,10 +1210,10 @@ async def _process_with_lock(
             if isinstance(raw_genres, list):
                 genre_list = [str(g).strip().title() for g in raw_genres if str(g).strip()]
                 if genre_list:
-                    genres = ", ".join(genre_list[:5])
+                    genres = ", ".join(genre_list)
             elif isinstance(raw_genres, str) and raw_genres.strip() and raw_genres.upper() != "N/A":
                 parts = [p.strip().title() for p in raw_genres.split(",") if p.strip()]
-                genres = ", ".join(parts[:5])
+                genres = ", ".join(parts)
         elif blogger_is_tmdb and tmdb_details.get("genres"):
             raw_genres = tmdb_details.get("genres")
             if isinstance(raw_genres, list):
@@ -1229,7 +1224,7 @@ async def _process_with_lock(
                     elif isinstance(g, str):
                         genre_list.append(g.strip().title())
                 if genre_list:
-                    genres = ", ".join(genre_list[:5])
+                    genres = ", ".join(genre_list)
             elif isinstance(raw_genres, str) and raw_genres.strip() and raw_genres.upper() != "N/A":
                 genres = raw_genres.strip()
 
