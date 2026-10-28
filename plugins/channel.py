@@ -410,9 +410,9 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
         return f"{total_mins}m"
 
 
-# Robust web scraper: JSON-LD, specific selectors and fallback for IMDb, TMDb & HDHub4u
+# Web scraper: IMDb, TMDb, HDHub4u, BookMyShow & All Third-party sites
 async def fetch_third_party_meta(url: str) -> dict:
-    data = {"rating": None, "genres": None}
+    data = {"rating": None, "genres": None, "runtime": None}
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -429,7 +429,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                     html = await resp.text()
                     soup = BeautifulSoup(html, "html.parser")
 
-                    # 1. Primary Check: JSON-LD Schema (IMDb & standard websites include official rating here)
+                    # 1. Primary Check: JSON-LD Schema (IMDb, BookMyShow & Standard websites)
                     for script_tag in soup.find_all("script", type="application/ld+json"):
                         try:
                             ld_content = script_tag.string or script_tag.get_text()
@@ -442,22 +442,55 @@ async def fetch_third_party_meta(url: str) -> dict:
                             # Rating from JSON-LD
                             agg_rating = ld_data.get("aggregateRating")
                             if isinstance(agg_rating, dict) and agg_rating.get("ratingValue"):
-                                r_val = float(agg_rating["ratingValue"])
-                                if 1.0 <= r_val <= 10.0:
-                                    data["rating"] = f"{r_val}/10"
+                                raw_r = float(agg_rating["ratingValue"])
+                                if 1.0 <= raw_r <= 10.0:
+                                    data["rating"] = f"{raw_r}/10"
+                                elif 10.0 < raw_r <= 100.0:
+                                    data["rating"] = f"{round(raw_r / 10, 1)}/10"
 
-                            # Genres from JSON-LD (Jitne bhi honge sabhi aayenge)
+                            # Genres from JSON-LD
                             if not data["genres"] and ld_data.get("genre"):
                                 g_val = ld_data["genre"]
                                 if isinstance(g_val, list):
                                     data["genres"] = ", ".join([str(x).strip().title() for x in g_val if str(x).strip()])
                                 elif isinstance(g_val, str):
                                     data["genres"] = g_val.strip().title()
+
+                            # Runtime from JSON-LD (e.g. duration: "PT2H15M" in BookMyShow/IMDb)
+                            if not data["runtime"] and ld_data.get("duration"):
+                                dur = str(ld_data["duration"]).strip()
+                                m_iso = re.match(r'^PT(?:(\d+)H)?(?:(\d+)M)?', dur, re.IGNORECASE)
+                                if m_iso:
+                                    h = int(m_iso.group(1)) if m_iso.group(1) else 0
+                                    mins = int(m_iso.group(2)) if m_iso.group(2) else 0
+                                    tot = (h * 60) + mins
+                                    if tot > 0:
+                                        data["runtime"] = str(tot)
+                                else:
+                                    data["runtime"] = dur
                         except Exception:
                             pass
 
-                    # 2. Specific Selectors for IMDb (if JSON-LD missed rating)
-                    if "imdb.com" in url.lower():
+                    # 2. BookMyShow Specific Scraper
+                    if "bookmyshow.com" in url.lower():
+                        # BookMyShow rating
+                        if not data["rating"]:
+                            r_match = re.search(r'([1-9](?:\.\d)?)\s*/\s*10', html)
+                            if r_match:
+                                data["rating"] = f"{float(r_match.group(1))}/10"
+                            else:
+                                pct_match = re.search(r'\b([5-9]\d)%\b', html)
+                                if pct_match:
+                                    data["rating"] = f"{round(int(pct_match.group(1)) / 10, 1)}/10"
+
+                        # BookMyShow visible runtime
+                        if not data["runtime"]:
+                            rt_match = re.search(r'\b(\d+\s*h(?:rs?)?\s*(?:\d+\s*m(?:ins?)?)?|\d+\s*m(?:ins?)?)\b', html, re.IGNORECASE)
+                            if rt_match:
+                                data["runtime"] = rt_match.group(1).strip()
+
+                    # 3. IMDb Specific Selectors
+                    elif "imdb.com" in url.lower():
                         if not data["rating"]:
                             r_elem = soup.select_one('[data-testid="hero-rating-bar__aggregate-rating__score"] span')
                             if r_elem:
@@ -465,7 +498,6 @@ async def fetch_third_party_meta(url: str) -> dict:
                                 if re.match(r'^[1-9](\.\d)?$', r_val):
                                     data["rating"] = f"{float(r_val)}/10"
 
-                        # IMDb Visible genres (Sabhi visible genres bina limit ke)
                         if not data["genres"]:
                             imdb_genres = []
                             for a in soup.select('div[data-testid="genres"] a, a[href*="/search/title/?genres="], a[href*="/search/title?genres="]'):
@@ -475,7 +507,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                             if imdb_genres:
                                 data["genres"] = ", ".join(imdb_genres)
 
-                    # 3. TMDb Specific Selectors
+                    # 4. TMDb Specific Selectors
                     elif "themoviedb.org" in url.lower():
                         if not data["rating"]:
                             user_score = soup.select_one('.user_score_chart')
@@ -493,7 +525,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                             if tmdb_genres:
                                 data["genres"] = ", ".join(tmdb_genres)
 
-                    # 4. HDHub4u / Generic Websites Regex Scraping
+                    # 5. HDHub4u / Generic Text Scraper Fallback
                     text = soup.get_text(" ", strip=True)
 
                     if not data["rating"]:
@@ -521,6 +553,11 @@ async def fetch_third_party_meta(url: str) -> dict:
                                     cleaned_genres.append(p)
                             if cleaned_genres:
                                 data["genres"] = ", ".join(cleaned_genres)
+
+                    if not data["runtime"]:
+                        rt_m = re.search(r'(?:runtime|duration)\s*[:\-]\s*(\d+\s*(?:h|hr|hour)s?(?:\s*\d+\s*(?:m|min|minute)s?)?|\d+\s*(?:m|min)s?)', text, re.IGNORECASE)
+                        if rt_m:
+                            data["runtime"] = rt_m.group(1).strip()
 
     except Exception as e:
         logger.warning(f"Error scraping website '{url}': {e}")
@@ -1163,7 +1200,7 @@ async def _process_with_lock(
                 official_search_title = base_name
             imdb_id = tmdb_details.get("imdb_id")
 
-        # 3. Third-party link
+        # 3. Third-party link (BookMyShow, HDHub4u, etc.)
         elif blogger_is_external and blogger_info_url:
             official_search_title = base_name
             imdb_id = None
@@ -1177,14 +1214,14 @@ async def _process_with_lock(
         poster_url = blogger_poster_url or ""
         is_backdrop = True
 
-        # STRICT RATING RULE: Web scraping -> IMDb API -> TMDb Fallback
+        # STRICT RATING RULE: Web scraping (BookMyShow/HDHub4u/IMDb) -> IMDb API -> TMDb Fallback
         rating = "x/10"
         
-        # Priority 1: Direct Webpage Scraping
+        # Priority 1: Direct Webpage Scraping (works for BookMyShow, HDHub4u, IMDb)
         if third_party_data.get("rating"):
             rating = str(third_party_data["rating"]).strip()
         
-        # Priority 2: IMDb Details API Fallback (agar web scraping ko IMDb ne block kiya ho)
+        # Priority 2: IMDb Details API Fallback
         if (rating == "x/10" or not rating) and blogger_is_imdb and imdb_details.get("rating"):
             r = str(imdb_details.get("rating")).strip()
             if r.upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
@@ -1228,6 +1265,7 @@ async def _process_with_lock(
             elif isinstance(raw_genres, str) and raw_genres.strip() and raw_genres.upper() != "N/A":
                 genres = raw_genres.strip()
 
+        # RUNTIME: Web scraping (BookMyShow/IMDb) -> TMDb -> IMDb -> File duration
         imdb_r = imdb_details.get("runtime")
         tmdb_r = (
             tmdb_details.get("episode_run_time")
@@ -1239,7 +1277,9 @@ async def _process_with_lock(
         if isinstance(tmdb_r, (list, tuple)) and tmdb_r:
             tmdb_r = tmdb_r[0]
 
-        if blogger_is_tmdb and tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
+        if third_party_data.get("runtime") and str(third_party_data.get("runtime")).strip().upper() not in ("N/A", "NONE", "0", ""):
+            runtime = str(third_party_data["runtime"]).strip()
+        elif blogger_is_tmdb and tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
             runtime = str(tmdb_r).strip()
         elif blogger_is_imdb and imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
             runtime = str(imdb_r).strip()
