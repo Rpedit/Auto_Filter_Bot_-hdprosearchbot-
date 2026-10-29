@@ -658,14 +658,15 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
                                     break
 
                         if img_url:
+                            # Original Full Resolution Google CDN Link (=s0)
                             if "googleusercontent.com" in img_url:
                                 img_url = re.sub(r'=w\d+-h\d+.*$', '=s0', img_url)
                                 img_url = re.sub(r'=s\d+.*$', '=s0', img_url)
                                 if "=s0" not in img_url and "=" in img_url:
                                     img_url = img_url.split("=")[0] + "=s0"
                             else:
-                                img_url = re.sub(r'/s\d+(-c)?/', '/s1600/', img_url)
-                                img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s1600/', img_url)
+                                img_url = re.sub(r'/s\d+(-c)?/', '/s0/', img_url)
+                                img_url = re.sub(r'/w\d+-h\d+(-c)?/', '/s0/', img_url)
 
                             logger.info(f"Blogger Exact Matched! URL: '{post_url}' | Poster: {bool(img_url)} | Target URL: {target_url}")
                             return img_url, target_url
@@ -1409,42 +1410,30 @@ async def send_movie_update(bot, base_name):
                     ]]
                 )
 
-                size = (2560, 1440)
                 poster_url = movie_doc.get("poster_url")
                 is_photo = False
                 msg = None
 
+                # Direct original photo without resizing
                 if poster_url and not LINK_PREVIEW:
                     try:
-                        resized_poster = await fetch_image(poster_url, size)
-                        photo_to_send = resized_poster or poster_url
                         msg = await bot.send_photo(
                             chat_id=MOVIE_UPDATE_CHANNEL,
-                            photo=photo_to_send,
+                            photo=poster_url,
                             caption=text,
                             reply_markup=buttons,
                             parse_mode=enums.ParseMode.HTML
                         )
                         is_photo = True
                     except Exception as err:
-                        logger.warning(f"send_photo failed ({err}), falling back to direct URL")
-                        try:
-                            msg = await bot.send_photo(
-                                chat_id=MOVIE_UPDATE_CHANNEL,
-                                photo=poster_url,
-                                caption=text,
-                                reply_markup=buttons,
-                                parse_mode=enums.ParseMode.HTML
-                            )
-                            is_photo = True
-                        except Exception:
-                            msg = await bot.send_message(
-                                chat_id=MOVIE_UPDATE_CHANNEL,
-                                text=text,
-                                reply_markup=buttons,
-                                parse_mode=enums.ParseMode.HTML
-                            )
-                            is_photo = False
+                        logger.warning(f"send_photo failed with URL ({err}), falling back to text")
+                        msg = await bot.send_message(
+                            chat_id=MOVIE_UPDATE_CHANNEL,
+                            text=text,
+                            reply_markup=buttons,
+                            parse_mode=enums.ParseMode.HTML
+                        )
+                        is_photo = False
                 else:
                     send_params = {
                         "chat_id": MOVIE_UPDATE_CHANNEL,
@@ -1527,26 +1516,15 @@ async def update_movie_message(bot, base_name):
         try:
             if is_photo:
                 poster_url = movie_doc.get("poster_url")
-                size = (2560, 1440)
-                try:
-                    resized = await fetch_image(poster_url, size) if poster_url else None
-                    media_photo = resized or poster_url
-                    if media_photo:
-                        await bot.edit_message_media(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            message_id=message_id,
-                            media=InputMediaPhoto(media_photo, caption=text, parse_mode=enums.ParseMode.HTML),
-                            reply_markup=buttons
-                        )
-                    else:
-                        await bot.edit_message_caption(
-                            chat_id=MOVIE_UPDATE_CHANNEL,
-                            message_id=message_id,
-                            caption=text,
-                            reply_markup=buttons,
-                            parse_mode=enums.ParseMode.HTML
-                        )
-                except Exception:
+                # Direct original photo without resizing
+                if poster_url:
+                    await bot.edit_message_media(
+                        chat_id=MOVIE_UPDATE_CHANNEL,
+                        message_id=message_id,
+                        media=InputMediaPhoto(poster_url, caption=text, parse_mode=enums.ParseMode.HTML),
+                        reply_markup=buttons
+                    )
+                else:
                     await bot.edit_message_caption(
                         chat_id=MOVIE_UPDATE_CHANNEL,
                         message_id=message_id,
