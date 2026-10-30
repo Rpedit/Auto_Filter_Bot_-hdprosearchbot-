@@ -4,6 +4,7 @@ import logging
 import asyncio
 import aiohttp
 import inspect
+from io import BytesIO
 from datetime import datetime
 from bs4 import BeautifulSoup
 from collections import defaultdict
@@ -410,7 +411,25 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
         return f"{total_mins}m"
 
 
-# Robust web scraper: JSON-LD, specific selectors and fallback for IMDb, TMDb & HDHub4u
+async def fetch_image_raw(url: str):
+    """Blogger image ko bina resize kiye uncompressed bytes me download karta hai"""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36"
+    }
+    timeout = aiohttp.ClientTimeout(total=10)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    data = await resp.read()
+                    bio = BytesIO(data)
+                    bio.name = "poster.jpg"
+                    return bio
+    except Exception as e:
+        logger.warning(f"Error fetching raw image: {e}")
+    return None
+
+
 async def fetch_third_party_meta(url: str) -> dict:
     data = {"rating": None, "genres": None}
     headers = {
@@ -429,7 +448,6 @@ async def fetch_third_party_meta(url: str) -> dict:
                     html = await resp.text()
                     soup = BeautifulSoup(html, "html.parser")
 
-                    # 1. Primary Check: JSON-LD Schema (IMDb & standard websites include official rating here)
                     for script_tag in soup.find_all("script", type="application/ld+json"):
                         try:
                             ld_content = script_tag.string or script_tag.get_text()
@@ -439,14 +457,12 @@ async def fetch_third_party_meta(url: str) -> dict:
                             if isinstance(ld_data, list):
                                 ld_data = ld_data[0]
                             
-                            # Rating from JSON-LD
                             agg_rating = ld_data.get("aggregateRating")
                             if isinstance(agg_rating, dict) and agg_rating.get("ratingValue"):
                                 r_val = float(agg_rating["ratingValue"])
                                 if 1.0 <= r_val <= 10.0:
                                     data["rating"] = f"{r_val}/10"
 
-                            # Genres from JSON-LD (Jitne bhi honge sabhi aayenge)
                             if not data["genres"] and ld_data.get("genre"):
                                 g_val = ld_data["genre"]
                                 if isinstance(g_val, list):
@@ -456,7 +472,6 @@ async def fetch_third_party_meta(url: str) -> dict:
                         except Exception:
                             pass
 
-                    # 2. Specific Selectors for IMDb (if JSON-LD missed rating)
                     if "imdb.com" in url.lower():
                         if not data["rating"]:
                             r_elem = soup.select_one('[data-testid="hero-rating-bar__aggregate-rating__score"] span')
@@ -465,7 +480,6 @@ async def fetch_third_party_meta(url: str) -> dict:
                                 if re.match(r'^[1-9](\.\d)?$', r_val):
                                     data["rating"] = f"{float(r_val)}/10"
 
-                        # IMDb Visible genres (Sabhi visible genres bina limit ke)
                         if not data["genres"]:
                             imdb_genres = []
                             for a in soup.select('div[data-testid="genres"] a, a[href*="/search/title/?genres="], a[href*="/search/title?genres="]'):
@@ -475,7 +489,6 @@ async def fetch_third_party_meta(url: str) -> dict:
                             if imdb_genres:
                                 data["genres"] = ", ".join(imdb_genres)
 
-                    # 3. TMDb Specific Selectors
                     elif "themoviedb.org" in url.lower():
                         if not data["rating"]:
                             user_score = soup.select_one('.user_score_chart')
@@ -493,7 +506,6 @@ async def fetch_third_party_meta(url: str) -> dict:
                             if tmdb_genres:
                                 data["genres"] = ", ".join(tmdb_genres)
 
-                    # 4. HDHub4u / Generic Websites Regex Scraping
                     text = soup.get_text(" ", strip=True)
 
                     if not data["rating"]:
@@ -550,13 +562,23 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
                 season = int(s_match.group(1))
 
         stop_words = {"series", "complete", "part", "episode", "the", "and", "hindi", "dubbed"}
+        
+        # 1. First Priority: Non-digit words
         words = [
             w.lower() for w in re.split(r'[\s\-:_.()]+', base_name)
             if len(w) >= 2 and not w.isdigit() and w.lower() not in stop_words and not w.lower().startswith("season")
         ]
         
+        # 2. Fix for numbers/digits title (e.g. "418", "1917", "96")
         if not words:
-            words = [w.lower() for w in re.split(r'[\s\-:_.()]+', base_name) if len(w) >= 2 and not w.isdigit()]
+            words = [
+                w.lower() for w in re.split(r'[\s\-:_.()]+', base_name)
+                if len(w) >= 2 and w.lower() not in stop_words and not w.lower().startswith("season") and w.lower() != str(year or "")
+            ]
+
+        # 3. Final Fallback
+        if not words:
+            words = [w.lower() for w in re.split(r'[\s\-:_.()]+', base_name) if len(w) >= 1]
 
         search_terms = list(words[:2])
         if season:
@@ -658,7 +680,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
                                     break
 
                         if img_url:
-                            # Original Full Resolution Google CDN Link (=s0)
                             if "googleusercontent.com" in img_url:
                                 img_url = re.sub(r'=w\d+-h\d+.*$', '=s0', img_url)
                                 img_url = re.sub(r'=s\d+.*$', '=s0', img_url)
@@ -1086,7 +1107,6 @@ async def _process_with_lock(
         "runtime": final_file_runtime
     }
 
-    # STEP 1: Blogger check strictly
     blogger_poster_url, blogger_info_url = await get_blogger_data(
         base_name,
         media_info.get("year"),
@@ -1122,11 +1142,9 @@ async def _process_with_lock(
         tmdb_details = {}
         third_party_data = {}
 
-        # Direct Web Scraping First
         if blogger_info_url:
             third_party_data = await fetch_third_party_meta(blogger_info_url)
 
-        # 1. Agar Blogger par IMDb Link add kiya hai
         if blogger_is_imdb and blogger_imdb_id:
             try:
                 imdb_details = await get_movie_details(blogger_imdb_id) or {}
@@ -1139,7 +1157,6 @@ async def _process_with_lock(
                 official_search_title = base_name
             imdb_id = blogger_imdb_id
 
-        # 2. Agar Blogger par TMDb Link add kiya hai
         elif blogger_is_tmdb and blogger_tmdb_id:
             sig = inspect.signature(get_movie_detailsx)
             kwargs = {}
@@ -1164,45 +1181,36 @@ async def _process_with_lock(
                 official_search_title = base_name
             imdb_id = tmdb_details.get("imdb_id")
 
-        # 3. Third-party link
         elif blogger_is_external and blogger_info_url:
             official_search_title = base_name
             imdb_id = None
 
-        # 4. Agar Blogger par koi link nahi hai
         else:
             official_search_title = base_name
             imdb_id = None
 
-        # STRICT POSTER RULE: Sirf Blogger poster aayega
         poster_url = blogger_poster_url or ""
         is_backdrop = True
 
-        # STRICT RATING RULE: Web scraping -> IMDb API -> TMDb Fallback
         rating = "x/10"
         
-        # Priority 1: Direct Webpage Scraping
         if third_party_data.get("rating"):
             rating = str(third_party_data["rating"]).strip()
         
-        # Priority 2: IMDb Details API Fallback (agar web scraping ko IMDb ne block kiya ho)
         if (rating == "x/10" or not rating) and blogger_is_imdb and imdb_details.get("rating"):
             r = str(imdb_details.get("rating")).strip()
             if r.upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
                 clean_r = r.replace("/10", "").strip()
                 rating = f"{clean_r}/10"
 
-        # Priority 3: TMDb Details Fallback
         if (rating == "x/10" or not rating) and blogger_is_tmdb and tmdb_details.get("rating"):
             r = str(tmdb_details.get("rating")).strip()
             if r.upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
                 clean_r = r.replace("/10", "").strip()
                 rating = f"{clean_r}/10"
 
-        # STRICT TARGET LINK: Blogger poster ka URL aayega
         imdb_url = blogger_info_url.strip() if blogger_info_url else ""
 
-        # GENRES: Exact Original Visible Genres from the Link (Poore aayenge bina kisi limit ke)
         genres = "N/A"
         if third_party_data.get("genres"):
             genres = str(third_party_data["genres"]).strip()
@@ -1414,19 +1422,21 @@ async def send_movie_update(bot, base_name):
                 is_photo = False
                 msg = None
 
-                # Direct original photo without resizing
+                # Exact Blogger original image binary stream (no distortion, full quality)
                 if poster_url and not LINK_PREVIEW:
                     try:
+                        raw_photo = await fetch_image_raw(poster_url)
+                        photo_to_send = raw_photo or poster_url
                         msg = await bot.send_photo(
                             chat_id=MOVIE_UPDATE_CHANNEL,
-                            photo=poster_url,
+                            photo=photo_to_send,
                             caption=text,
                             reply_markup=buttons,
                             parse_mode=enums.ParseMode.HTML
                         )
                         is_photo = True
                     except Exception as err:
-                        logger.warning(f"send_photo failed with URL ({err}), falling back to text")
+                        logger.warning(f"send_photo failed with buffer/URL ({err}), falling back to text")
                         msg = await bot.send_message(
                             chat_id=MOVIE_UPDATE_CHANNEL,
                             text=text,
@@ -1516,12 +1526,13 @@ async def update_movie_message(bot, base_name):
         try:
             if is_photo:
                 poster_url = movie_doc.get("poster_url")
-                # Direct original photo without resizing
                 if poster_url:
+                    raw_photo = await fetch_image_raw(poster_url)
+                    media_photo = raw_photo or poster_url
                     await bot.edit_message_media(
                         chat_id=MOVIE_UPDATE_CHANNEL,
                         message_id=message_id,
-                        media=InputMediaPhoto(poster_url, caption=text, parse_mode=enums.ParseMode.HTML),
+                        media=InputMediaPhoto(media_photo, caption=text, parse_mode=enums.ParseMode.HTML),
                         reply_markup=buttons
                     )
                 else:
