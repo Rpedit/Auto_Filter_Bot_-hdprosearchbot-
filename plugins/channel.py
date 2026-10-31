@@ -411,6 +411,19 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
         return f"{total_mins}m"
 
 
+def get_star_rating(rating_val: str) -> str:
+    """Dynamic Star Bar generator"""
+    try:
+        clean = rating_val.replace("/10", "").strip()
+        score = float(clean)
+        filled = min(10, max(0, round(score)))
+        empty = 10 - filled
+        stars = "★" * filled + "☆" * empty
+        return f"{score:.1f}/10 [{stars}]"
+    except Exception:
+        return rating_val
+
+
 async def fetch_image_raw(url: str):
     """Blogger image ko bina resize kiye uncompressed bytes me download karta hai"""
     headers = {
@@ -563,13 +576,13 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
 
         stop_words = {"series", "complete", "part", "episode", "the", "and", "hindi", "dubbed"}
         
-        # 1. First Priority: Non-digit words
+        # 1. Non-digit words
         words = [
             w.lower() for w in re.split(r'[\s\-:_.()]+', base_name)
             if len(w) >= 2 and not w.isdigit() and w.lower() not in stop_words and not w.lower().startswith("season")
         ]
         
-        # 2. Fix for numbers/digits title (e.g. "418", "1917", "96")
+        # 2. Number title support
         if not words:
             words = [
                 w.lower() for w in re.split(r'[\s\-:_.()]+', base_name)
@@ -1113,9 +1126,10 @@ async def _process_with_lock(
         season=media_info.get("season")
     )
 
+    # AUTO SELF-HEALING: Purana corrupted ya missing poster document hone par auto-reset
     is_mismatched = False
     if movie_doc:
-        if not movie_doc.get("from_blogger") and blogger_poster_url:
+        if (not movie_doc.get("from_blogger") or not movie_doc.get("poster_url") or movie_doc.get("rating") == "x/10") and blogger_poster_url:
             is_mismatched = True
 
     if not movie_doc or is_mismatched:
@@ -1268,6 +1282,14 @@ async def _process_with_lock(
         movie_year = media_info.get("year") or tmdb_details.get("year") or imdb_details.get("year")
 
         if is_mismatched and movie_doc:
+            old_msg_id = movie_doc.get("message_id")
+            if old_msg_id and not movie_doc.get("is_photo"):
+                try:
+                    await bot.delete_messages(chat_id=MOVIE_UPDATE_CHANNEL, message_ids=old_msg_id)
+                except Exception:
+                    pass
+                movie_doc["message_id"] = None
+
             update_data = {
                 "title": official_search_title,
                 "clean_title": clean_title,
@@ -1282,7 +1304,8 @@ async def _process_with_lock(
                 "ott_platform": media_info["ott_platform"],
                 "error_tmdb": False,
                 "is_backdrop": is_backdrop,
-                "from_blogger": bool(blogger_poster_url)
+                "from_blogger": bool(blogger_poster_url),
+                "message_id": movie_doc.get("message_id")
             }
             await db.movie_updates.update_one(
                 {"_id": base_name},
@@ -1422,7 +1445,6 @@ async def send_movie_update(bot, base_name):
                 is_photo = False
                 msg = None
 
-                # Exact Blogger original image binary stream (no distortion, full quality)
                 if poster_url and not LINK_PREVIEW:
                     try:
                         raw_photo = await fetch_image_raw(poster_url)
@@ -1699,7 +1721,8 @@ def generate_movie_message(movie_doc, base_name):
         rating_display = "<small>x/10</small>"
     else:
         clean_rating = raw_rating.replace("/10", "").strip()
-        rating_display = f"<small>{clean_rating}/10</small>"
+        formatted_stars = get_star_rating(clean_rating)
+        rating_display = f"<small>{formatted_stars}</small>"
 
     if imdb_url:
         rating_text = f'<a href="{imdb_url}">{rating_display}</a>'
@@ -1740,3 +1763,28 @@ def generate_movie_message(movie_doc, base_name):
         line.strip()
         for line in raw_text.splitlines()
     )
+
+
+@Client.on_message(filters.command("delupdate"))
+async def delete_movie_update_cmd(bot, message):
+    """Admin command: Seedha Telegram bot chat se movie database record delete karein"""
+    if len(message.command) < 2:
+        return await message.reply_text("❌ **Usage:** `/delupdate Movie Name`\n(Jaise: `/delupdate Super Hit` ya `/delupdate 418`)")
+    
+    query = message.text.split(None, 1)[1].strip()
+    clean_q = get_clean_title(query)
+    
+    if not hasattr(db, "movie_updates"):
+        db.movie_updates = db.db.movie_updates
+        
+    res = await db.movie_updates.delete_many({
+        "$or": [
+            {"_id": {"$regex": f"^{re.escape(query)}", "$options": "i"}},
+            {"clean_title": {"$regex": f"^{re.escape(clean_q)}", "$options": "i"}}
+        ]
+    })
+    
+    if res.deleted_count > 0:
+        await message.reply_text(f"✅ Database se **{res.deleted_count}** record(s) delete kar diye gaye target: `{query}` ke liye!")
+    else:
+        await message.reply_text(f"⚠️ Database me `{query}` naam se koi record nahi mila.")
