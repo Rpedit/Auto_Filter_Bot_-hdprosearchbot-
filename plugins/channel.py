@@ -148,7 +148,7 @@ RES_ORDER = {
 }
 
 CLEAN_PATTERN = re.compile(r'@[^ \n\r\t\.,:;!?()\[\]{}<>\\/"\'=_%]+|\bwww\.[^\s\]\)]+|\([\@^]+\)|\[[\@^]+\]')
-NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_]")
+NORMALIZE_PATTERN = re.compile(r"[._]+|[()\[\]{}:;'–!,.?_@#*\"“”‘’\\/|~`+=%^&$]")
 
 RESOLUTION_PATTERN = re.compile(r"\b(?:2160p|4K|1440p|1080p|720p|540p|480p|360p|240p|140p)\b", re.IGNORECASE)
 SOURCE_PATTERN = re.compile(
@@ -187,7 +187,7 @@ def clean_mentions_links(text: str) -> str:
 
 
 def normalize(s: str) -> str:
-    s = NORMALIZE_PATTERN.sub(" ", s)
+    s = NORMALIZE_PATTERN.sub(" ", s or "")
     return re.sub(r"\s+", " ", s).strip()
 
 
@@ -210,7 +210,6 @@ def is_good_title_match(query: str, found_title: str) -> bool:
         s = re.sub(r'\b(?:Season\s*\d+|S\d{1,2}|Part\s*\d+|Episode\s*\d+|Ep\s*\d+)\b', ' ', s, flags=re.IGNORECASE)
         s = re.sub(r'\(?\b(?:full\s*movie|full\s*series|full\s*film|hd|rip|dubbed)\b\)?', ' ', s, flags=re.IGNORECASE)
         s = re.sub(r'^(the|a|an)\s+', ' ', s, flags=re.IGNORECASE)
-        s = re.sub(r"['’]", "", s)
         s = normalize(s).lower()
         return [w for w in s.split() if w]
 
@@ -563,22 +562,26 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
 
         stop_words = {"series", "complete", "part", "episode", "the", "and", "hindi", "dubbed"}
         
-        # 1. First Priority: Non-digit words
+        # Punctuation aur symbols ko clean karke words nikalna
+        clean_base = normalize(base_name)
+        raw_tokens = [w.lower() for w in clean_base.split() if w]
+        
+        # 1. Non-digit words
         words = [
-            w.lower() for w in re.split(r'[\s\-:_.()]+', base_name)
-            if len(w) >= 2 and not w.isdigit() and w.lower() not in stop_words and not w.lower().startswith("season")
+            w for w in raw_tokens
+            if len(w) >= 2 and not w.isdigit() and w not in stop_words and not w.startswith("season")
         ]
         
-        # 2. Fix for numbers/digits title (e.g. "418", "1917", "96")
+        # 2. Number title support (e.g. "418", "1917", "96")
         if not words:
             words = [
-                w.lower() for w in re.split(r'[\s\-:_.()]+', base_name)
-                if len(w) >= 2 and w.lower() not in stop_words and not w.lower().startswith("season") and w.lower() != str(year or "")
+                w for w in raw_tokens
+                if len(w) >= 2 and w not in stop_words and not w.startswith("season") and w != str(year or "")
             ]
 
         # 3. Final Fallback
         if not words:
-            words = [w.lower() for w in re.split(r'[\s\-:_.()]+', base_name) if len(w) >= 1]
+            words = [w for w in raw_tokens if len(w) >= 1]
 
         search_terms = list(words[:2])
         if season:
@@ -597,19 +600,25 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
                             s_soup = BeautifulSoup(s_html, "html.parser")
                             for a_elem in s_soup.find_all("a", href=True):
                                 h = a_elem["href"].split("?")[0]
-                                title_attr = (a_elem.get("title") or a_elem.get_text() or "").strip().lower()
+                                title_attr = (a_elem.get("title") or a_elem.get_text() or "").strip()
+                                
+                                # Blogger link aur title se sabhi symbols strip karke clean compare karna
+                                norm_h = normalize(h.lower())
+                                norm_title = normalize(title_attr.lower())
+                                combined_target = f"{norm_h} {norm_title}"
+
                                 if h.startswith(blog_url) and h.endswith(".html"):
                                     if season:
                                         has_target_season = (
                                             f"season-{season}" in h.lower() or 
                                             f"season{season}" in h.lower() or 
-                                            f"season {season}" in title_attr or 
-                                            f"(season {season})" in title_attr
+                                            f"season {season}" in norm_title or 
+                                            f"(season {season})" in norm_title
                                         )
                                         if has_target_season and h not in candidate_urls:
                                             candidate_urls.append(h)
                                     else:
-                                        if words and any(w in (h.lower() + " " + title_attr) for w in words):
+                                        if words and any(w in combined_target for w in words):
                                             if h not in candidate_urls:
                                                 candidate_urls.append(h)
                 except Exception as se:
@@ -623,10 +632,11 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
                             f_text = await f_resp.text()
                             f_data = json.loads(f_text)
                             for entry in f_data.get("feed", {}).get("entry", []):
-                                p_title = entry.get("title", {}).get("$t", "").lower()
-                                if words and any(w in p_title for w in words):
+                                p_title = entry.get("title", {}).get("$t", "")
+                                norm_p_title = normalize(p_title.lower())
+                                if words and any(w in norm_p_title for w in words):
                                     if season:
-                                        if f"season {season}" in p_title or f"season-{season}" in p_title:
+                                        if f"season {season}" in norm_p_title or f"season-{season}" in norm_p_title:
                                             for l in entry.get("link", []):
                                                 if l.get("rel") == "alternate":
                                                     candidate_urls.append(l.get("href"))
@@ -931,8 +941,7 @@ def extract_media_info(filename: str, caption: str):
         for p in patterns:
             name = re.sub(p, " ", name, flags=re.IGNORECASE)
 
-        name = re.sub(r"[_\.\-]+", " ", name)
-        name = re.sub(r"\s+", " ", name).strip()
+        name = normalize(name)
 
         if year_part:
             y = re.search(r"(19|20)\d{2}", year_part)
