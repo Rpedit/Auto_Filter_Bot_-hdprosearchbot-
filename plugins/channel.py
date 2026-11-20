@@ -3,12 +3,12 @@ import json
 import logging
 import asyncio
 import aiohttp
-import inspect
+import info
 from io import BytesIO
 from datetime import datetime
 from bs4 import BeautifulSoup
 from collections import defaultdict
-from plugins.Dreamxfutures.Imdbposter import get_movie_detailsx, get_movie_details
+from plugins.Dreamxfutures.Imdbposter import get_movie_details
 from database.users_chats_db import db
 from pyrogram import Client, filters, enums
 from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, BAD_WORDS
@@ -389,8 +389,24 @@ async def fetch_image_raw(url: str):
     return None
 
 
-async def fetch_third_party_meta(url: str) -> dict:
+def _get_tmdb_api_key() -> Optional[str]:
+    for attr in ("TMDB_API", "TMDB_API_KEY", "TMDB_KEY"):
+        val = getattr(info, attr, None)
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
+async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
+    """
+    Sirf Blogger post me lage hyperlink (TMDB / IMDb / Any Third-Party URL) se exact data layega.
+    Koi auto-search ya title-guessing nahi karega.
+    """
     data = {"rating": None, "genres": None, "runtime": None, "certificates": None}
+    if not url:
+        return data
+
+    url = url.strip()
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -399,7 +415,79 @@ async def fetch_third_party_meta(url: str) -> dict:
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://www.google.com/"
     }
-    timeout = aiohttp.ClientTimeout(total=9)
+    timeout = aiohttp.ClientTimeout(total=10)
+
+    # 1. Agar TMDB URL hai (e.g. https://www.themoviedb.org/movie/134375-1920-evil-returns)
+    m_tmdb = re.search(r'themoviedb\.org/(movie|tv)/(\d+)', url, re.IGNORECASE)
+    if m_tmdb:
+        media_t = m_tmdb.group(1).lower()
+        tmdb_id = m_tmdb.group(2)
+        tmdb_key = _get_tmdb_api_key()
+
+        if tmdb_key:
+            api_url = f"https://api.themoviedb.org/3/{media_t}/{tmdb_id}?api_key={tmdb_key}&language=en-US"
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(api_url) as resp:
+                        if resp.status == 200:
+                            js = await resp.json()
+                            va = js.get("vote_average")
+                            if va and float(va) > 0:
+                                data["rating"] = f"{round(float(va), 1)}/10"
+
+                            g_list = [
+                                g["name"].strip().title()
+                                for g in js.get("genres", [])
+                                if isinstance(g, dict) and g.get("name")
+                            ]
+                            if g_list:
+                                data["genres"] = ", ".join(g_list)
+
+                            rt = js.get("runtime") or (
+                                js.get("episode_run_time")[0]
+                                if isinstance(js.get("episode_run_time"), list) and js.get("episode_run_time")
+                                else None
+                            )
+                            if rt and int(rt) > 0:
+                                data["runtime"] = str(rt)
+
+                            if data["rating"] or data["genres"]:
+                                logger.info(f"TMDB Direct API fetched for ID {tmdb_id}: {data}")
+                                return data
+            except Exception as e:
+                logger.warning(f"TMDB API failed for {tmdb_id}: {e}")
+
+    # 2. Agar IMDb URL hai (e.g. https://www.imdb.com/title/tt2222550/)
+    m_imdb = re.search(r'imdb\.com/title/(tt\d+)', url, re.IGNORECASE)
+    if m_imdb:
+        tt_id = m_imdb.group(1)
+        try:
+            imdb_details = await get_movie_details(tt_id) or {}
+            r = str(imdb_details.get("rating", "")).strip()
+            if r and r.upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+                data["rating"] = f"{r.replace('/10', '').strip()}/10"
+
+            raw_g = imdb_details.get("genres")
+            if isinstance(raw_g, list):
+                g_list = [str(g).strip().title() for g in raw_g if g]
+                if g_list:
+                    data["genres"] = ", ".join(g_list)
+            elif isinstance(raw_g, str) and raw_g.strip() and raw_g.upper() != "N/A":
+                data["genres"] = raw_g.strip()
+
+            imdb_r = imdb_details.get("runtime")
+            if isinstance(imdb_r, (list, tuple)) and imdb_r:
+                imdb_r = imdb_r[0]
+            if imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
+                data["runtime"] = str(imdb_r).strip()
+
+            cert = imdb_details.get("certificates")
+            if cert and str(cert).strip().upper() not in ("N/A", "NONE", "-", ""):
+                data["certificates"] = str(cert).strip()
+        except Exception as e:
+            logger.warning(f"IMDb ID lookup failed for {tt_id}: {e}")
+
+    # 3. Webpage HTML / JSON-LD / Meta Scraping (TMDB fallback, IMDb fallback, ya koi bhi 3rd-party site)
     try:
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
             async with session.get(url) as resp:
@@ -407,6 +495,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                     html = await resp.text()
                     soup = BeautifulSoup(html, "html.parser")
 
+                    # JSON-LD Structured Data
                     for script_tag in soup.find_all("script", type="application/ld+json"):
                         try:
                             ld_content = script_tag.string or script_tag.get_text()
@@ -415,9 +504,9 @@ async def fetch_third_party_meta(url: str) -> dict:
                             ld_data = json.loads(ld_content)
                             if isinstance(ld_data, list):
                                 ld_data = ld_data[0]
-                            
+
                             agg_rating = ld_data.get("aggregateRating")
-                            if isinstance(agg_rating, dict) and agg_rating.get("ratingValue"):
+                            if not data["rating"] and isinstance(agg_rating, dict) and agg_rating.get("ratingValue"):
                                 r_val = float(agg_rating["ratingValue"])
                                 if 1.0 <= r_val <= 10.0:
                                     data["rating"] = f"{r_val}/10"
@@ -444,6 +533,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                         except Exception:
                             pass
 
+                    # IMDb Specific HTML Selectors
                     if "imdb.com" in url.lower():
                         if not data["rating"]:
                             r_elem = soup.select_one('[data-testid="hero-rating-bar__aggregate-rating__score"] span')
@@ -466,10 +556,11 @@ async def fetch_third_party_meta(url: str) -> dict:
                             if rt_elem:
                                 data["runtime"] = rt_elem.get_text(" ", strip=True)
 
+                    # TMDB Specific HTML Selectors (Updated Layout)
                     elif "themoviedb.org" in url.lower():
                         if not data["rating"]:
-                            user_score = soup.select_one('.user_score_chart')
-                            if user_score and user_score.get("data-percent"):
+                            user_score = soup.select_one('.user_score_chart[data-percent]')
+                            if user_score:
                                 pct = float(user_score["data-percent"])
                                 if pct > 0:
                                     data["rating"] = f"{round(pct / 10, 1)}/10"
@@ -493,6 +584,7 @@ async def fetch_third_party_meta(url: str) -> dict:
                             if cert_elem:
                                 data["certificates"] = cert_elem.get_text(strip=True)
 
+                    # Generic Third-Party Text Fallback
                     text = soup.get_text(" ", strip=True)
 
                     if not data["rating"]:
@@ -985,7 +1077,7 @@ async def media_handler(bot, message):
 
     media.caption = message.caption or ""
 
-    success, info = await save_file(media)
+    success, info_save = await save_file(media)
     if not success:
         return
 
@@ -1100,102 +1192,17 @@ async def _process_with_lock(
             is_mismatched = True
 
     if not movie_doc or is_mismatched:
-        hyperlink_data = {}
-        imdb_details = {}
-        tmdb_details = {}
-
-        if blogger_info_url:
-            hyperlink_data = await fetch_third_party_meta(blogger_info_url)
-
-            m_imdb = re.search(r'imdb\.com/title/(tt\d+)', blogger_info_url, re.IGNORECASE)
-            m_tmdb = re.search(r'themoviedb\.org/(movie|tv)/(\d+)', blogger_info_url, re.IGNORECASE)
-
-            if m_imdb:
-                try:
-                    imdb_details = await get_movie_details(m_imdb.group(1)) or {}
-                except Exception:
-                    pass
-            elif m_tmdb:
-                media_t = m_tmdb.group(1).lower()
-                tmdb_id = m_tmdb.group(2)
-                sig = inspect.signature(get_movie_detailsx)
-                kwargs = {}
-                if "is_series" in sig.parameters:
-                    kwargs["is_series"] = (media_t == "tv")
-                elif "media_type" in sig.parameters:
-                    kwargs["media_type"] = media_t
-
-                try:
-                    tmdb_details = (
-                        await get_movie_detailsx(tmdb_id, **kwargs)
-                        if kwargs
-                        else await get_movie_detailsx(tmdb_id)
-                    ) or {}
-                except Exception:
-                    pass
+        hyperlink_data = await fetch_hyperlink_metadata(blogger_info_url, is_series=is_series)
 
         official_search_title = base_name
         poster_url = blogger_poster_url or ""
         is_backdrop = True
         imdb_url = blogger_info_url.strip() if blogger_info_url else ""
 
-        rating = "x/10"
-        if hyperlink_data.get("rating"):
-            rating = str(hyperlink_data["rating"]).strip()
-        elif tmdb_details.get("rating") and str(tmdb_details["rating"]).upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-            clean_r = str(tmdb_details["rating"]).replace("/10", "").strip()
-            rating = f"{clean_r}/10"
-        elif imdb_details.get("rating") and str(imdb_details["rating"]).upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
-            clean_r = str(imdb_details["rating"]).replace("/10", "").strip()
-            rating = f"{clean_r}/10"
-
-        genres = "N/A"
-        if hyperlink_data.get("genres"):
-            genres = str(hyperlink_data["genres"]).strip()
-        elif tmdb_details.get("genres"):
-            raw_g = tmdb_details["genres"]
-            if isinstance(raw_g, list):
-                g_list = [g["name"].strip().title() if isinstance(g, dict) else str(g).strip().title() for g in raw_g if g]
-                if g_list:
-                    genres = ", ".join(g_list)
-            elif isinstance(raw_g, str) and raw_g.strip() and raw_g.upper() != "N/A":
-                genres = raw_g.strip()
-        elif imdb_details.get("genres"):
-            raw_g = imdb_details["genres"]
-            if isinstance(raw_g, list):
-                g_list = [str(g).strip().title() for g in raw_g if g]
-                if g_list:
-                    genres = ", ".join(g_list)
-            elif isinstance(raw_g, str) and raw_g.strip() and raw_g.upper() != "N/A":
-                genres = raw_g.strip()
-
-        tmdb_r = (
-            tmdb_details.get("episode_run_time")
-            if is_series and tmdb_details.get("episode_run_time")
-            else tmdb_details.get("runtime")
-        )
-        imdb_r = imdb_details.get("runtime")
-        if isinstance(tmdb_r, (list, tuple)) and tmdb_r:
-            tmdb_r = tmdb_r[0]
-        if isinstance(imdb_r, (list, tuple)) and imdb_r:
-            imdb_r = imdb_r[0]
-
-        if hyperlink_data.get("runtime"):
-            runtime = str(hyperlink_data["runtime"]).strip()
-        elif tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
-            runtime = str(tmdb_r).strip()
-        elif imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
-            runtime = str(imdb_r).strip()
-        else:
-            runtime = final_file_runtime
-
-        certificates = (
-            hyperlink_data.get("certificates")
-            or (tmdb_details.get("certificates") if tmdb_details.get("certificates") and tmdb_details.get("certificates") != "N/A" else None)
-            or (imdb_details.get("certificates") if imdb_details.get("certificates") and imdb_details.get("certificates") != "N/A" else None)
-            or "N/A"
-        )
-
+        rating = hyperlink_data.get("rating") or "x/10"
+        genres = hyperlink_data.get("genres") or "N/A"
+        runtime = hyperlink_data.get("runtime") or final_file_runtime
+        certificates = hyperlink_data.get("certificates") or "N/A"
         movie_year = media_info.get("year")
 
         if is_mismatched and movie_doc:
