@@ -399,10 +399,10 @@ def _get_tmdb_api_key() -> Optional[str]:
 
 async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
     """
-    Sirf Blogger post me lage hyperlink (TMDB / IMDb / Any Third-Party URL) se exact data layega.
+    Sirf Blogger post me lage hyperlink (TMDB / IMDb / Any Third-Party URL) se exact Title, Rating, Genres, Runtime layega.
     Koi auto-search ya title-guessing nahi karega.
     """
-    data = {"rating": None, "genres": None, "runtime": None, "certificates": None}
+    data = {"title": None, "rating": None, "genres": None, "runtime": None, "certificates": None}
     if not url:
         return data
 
@@ -431,6 +431,10 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                     async with session.get(api_url) as resp:
                         if resp.status == 200:
                             js = await resp.json()
+                            t_val = js.get("title") or js.get("name")
+                            if t_val:
+                                data["title"] = str(t_val).strip()
+
                             va = js.get("vote_average")
                             if va and float(va) > 0:
                                 data["rating"] = f"{round(float(va), 1)}/10"
@@ -463,6 +467,9 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
         tt_id = m_imdb.group(1)
         try:
             imdb_details = await get_movie_details(tt_id) or {}
+            if imdb_details.get("title"):
+                data["title"] = str(imdb_details["title"]).strip()
+
             r = str(imdb_details.get("rating", "")).strip()
             if r and r.upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
                 data["rating"] = f"{r.replace('/10', '').strip()}/10"
@@ -505,6 +512,9 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                             if isinstance(ld_data, list):
                                 ld_data = ld_data[0]
 
+                            if not data["title"] and ld_data.get("name"):
+                                data["title"] = str(ld_data["name"]).strip()
+
                             agg_rating = ld_data.get("aggregateRating")
                             if not data["rating"] and isinstance(agg_rating, dict) and agg_rating.get("ratingValue"):
                                 r_val = float(agg_rating["ratingValue"])
@@ -535,6 +545,11 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
 
                     # IMDb Specific HTML Selectors
                     if "imdb.com" in url.lower():
+                        if not data["title"]:
+                            t_elem = soup.select_one('[data-testid="hero__primary-text"]')
+                            if t_elem:
+                                data["title"] = t_elem.get_text(strip=True)
+
                         if not data["rating"]:
                             r_elem = soup.select_one('[data-testid="hero-rating-bar__aggregate-rating__score"] span')
                             if r_elem:
@@ -558,6 +573,11 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
 
                     # TMDB Specific HTML Selectors (Updated Layout)
                     elif "themoviedb.org" in url.lower():
+                        if not data["title"]:
+                            t_elem = soup.select_one('div.title h2 a')
+                            if t_elem:
+                                data["title"] = t_elem.get_text(strip=True)
+
                         if not data["rating"]:
                             user_score = soup.select_one('.user_score_chart[data-percent]')
                             if user_score:
@@ -584,7 +604,15 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                             if cert_elem:
                                 data["certificates"] = cert_elem.get_text(strip=True)
 
-                    # Generic Third-Party Text Fallback
+                    # Generic Third-Party Title & Text Fallback
+                    if not data["title"]:
+                        h1_elem = soup.find("h1")
+                        if h1_elem:
+                            raw_h1 = h1_elem.get_text(" ", strip=True)
+                            raw_h1 = re.sub(r'\s*\((?:19|20)\d{2}\)\s*$', '', raw_h1).strip()
+                            if raw_h1 and len(raw_h1) < 120:
+                                data["title"] = raw_h1
+
                     text = soup.get_text(" ", strip=True)
 
                     if not data["rating"]:
@@ -1194,7 +1222,7 @@ async def _process_with_lock(
     if not movie_doc or is_mismatched:
         hyperlink_data = await fetch_hyperlink_metadata(blogger_info_url, is_series=is_series)
 
-        official_search_title = base_name
+        official_search_title = hyperlink_data.get("title") or base_name
         poster_url = blogger_poster_url or ""
         is_backdrop = True
         imdb_url = blogger_info_url.strip() if blogger_info_url else ""
