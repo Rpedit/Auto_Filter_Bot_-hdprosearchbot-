@@ -3,10 +3,12 @@ import json
 import logging
 import asyncio
 import aiohttp
+import inspect
 from io import BytesIO
 from datetime import datetime
 from bs4 import BeautifulSoup
 from collections import defaultdict
+from plugins.Dreamxfutures.Imdbposter import get_movie_detailsx, get_movie_details
 from database.users_chats_db import db
 from pyrogram import Client, filters, enums
 from info import CHANNELS, MOVIE_UPDATE_CHANNEL, LINK_PREVIEW, BAD_WORDS
@@ -1065,6 +1067,8 @@ async def _process_with_lock(
         if movie_doc:
             base_name = movie_doc["_id"]
 
+    is_series = media_info["tag"] == "#SERIES"
+
     final_file_runtime = (
         f"{file_runtime_mins}"
         if file_runtime_mins
@@ -1097,8 +1101,38 @@ async def _process_with_lock(
 
     if not movie_doc or is_mismatched:
         hyperlink_data = {}
+        imdb_details = {}
+        tmdb_details = {}
+
         if blogger_info_url:
             hyperlink_data = await fetch_third_party_meta(blogger_info_url)
+
+            m_imdb = re.search(r'imdb\.com/title/(tt\d+)', blogger_info_url, re.IGNORECASE)
+            m_tmdb = re.search(r'themoviedb\.org/(movie|tv)/(\d+)', blogger_info_url, re.IGNORECASE)
+
+            if m_imdb:
+                try:
+                    imdb_details = await get_movie_details(m_imdb.group(1)) or {}
+                except Exception:
+                    pass
+            elif m_tmdb:
+                media_t = m_tmdb.group(1).lower()
+                tmdb_id = m_tmdb.group(2)
+                sig = inspect.signature(get_movie_detailsx)
+                kwargs = {}
+                if "is_series" in sig.parameters:
+                    kwargs["is_series"] = (media_t == "tv")
+                elif "media_type" in sig.parameters:
+                    kwargs["media_type"] = media_t
+
+                try:
+                    tmdb_details = (
+                        await get_movie_detailsx(tmdb_id, **kwargs)
+                        if kwargs
+                        else await get_movie_detailsx(tmdb_id)
+                    ) or {}
+                except Exception:
+                    pass
 
         official_search_title = base_name
         poster_url = blogger_poster_url or ""
@@ -1108,19 +1142,59 @@ async def _process_with_lock(
         rating = "x/10"
         if hyperlink_data.get("rating"):
             rating = str(hyperlink_data["rating"]).strip()
+        elif tmdb_details.get("rating") and str(tmdb_details["rating"]).upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+            clean_r = str(tmdb_details["rating"]).replace("/10", "").strip()
+            rating = f"{clean_r}/10"
+        elif imdb_details.get("rating") and str(imdb_details["rating"]).upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
+            clean_r = str(imdb_details["rating"]).replace("/10", "").strip()
+            rating = f"{clean_r}/10"
 
         genres = "N/A"
         if hyperlink_data.get("genres"):
             genres = str(hyperlink_data["genres"]).strip()
+        elif tmdb_details.get("genres"):
+            raw_g = tmdb_details["genres"]
+            if isinstance(raw_g, list):
+                g_list = [g["name"].strip().title() if isinstance(g, dict) else str(g).strip().title() for g in raw_g if g]
+                if g_list:
+                    genres = ", ".join(g_list)
+            elif isinstance(raw_g, str) and raw_g.strip() and raw_g.upper() != "N/A":
+                genres = raw_g.strip()
+        elif imdb_details.get("genres"):
+            raw_g = imdb_details["genres"]
+            if isinstance(raw_g, list):
+                g_list = [str(g).strip().title() for g in raw_g if g]
+                if g_list:
+                    genres = ", ".join(g_list)
+            elif isinstance(raw_g, str) and raw_g.strip() and raw_g.upper() != "N/A":
+                genres = raw_g.strip()
+
+        tmdb_r = (
+            tmdb_details.get("episode_run_time")
+            if is_series and tmdb_details.get("episode_run_time")
+            else tmdb_details.get("runtime")
+        )
+        imdb_r = imdb_details.get("runtime")
+        if isinstance(tmdb_r, (list, tuple)) and tmdb_r:
+            tmdb_r = tmdb_r[0]
+        if isinstance(imdb_r, (list, tuple)) and imdb_r:
+            imdb_r = imdb_r[0]
 
         if hyperlink_data.get("runtime"):
             runtime = str(hyperlink_data["runtime"]).strip()
+        elif tmdb_r and str(tmdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
+            runtime = str(tmdb_r).strip()
+        elif imdb_r and str(imdb_r).strip().upper() not in ("N/A", "NONE", "0", ""):
+            runtime = str(imdb_r).strip()
         else:
             runtime = final_file_runtime
 
-        certificates = "N/A"
-        if hyperlink_data.get("certificates"):
-            certificates = str(hyperlink_data["certificates"]).strip()
+        certificates = (
+            hyperlink_data.get("certificates")
+            or (tmdb_details.get("certificates") if tmdb_details.get("certificates") and tmdb_details.get("certificates") != "N/A" else None)
+            or (imdb_details.get("certificates") if imdb_details.get("certificates") and imdb_details.get("certificates") != "N/A" else None)
+            or "N/A"
+        )
 
         movie_year = media_info.get("year")
 
