@@ -317,7 +317,6 @@ def extract_ott_platform(text: str) -> str:
 
 
 def get_clean_title(name: str) -> str:
-    # Sirf end me aane wale release year ko hataye, title ke start wale year (jaise "1920") ko nahi
     t = re.sub(r'\s+\b(19|20)\d{2}\b$', '', name.strip())
     return normalize(t).lower()
 
@@ -371,7 +370,6 @@ def format_runtime(runtime_val, is_series: bool = False) -> str:
 
 
 async def fetch_image_raw(url: str):
-    """Blogger image ko bina resize kiye uncompressed bytes me download karta hai"""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36"
     }
@@ -390,7 +388,6 @@ async def fetch_image_raw(url: str):
 
 
 async def fetch_third_party_meta(url: str) -> dict:
-    """Sirf Blogger post ke hyperlink se metadata scrape karega"""
     data = {"rating": None, "genres": None, "runtime": None, "certificates": None}
     headers = {
         "User-Agent": (
@@ -551,7 +548,6 @@ async def get_blogger_data(base_name: str, year: Optional[str] = None, season: O
 
         stop_words = {"series", "complete", "part", "episode", "the", "and", "hindi", "dubbed"}
         
-        # Title me number (jaise "1920") bhi include karein agar wo release year nahi hai
         raw_tokens = [
             w.lower() for w in re.split(r'[\s\-:_.()]+', base_name)
             if len(w) >= 2 and w.lower() not in stop_words and not w.lower().startswith("season")
@@ -833,11 +829,9 @@ def extract_media_info(filename: str, caption: str):
         year_matches = YEAR_PATTERN.findall(filename)
 
         if year_matches:
-            # Agar multiple years hain (jaise "1920 Evil Returns 2012"), toh last wala release year hoga
             if len(year_matches) > 1:
                 year = year_matches[-1]
             else:
-                # Agar filename year se hi shuru ho rahi hai (e.g. "1920 Evil Returns 720p"), toh wo movie ka naam hai, year nahi
                 if filename.strip().startswith(year_matches[0]) and len(filename.strip()) > 4:
                     year = None
                 else:
@@ -1102,7 +1096,6 @@ async def _process_with_lock(
             is_mismatched = True
 
     if not movie_doc or is_mismatched:
-        # Koi automatic IMDb/TMDB API detect nahi hoga - sirf Blogger post ke hyperlink se data aayega
         hyperlink_data = {}
         if blogger_info_url:
             hyperlink_data = await fetch_third_party_meta(blogger_info_url)
