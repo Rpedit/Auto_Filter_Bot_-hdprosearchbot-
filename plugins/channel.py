@@ -404,7 +404,6 @@ def _is_english_title(text: Optional[str]) -> bool:
     clean = text.strip()
     if not clean:
         return False
-    # Japanese (Hiragana/Katakana), Korean (Hangul), Chinese (CJK) characters reject karein
     if re.search(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]', clean):
         return False
     return bool(re.search(r'[A-Za-z0-9]', clean))
@@ -412,14 +411,17 @@ def _is_english_title(text: Optional[str]) -> bool:
 
 async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
     """
-    Sirf Blogger post me lage hyperlink (TMDB / IMDb / Any Third-Party URL) se exact English Title, Rating, Genres, Runtime layega.
-    IMDb Suggestion API aur TMDB en-US API use karta hai taaki kabhi bhi Japanese/Korean original title na aaye.
+    - IMDb / TMDB hyperlink se exact English Title + Rating + Genres + Runtime + Certificates layega.
+    - Third-party website hyperlink se sirf Rating + Genres + Runtime + Certificates layega (Title hamesha file se aayega).
     """
     data = {"title": None, "rating": None, "genres": None, "runtime": None, "certificates": None}
     if not url:
         return data
 
     url = url.strip()
+    is_imdb = bool(re.search(r'imdb\.com/title/(tt\d+)', url, re.IGNORECASE))
+    is_tmdb = bool(re.search(r'themoviedb\.org/(movie|tv)/(\d+)', url, re.IGNORECASE))
+
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -430,7 +432,7 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
     }
     timeout = aiohttp.ClientTimeout(total=10)
 
-    # 1. TMDB URL (e.g. https://www.themoviedb.org/movie/134375)
+    # 1. TMDB URL
     m_tmdb = re.search(r'themoviedb\.org/(movie|tv)/(\d+)', url, re.IGNORECASE)
     if m_tmdb:
         media_t = m_tmdb.group(1).lower()
@@ -444,7 +446,6 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                     async with session.get(api_url) as resp:
                         if resp.status == 200:
                             js = await resp.json()
-                            # Sirf English localized title ('title' / 'name'), kabhi bhi 'original_title' / 'original_name' nahi
                             t_val = js.get("title") or js.get("name")
                             if t_val and _is_english_title(t_val):
                                 data["title"] = str(t_val).strip()
@@ -475,13 +476,12 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
             except Exception as e:
                 logger.warning(f"TMDB API failed for {tmdb_id}: {e}")
 
-    # 2. IMDb URL (e.g. https://www.imdb.com/title/tt2222550/)
+    # 2. IMDb URL
     imdb_fallback_title = None
     m_imdb = re.search(r'imdb\.com/title/(tt\d+)', url, re.IGNORECASE)
     if m_imdb:
         tt_id = m_imdb.group(1)
 
-        # IMDb Official Suggestion JSON endpoint (Anti-bot block free, hamesha main English display title 'l' deta hai)
         sug_url = f"https://v3.sg.media-imdb.com/suggestion/x/{tt_id}.json"
         try:
             async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
@@ -498,7 +498,6 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
         except Exception as e:
             logger.warning(f"IMDb suggestion API failed for {tt_id}: {e}")
 
-        # Rating, Genres, Runtime aapke get_movie_details se layein
         try:
             imdb_details = await get_movie_details(tt_id) or {}
             if not data["title"]:
@@ -530,7 +529,7 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
         except Exception as e:
             logger.warning(f"IMDb ID lookup failed for {tt_id}: {e}")
 
-    # 3. Webpage HTML / JSON-LD / Meta Scraping (English title priority)
+    # 3. Webpage HTML / JSON-LD Scraping (Sirf IMDb/TMDB ke liye title; third-party se sirf metadata)
     try:
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
             async with session.get(url) as resp:
@@ -538,8 +537,7 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                     html = await resp.text()
                     soup = BeautifulSoup(html, "html.parser")
 
-                    # IMDb Specific HTML Selectors
-                    if "imdb.com" in url.lower():
+                    if is_imdb:
                         if not data["title"]:
                             t_elem = soup.select_one('[data-testid="hero__primary-text"]')
                             if t_elem:
@@ -568,8 +566,7 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                             if rt_elem:
                                 data["runtime"] = rt_elem.get_text(" ", strip=True)
 
-                    # TMDB Specific HTML Selectors
-                    elif "themoviedb.org" in url.lower():
+                    elif is_tmdb:
                         if not data["title"]:
                             t_elem = soup.select_one('div.title h2 a')
                             if t_elem:
@@ -603,7 +600,6 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                             if cert_elem:
                                 data["certificates"] = cert_elem.get_text(strip=True)
 
-                    # JSON-LD Structured Data ('alternateName' IMDb/TMDB me English localized title hota hai)
                     for script_tag in soup.find_all("script", type="application/ld+json"):
                         try:
                             ld_content = script_tag.string or script_tag.get_text()
@@ -613,7 +609,7 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                             if isinstance(ld_data, list):
                                 ld_data = ld_data[0]
 
-                            if not data["title"]:
+                            if (is_imdb or is_tmdb) and not data["title"]:
                                 alt_name = ld_data.get("alternateName")
                                 main_name = ld_data.get("name")
                                 if alt_name and isinstance(alt_name, str) and _is_english_title(alt_name):
@@ -649,26 +645,6 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                         except Exception:
                             pass
 
-                    # OpenGraph Title Fallback (og:title hamesha English display title hota hai)
-                    if not data["title"]:
-                        og_title = soup.find("meta", property="og:title")
-                        if og_title and og_title.get("content"):
-                            raw_og = og_title["content"].strip()
-                            raw_og = re.sub(r'\s*\((?:TV\s*Series|Movie|Mini\s*Series|Video)?\s*(?:19|20)\d{2}.*?\)\s*[-–|].*$', '', raw_og, flags=re.IGNORECASE).strip()
-                            raw_og = re.sub(r'\s*[-–|]\s*(?:IMDb|The Movie Database|TMDB).*$', '', raw_og, flags=re.IGNORECASE).strip()
-                            raw_og = re.sub(r'\s*\((?:19|20)\d{2}\)\s*$', '', raw_og).strip()
-                            if _is_english_title(raw_og) and len(raw_og) < 120:
-                                data["title"] = raw_og
-
-                    # Generic Third-Party H1 Title Fallback
-                    if not data["title"]:
-                        h1_elem = soup.find("h1")
-                        if h1_elem:
-                            raw_h1 = h1_elem.get_text(" ", strip=True)
-                            raw_h1 = re.sub(r'\s*\((?:19|20)\d{2}\)\s*$', '', raw_h1).strip()
-                            if _is_english_title(raw_h1) and len(raw_h1) < 120:
-                                data["title"] = raw_h1
-
                     text = soup.get_text(" ", strip=True)
 
                     if not data["rating"]:
@@ -700,7 +676,7 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
     except Exception as e:
         logger.warning(f"Error scraping hyperlink '{url}': {e}")
 
-    if not data["title"] and imdb_fallback_title:
+    if is_imdb and not data["title"] and imdb_fallback_title:
         data["title"] = imdb_fallback_title
 
     return data
@@ -1004,7 +980,6 @@ def extract_media_info(filename: str, caption: str):
 
                 if yi != -1:
                     processed_raw = filename[:yi + 4]
-                    base_raw += f" {y}"
 
     else:
         year_matches = YEAR_PATTERN.findall(filename)
@@ -1040,7 +1015,7 @@ def extract_media_info(filename: str, caption: str):
         )
     )
 
-    if year and year not in base_name:
+    if season is None and year and year not in base_name:
         base_name += f" {year}"
 
     if base_name.endswith(")"):
@@ -1050,7 +1025,7 @@ def extract_media_info(filename: str, caption: str):
             base_name
         )
 
-        if year:
+        if season is None and year:
             base_name += f" {year}"
 
     def _strip_season_episode_tokens(name: str) -> str:
@@ -1094,7 +1069,7 @@ def extract_media_info(filename: str, caption: str):
         name = re.sub(r"[_\.\-]+", " ", name)
         name = re.sub(r"\s+", " ", name).strip()
 
-        if year_part:
+        if season is None and year_part:
             y = re.search(r"(19|20)\d{2}", year_part)
             if y:
                 name = f"{name} {y.group(0)}"
@@ -1123,7 +1098,7 @@ def extract_media_info(filename: str, caption: str):
         "tag": tag,
         "season": season,
         "episode": episode,
-        "year": year,
+        "year": year if season is None else None,
         "quality": quality,
         "ott_platform": ott_platform,
         "language": language
@@ -1290,7 +1265,7 @@ async def _process_with_lock(
         genres = hyperlink_data.get("genres") or "N/A"
         runtime = hyperlink_data.get("runtime") or final_file_runtime
         certificates = hyperlink_data.get("certificates") or "N/A"
-        movie_year = media_info.get("year")
+        movie_year = None if is_series else media_info.get("year")
 
         if is_mismatched and movie_doc:
             update_data = {
