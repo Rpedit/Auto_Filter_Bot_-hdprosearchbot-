@@ -397,10 +397,24 @@ def _get_tmdb_api_key() -> Optional[str]:
     return None
 
 
+def _is_english_title(text: Optional[str]) -> bool:
+    """Check karta hai ki title English / Latin letters me ho, Japanese/Korean/Chinese script me nahi."""
+    if not text or not isinstance(text, str):
+        return False
+    clean = text.strip()
+    if not clean:
+        return False
+    # Japanese (Hiragana/Katakana), Korean (Hangul), Chinese (CJK) characters reject karein
+    if re.search(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]', clean):
+        return False
+    # Kam se kam ek English alphabet hona chahiye (ya pure digits title jaise "1920")
+    return bool(re.search(r'[A-Za-z0-9]', clean))
+
+
 async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
     """
-    Sirf Blogger post me lage hyperlink (TMDB / IMDb / Any Third-Party URL) se exact Title, Rating, Genres, Runtime layega.
-    Koi auto-search ya title-guessing nahi karega.
+    Sirf Blogger post me lage hyperlink (TMDB / IMDb / Any Third-Party URL) se exact English Title, Rating, Genres, Runtime layega.
+    Japanese / Korean / Original non-English titles ko ignore karke English title hi rakhega.
     """
     data = {"title": None, "rating": None, "genres": None, "runtime": None, "certificates": None}
     if not url:
@@ -417,7 +431,7 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
     }
     timeout = aiohttp.ClientTimeout(total=10)
 
-    # 1. Agar TMDB URL hai (e.g. https://www.themoviedb.org/movie/134375-1920-evil-returns)
+    # 1. TMDB URL (e.g. https://www.themoviedb.org/movie/134375)
     m_tmdb = re.search(r'themoviedb\.org/(movie|tv)/(\d+)', url, re.IGNORECASE)
     if m_tmdb:
         media_t = m_tmdb.group(1).lower()
@@ -431,8 +445,9 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                     async with session.get(api_url) as resp:
                         if resp.status == 200:
                             js = await resp.json()
+                            # Sirf English localized title ('title' / 'name'), kabhi bhi 'original_title' / 'original_name' nahi
                             t_val = js.get("title") or js.get("name")
-                            if t_val:
+                            if t_val and _is_english_title(t_val):
                                 data["title"] = str(t_val).strip()
 
                             va = js.get("vote_average")
@@ -461,14 +476,16 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
             except Exception as e:
                 logger.warning(f"TMDB API failed for {tmdb_id}: {e}")
 
-    # 2. Agar IMDb URL hai (e.g. https://www.imdb.com/title/tt2222550/)
+    # 2. IMDb URL (e.g. https://www.imdb.com/title/tt2222550/)
+    imdb_fallback_title = None
     m_imdb = re.search(r'imdb\.com/title/(tt\d+)', url, re.IGNORECASE)
     if m_imdb:
         tt_id = m_imdb.group(1)
         try:
             imdb_details = await get_movie_details(tt_id) or {}
-            if imdb_details.get("title"):
-                data["title"] = str(imdb_details["title"]).strip()
+            cand_imdb_t = imdb_details.get("title")
+            if cand_imdb_t and _is_english_title(cand_imdb_t):
+                imdb_fallback_title = str(cand_imdb_t).strip()
 
             r = str(imdb_details.get("rating", "")).strip()
             if r and r.upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
@@ -494,7 +511,7 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
         except Exception as e:
             logger.warning(f"IMDb ID lookup failed for {tt_id}: {e}")
 
-    # 3. Webpage HTML / JSON-LD / Meta Scraping (TMDB fallback, IMDb fallback, ya koi bhi 3rd-party site)
+    # 3. Webpage HTML / JSON-LD / Meta Scraping (English title priority)
     try:
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
             async with session.get(url) as resp:
@@ -502,7 +519,70 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                     html = await resp.text()
                     soup = BeautifulSoup(html, "html.parser")
 
-                    # JSON-LD Structured Data
+                    # IMDb Specific HTML Selectors (Main English Heading ko sabse pehle uthaye)
+                    if "imdb.com" in url.lower():
+                        t_elem = soup.select_one('[data-testid="hero__primary-text"]')
+                        if t_elem:
+                            raw_t = t_elem.get_text(strip=True)
+                            if _is_english_title(raw_t):
+                                data["title"] = raw_t
+
+                        if not data["rating"]:
+                            r_elem = soup.select_one('[data-testid="hero-rating-bar__aggregate-rating__score"] span')
+                            if r_elem:
+                                r_val = r_elem.get_text(strip=True)
+                                if re.match(r'^[1-9](\.\d)?$', r_val):
+                                    data["rating"] = f"{float(r_val)}/10"
+
+                        if not data["genres"]:
+                            imdb_genres = []
+                            for a in soup.select('div[data-testid="genres"] a, a[href*="/search/title/?genres="], a[href*="/search/title?genres="]'):
+                                g_text = a.get_text(strip=True).title()
+                                if g_text and g_text not in imdb_genres and len(g_text) > 2 and not g_text.isdigit():
+                                    imdb_genres.append(g_text)
+                            if imdb_genres:
+                                data["genres"] = ", ".join(imdb_genres)
+
+                        if not data["runtime"]:
+                            rt_elem = soup.select_one('[data-testid="title-techspec_runtime"] div')
+                            if rt_elem:
+                                data["runtime"] = rt_elem.get_text(" ", strip=True)
+
+                    # TMDB Specific HTML Selectors
+                    elif "themoviedb.org" in url.lower():
+                        t_elem = soup.select_one('div.title h2 a')
+                        if t_elem:
+                            raw_t = t_elem.get_text(strip=True)
+                            if _is_english_title(raw_t):
+                                data["title"] = raw_t
+
+                        if not data["rating"]:
+                            user_score = soup.select_one('.user_score_chart[data-percent]')
+                            if user_score:
+                                pct = float(user_score["data-percent"])
+                                if pct > 0:
+                                    data["rating"] = f"{round(pct / 10, 1)}/10"
+
+                        if not data["genres"]:
+                            tmdb_genres = []
+                            for a in soup.select('span.genres a, a[href*="/genre/"]'):
+                                g_text = a.get_text(strip=True).title()
+                                if g_text and g_text not in tmdb_genres and len(g_text) > 2:
+                                    tmdb_genres.append(g_text)
+                            if tmdb_genres:
+                                data["genres"] = ", ".join(tmdb_genres)
+
+                        if not data["runtime"]:
+                            rt_elem = soup.select_one('span.runtime')
+                            if rt_elem:
+                                data["runtime"] = rt_elem.get_text(strip=True)
+
+                        if not data["certificates"]:
+                            cert_elem = soup.select_one('span.certification')
+                            if cert_elem:
+                                data["certificates"] = cert_elem.get_text(strip=True)
+
+                    # JSON-LD Structured Data ('alternateName' IMDb/TMDB me English localized title hota hai)
                     for script_tag in soup.find_all("script", type="application/ld+json"):
                         try:
                             ld_content = script_tag.string or script_tag.get_text()
@@ -512,8 +592,13 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                             if isinstance(ld_data, list):
                                 ld_data = ld_data[0]
 
-                            if not data["title"] and ld_data.get("name"):
-                                data["title"] = str(ld_data["name"]).strip()
+                            if not data["title"]:
+                                alt_name = ld_data.get("alternateName")
+                                main_name = ld_data.get("name")
+                                if alt_name and isinstance(alt_name, str) and _is_english_title(alt_name):
+                                    data["title"] = alt_name.strip()
+                                elif main_name and isinstance(main_name, str) and _is_english_title(main_name):
+                                    data["title"] = main_name.strip()
 
                             agg_rating = ld_data.get("aggregateRating")
                             if not data["rating"] and isinstance(agg_rating, dict) and agg_rating.get("ratingValue"):
@@ -543,74 +628,24 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                         except Exception:
                             pass
 
-                    # IMDb Specific HTML Selectors
-                    if "imdb.com" in url.lower():
-                        if not data["title"]:
-                            t_elem = soup.select_one('[data-testid="hero__primary-text"]')
-                            if t_elem:
-                                data["title"] = t_elem.get_text(strip=True)
+                    # OpenGraph Title Fallback (og:title hamesha English display title hota hai)
+                    if not data["title"]:
+                        og_title = soup.find("meta", property="og:title")
+                        if og_title and og_title.get("content"):
+                            raw_og = og_title["content"].strip()
+                            raw_og = re.sub(r'\s*\((?:TV\s*Series|Movie|Mini\s*Series|Video)?\s*(?:19|20)\d{2}.*?\)\s*[-–|].*$', '', raw_og, flags=re.IGNORECASE).strip()
+                            raw_og = re.sub(r'\s*[-–|]\s*(?:IMDb|The Movie Database|TMDB).*$', '', raw_og, flags=re.IGNORECASE).strip()
+                            raw_og = re.sub(r'\s*\((?:19|20)\d{2}\)\s*$', '', raw_og).strip()
+                            if _is_english_title(raw_og) and len(raw_og) < 120:
+                                data["title"] = raw_og
 
-                        if not data["rating"]:
-                            r_elem = soup.select_one('[data-testid="hero-rating-bar__aggregate-rating__score"] span')
-                            if r_elem:
-                                r_val = r_elem.get_text(strip=True)
-                                if re.match(r'^[1-9](\.\d)?$', r_val):
-                                    data["rating"] = f"{float(r_val)}/10"
-
-                        if not data["genres"]:
-                            imdb_genres = []
-                            for a in soup.select('div[data-testid="genres"] a, a[href*="/search/title/?genres="], a[href*="/search/title?genres="]'):
-                                g_text = a.get_text(strip=True).title()
-                                if g_text and g_text not in imdb_genres and len(g_text) > 2 and not g_text.isdigit():
-                                    imdb_genres.append(g_text)
-                            if imdb_genres:
-                                data["genres"] = ", ".join(imdb_genres)
-
-                        if not data["runtime"]:
-                            rt_elem = soup.select_one('[data-testid="title-techspec_runtime"] div')
-                            if rt_elem:
-                                data["runtime"] = rt_elem.get_text(" ", strip=True)
-
-                    # TMDB Specific HTML Selectors (Updated Layout)
-                    elif "themoviedb.org" in url.lower():
-                        if not data["title"]:
-                            t_elem = soup.select_one('div.title h2 a')
-                            if t_elem:
-                                data["title"] = t_elem.get_text(strip=True)
-
-                        if not data["rating"]:
-                            user_score = soup.select_one('.user_score_chart[data-percent]')
-                            if user_score:
-                                pct = float(user_score["data-percent"])
-                                if pct > 0:
-                                    data["rating"] = f"{round(pct / 10, 1)}/10"
-
-                        if not data["genres"]:
-                            tmdb_genres = []
-                            for a in soup.select('span.genres a, a[href*="/genre/"]'):
-                                g_text = a.get_text(strip=True).title()
-                                if g_text and g_text not in tmdb_genres and len(g_text) > 2:
-                                    tmdb_genres.append(g_text)
-                            if tmdb_genres:
-                                data["genres"] = ", ".join(tmdb_genres)
-
-                        if not data["runtime"]:
-                            rt_elem = soup.select_one('span.runtime')
-                            if rt_elem:
-                                data["runtime"] = rt_elem.get_text(strip=True)
-
-                        if not data["certificates"]:
-                            cert_elem = soup.select_one('span.certification')
-                            if cert_elem:
-                                data["certificates"] = cert_elem.get_text(strip=True)
-
-                    # Generic Third-Party Title & Text Fallback
+                    # Generic Third-Party H1 Title Fallback
                     if not data["title"]:
                         h1_elem = soup.find("h1")
                         if h1_elem:
                             raw_h1 = h1_elem.get_text(" ", strip=True)
                             raw_h1 = re.sub(r'\s*\((?:19|20)\d{2}\)\s*$', '', raw_h1).strip()
-                            if raw_h1 and len(raw_h1) < 120:
+                            if _is_english_title(raw_h1) and len(raw_h1) < 120:
                                 data["title"] = raw_h1
 
                     text = soup.get_text(" ", strip=True)
@@ -643,6 +678,9 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
 
     except Exception as e:
         logger.warning(f"Error scraping hyperlink '{url}': {e}")
+
+    if not data["title"] and imdb_fallback_title:
+        data["title"] = imdb_fallback_title
 
     return data
 
