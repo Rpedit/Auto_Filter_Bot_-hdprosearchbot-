@@ -407,14 +407,13 @@ def _is_english_title(text: Optional[str]) -> bool:
     # Japanese (Hiragana/Katakana), Korean (Hangul), Chinese (CJK) characters reject karein
     if re.search(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]', clean):
         return False
-    # Kam se kam ek English alphabet hona chahiye (ya pure digits title jaise "1920")
     return bool(re.search(r'[A-Za-z0-9]', clean))
 
 
 async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
     """
     Sirf Blogger post me lage hyperlink (TMDB / IMDb / Any Third-Party URL) se exact English Title, Rating, Genres, Runtime layega.
-    Japanese / Korean / Original non-English titles ko ignore karke English title hi rakhega.
+    IMDb Suggestion API aur TMDB en-US API use karta hai taaki kabhi bhi Japanese/Korean original title na aaye.
     """
     data = {"title": None, "rating": None, "genres": None, "runtime": None, "certificates": None}
     if not url:
@@ -481,11 +480,31 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
     m_imdb = re.search(r'imdb\.com/title/(tt\d+)', url, re.IGNORECASE)
     if m_imdb:
         tt_id = m_imdb.group(1)
+
+        # IMDb Official Suggestion JSON endpoint (Anti-bot block free, hamesha main English display title 'l' deta hai)
+        sug_url = f"https://v3.sg.media-imdb.com/suggestion/x/{tt_id}.json"
+        try:
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                async with session.get(sug_url) as resp:
+                    if resp.status == 200:
+                        sug_js = await resp.json(content_type=None)
+                        for item in sug_js.get("d", []):
+                            if item.get("id") == tt_id and item.get("l"):
+                                cand_l = str(item["l"]).strip()
+                                if _is_english_title(cand_l):
+                                    data["title"] = cand_l
+                                    logger.info(f"IMDb Suggestion English Title fetched for {tt_id}: {cand_l}")
+                                    break
+        except Exception as e:
+            logger.warning(f"IMDb suggestion API failed for {tt_id}: {e}")
+
+        # Rating, Genres, Runtime aapke get_movie_details se layein
         try:
             imdb_details = await get_movie_details(tt_id) or {}
-            cand_imdb_t = imdb_details.get("title")
-            if cand_imdb_t and _is_english_title(cand_imdb_t):
-                imdb_fallback_title = str(cand_imdb_t).strip()
+            if not data["title"]:
+                cand_imdb_t = imdb_details.get("title")
+                if cand_imdb_t and _is_english_title(cand_imdb_t):
+                    imdb_fallback_title = str(cand_imdb_t).strip()
 
             r = str(imdb_details.get("rating", "")).strip()
             if r and r.upper() not in ("N/A", "NONE", "0", "0.0", "-", ""):
@@ -519,13 +538,14 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
                     html = await resp.text()
                     soup = BeautifulSoup(html, "html.parser")
 
-                    # IMDb Specific HTML Selectors (Main English Heading ko sabse pehle uthaye)
+                    # IMDb Specific HTML Selectors
                     if "imdb.com" in url.lower():
-                        t_elem = soup.select_one('[data-testid="hero__primary-text"]')
-                        if t_elem:
-                            raw_t = t_elem.get_text(strip=True)
-                            if _is_english_title(raw_t):
-                                data["title"] = raw_t
+                        if not data["title"]:
+                            t_elem = soup.select_one('[data-testid="hero__primary-text"]')
+                            if t_elem:
+                                raw_t = t_elem.get_text(strip=True)
+                                if _is_english_title(raw_t):
+                                    data["title"] = raw_t
 
                         if not data["rating"]:
                             r_elem = soup.select_one('[data-testid="hero-rating-bar__aggregate-rating__score"] span')
@@ -550,11 +570,12 @@ async def fetch_hyperlink_metadata(url: str, is_series: bool = False) -> dict:
 
                     # TMDB Specific HTML Selectors
                     elif "themoviedb.org" in url.lower():
-                        t_elem = soup.select_one('div.title h2 a')
-                        if t_elem:
-                            raw_t = t_elem.get_text(strip=True)
-                            if _is_english_title(raw_t):
-                                data["title"] = raw_t
+                        if not data["title"]:
+                            t_elem = soup.select_one('div.title h2 a')
+                            if t_elem:
+                                raw_t = t_elem.get_text(strip=True)
+                                if _is_english_title(raw_t):
+                                    data["title"] = raw_t
 
                         if not data["rating"]:
                             user_score = soup.select_one('.user_score_chart[data-percent]')
